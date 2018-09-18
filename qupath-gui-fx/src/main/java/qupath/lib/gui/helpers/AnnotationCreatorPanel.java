@@ -56,6 +56,7 @@ public class AnnotationCreatorPanel {
 //			.addEmptyParameter("t1", "Properties")
 			.addChoiceParameter("type", "Type", "Rectangle", new String[]{"Rectangle", "Ellipse"})
 			.addStringParameter("name", "Name", "")
+			.addStringParameter("answer", "Answer", "")
 //			.addEmptyParameter("t2", "Location")
 			.addDoubleParameter("xOrigin", "X origin", -1, null, "X-coordinate of top left of annotation bounding box (if < 0, annotation will be centered)")
 			.addDoubleParameter("yOrigin", "Y origin", -1, null, "Y-coordinate of top left of annotation bounding box (if < 0, annotation will be centered)")
@@ -117,6 +118,11 @@ public class AnnotationCreatorPanel {
 		String name = params.getStringParameterValue("name");
 		if (name.length() > 0)
 			pathObject.setName(name);
+
+		String answer = params.getStringParameterValue("answer");
+		if (answer.length() > 0)
+			pathObject.setAnswer(answer);
+
 		pathObject.setColorRGB(ColorToolsFX.getRGBA(colorPicker.getValue()));
 		
 		return pathObject;

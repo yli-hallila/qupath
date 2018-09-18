@@ -64,6 +64,7 @@ public abstract class PathObject implements Externalizable {
 	private MetadataMap metadata = null;
 	
 	private String name = null;
+	private String answer = null;
 	private Integer color;
 
 	transient private Collection<PathObject> cachedUnmodifiableChildren = null;
@@ -443,6 +444,14 @@ public abstract class PathObject implements Externalizable {
 		this.name = name;
 	}
 
+	public String getAnswer() {
+		return (String) retrieveMetadataValue("Answer");
+	}
+
+	public void setAnswer(String answer) {
+		storeMetadataValue("Answer", answer);
+	}
+
 	public abstract ROI getROI();
 	
 	/**
@@ -536,7 +545,7 @@ public abstract class PathObject implements Externalizable {
 
 		out.writeObject(name);
 		out.writeObject(color);
-		
+
 		if (metadata != null)
 			out.writeObject(metadata);
 
@@ -562,7 +571,7 @@ public abstract class PathObject implements Externalizable {
 		Object colorObject = in.readObject();
 		if (colorObject instanceof Integer)
 			color = (Integer)colorObject;
-		
+
 		// Read the next object carefully, to help deal with changes in object specifications
 		Object nextObject = in.readObject();
 		

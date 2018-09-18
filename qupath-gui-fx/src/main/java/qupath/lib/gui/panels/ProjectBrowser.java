@@ -468,14 +468,22 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 			return;
 		this.project = project;
 		model = new ProjectImageTreeModel(project);
+		model.setMetadataKeys("OY");
 		tree.setRoot(model.getRootFX());
 		tree.getRoot().setExpanded(true);
+		expandChildren();
 	}
 	
 	public void refreshProject() {
 		model = new ProjectImageTreeModel(project);
+		model.setMetadataKeys("OY");
 		tree.setRoot(model.getRootFX());
-		tree.getRoot().setExpanded(true);		
+		tree.getRoot().setExpanded(true);
+		expandChildren();
+	}
+
+	private void expandChildren() {
+		// TODO
 	}
 
 

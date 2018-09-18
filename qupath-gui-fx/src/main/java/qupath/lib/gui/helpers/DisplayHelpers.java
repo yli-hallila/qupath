@@ -69,6 +69,7 @@ import qupath.lib.color.StainVector;
 import qupath.lib.common.ColorTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.helpers.dialogs.ParameterPanelFX;
+import qupath.lib.gui.helpers.dialogs.TextAreaDialog;
 import qupath.lib.gui.legacy.swing.ParameterPanel;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.images.ImageData;
@@ -408,6 +409,21 @@ public class DisplayHelpers {
 			if (result instanceof String)
 				return (String)result;
 		}
+		return null;
+	}
+
+	public static String showTextAreaDialog(final String title, final String message, final String initialInput) {
+		if (Platform.isFxApplicationThread()) {
+			TextAreaDialog dialog = new TextAreaDialog(initialInput);
+			dialog.setTitle(title);
+			dialog.setHeaderText(null);
+			dialog.setContentText(message);
+			// Traditional way to get the response value.
+			Optional<String> result = dialog.showAndWait();
+			if (result.isPresent())
+				return result.get();
+		}
+
 		return null;
 	}
 	

@@ -319,6 +319,8 @@ import qupath.lib.www.URLHelpers;
  *
  */
 public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, ViewerManager<QuPathViewerPlus> {
+
+	public final boolean STUDENT = true; // TODO
 	
 	static Logger logger = LoggerFactory.getLogger(QuPathGUI.class);
 	
@@ -384,7 +386,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	private MultiviewManager viewerManager;
 	
 	private ObjectProperty<Project<BufferedImage>> project = new SimpleObjectProperty<>();
-	
+
 	private ProjectBrowser projectBrowser;
 	
 	/**
@@ -2861,8 +2863,14 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				null,
 				createCommandAction(new InverseObjectCommand(this), "Make inverse annotation"),
 				createCommandAction(new MergeSelectedAnnotationsCommand(this), "Merge selected annotations"),
-				createCommandAction(new ShapeSimplifierCommand(this), "Simplify annotation shape")
-				);
+				createCommandAction(new ShapeSimplifierCommand(this), "Simplify annotation shape"),
+				null,
+				createCommandAction(() -> {
+					String initialInput = (String) QuPathGUI.getInstance().getImageData().getProperty("Information");
+					String text = DisplayHelpers.showTextAreaDialog("Annotate image", "", initialInput);
+					QuPathGUI.getInstance().getImageData().setProperty("Information", text);
+				}, "Annotate image")
+			);
 
 		
 		Menu menuTMA = createMenu(
@@ -3762,31 +3770,16 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		TabPane tabbedPanel = new TabPane();
 		tabbedPanel.setTabClosingPolicy(TabClosingPolicy.UNAVAILABLE);
 		projectBrowser = new ProjectBrowser(this);
-
 		tabbedPanel.getTabs().add(new Tab("Project", projectBrowser.getPane()));
+
 		PathImageDetailsPanel pathImageDetailsPanel = new PathImageDetailsPanel(this);
 		tabbedPanel.getTabs().add(new Tab("Image", pathImageDetailsPanel.getContainer()));
 
-		final PathAnnotationPanel panelAnnotations = new PathAnnotationPanel(this);
-		SplitPane splitAnnotations = new SplitPane();
-		splitAnnotations.setOrientation(Orientation.VERTICAL);
-		splitAnnotations.getItems().addAll(
-				panelAnnotations.getPane(),
-				new SelectedMeasurementTableView(this).getTable());
-		tabbedPanel.getTabs().add(new Tab("Annotations", splitAnnotations));
+		PathAnnotationPanel panelAnnotations = new PathAnnotationPanel(this);
+		tabbedPanel.getTabs().add(new Tab("Annotations", panelAnnotations.getPane()));
 
-		final PathObjectHierarchyView paneHierarchy = new PathObjectHierarchyView(this);
-		SplitPane splitHierarchy = new SplitPane();
-		splitHierarchy.setOrientation(Orientation.VERTICAL);
-		splitHierarchy.getItems().addAll(
-				paneHierarchy.getPane(),
-				new SelectedMeasurementTableView(this).getTable());
-		tabbedPanel.getTabs().add(new Tab("Hierarchy", splitHierarchy));
-		
-		// Bind the split pane dividers to create a more consistent appearance
-		splitAnnotations.getDividers().get(0).positionProperty().bindBidirectional(
-				splitHierarchy.getDividers().get(0).positionProperty()
-				);
+		PathObjectHierarchyView paneHierarchy = new PathObjectHierarchyView(this);
+		tabbedPanel.getTabs().add(new Tab("Hierarchy", paneHierarchy.getPane()));
 
 		WorkflowPanel workflowPanel = new WorkflowPanel(this);
 		tabbedPanel.getTabs().add(new Tab("Workflow", workflowPanel.getPane()));

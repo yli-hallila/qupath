@@ -32,6 +32,16 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextFlow;
+import javafx.scene.web.WebEngine;
+import javafx.scene.web.WebView;
+import javafx.stage.Modality;
+import javafx.stage.Popup;
+import javafx.stage.Stage;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
 import org.slf4j.Logger;
@@ -41,24 +51,6 @@ import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
-import javafx.scene.control.ColorPicker;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.Control;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.ListView;
-import javafx.scene.control.MenuItem;
-import javafx.scene.control.MultipleSelectionModel;
-import javafx.scene.control.SelectionMode;
-import javafx.scene.control.SeparatorMenuItem;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
-import javafx.scene.control.Tooltip;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.ColumnConstraints;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.Pane;
-import javafx.scene.layout.RowConstraints;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.util.Callback;
@@ -66,6 +58,7 @@ import qupath.lib.classifiers.PathClassificationLabellingHelper;
 import qupath.lib.geom.Point2;
 import qupath.lib.gui.ImageDataChangeListener;
 import qupath.lib.gui.ImageDataWrapper;
+import qupath.lib.gui.QuPathApp;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.helpers.ColorToolsFX;
 import qupath.lib.gui.helpers.DisplayHelpers;
@@ -111,6 +104,10 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 
 	private ListView<PathObject> listAnnotations;
 	private PathObjectHierarchy hierarchy;
+
+	private Text information;
+	private Button showAnswerButton;
+	private Action showAnswerClassAction;
 
 	// Available PathClasses
 	private ListView<PathClass> listClasses;
@@ -476,65 +473,100 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		BorderPane panelObjects = new BorderPane();
 		panelObjects.setCenter(listAnnotations);
 		//		panelObjects.setBorder(BorderFactory.createTitledBorder("Annotation list"));
-		GridPane panelButtons = PanelToolsFX.createColumnGrid(2);
 
-		Action removeROIAction = createRemoveROIAction();
-		Action clearROIsAction = createClearROIsAction();
+		//qupath.getImageData().setProperty("Description", "foo bar");
 
+		if (!qupath.STUDENT) {
+			GridPane panelButtons = PanelToolsFX.createColumnGrid(2);
 
-		Control button = ActionUtils.createButton(removeROIAction);
-		panelButtons.add(button, 0, 0);
-		button.prefWidthProperty().bind(panelButtons.widthProperty().divide(2));
-		button = ActionUtils.createButton(clearROIsAction);
-		panelButtons.add(button, 1, 0);
-		button.prefWidthProperty().bind(panelButtons.widthProperty().divide(2));
-		panelObjects.setBottom(panelButtons);
-
-		// Add the class list
-		BorderPane panelClasses = new BorderPane();
-		panelClasses.setCenter(listClasses);
-		//		panelClasses.setBorder(BorderFactory.createTitledBorder("Classes"));
-
-		GridPane paneColumns = PanelToolsFX.createColumnGrid(panelObjects, panelClasses);
-
-		panelButtons = PanelToolsFX.createColumnGrid(2);
-
-		Action setSelectedObjectClassAction = new Action("Set class", e -> {
-			hierarchy = QuPathGUI.getInstance().getImageData().getHierarchy();
-			if (hierarchy == null)
-				return;
-			PathObject pathObject = hierarchy.getSelectionModel().getSelectedObject();
-			if (!(pathObject instanceof PathAnnotationObject)) {
-				// TODO: Support classifying non-annotation objects?
-				logger.error("Sorry, only annotations can be classified manually.");
-				return;
-			}
-
-			PathClass pathClass = getSelectedPathClass();
-			if (pathObject.getPathClass() == pathClass)
-				return;
-			pathObject.setPathClass(pathClass);
-			hierarchy.fireObjectClassificationsChangedEvent(this, Collections.singleton(pathObject));
-			refreshList(listClasses);
-		});
-		setSelectedObjectClassAction.setLongText("Set the class of the currently-selected annotation");
+			Action removeROIAction = createRemoveROIAction();
+			Action clearROIsAction = createClearROIsAction();
 
 
-		Action autoClassifyAnnotationsAction = new Action("Auto set");
-		autoClassifyAnnotationsAction.setLongText("Automatically set all new annotations to the selected class");
-		autoClassifyAnnotationsAction.selectedProperty().addListener((e, f, g) ->
-		PathPrefs.setAutoSetAnnotationClass(g)
-				);
+			Control button = ActionUtils.createButton(removeROIAction);
+			panelButtons.add(button, 0, 0);
+			button.prefWidthProperty().bind(panelButtons.widthProperty().divide(2));
+			button = ActionUtils.createButton(clearROIsAction);
+			panelButtons.add(button, 1, 0);
+			button.prefWidthProperty().bind(panelButtons.widthProperty().divide(2));
+			panelObjects.setBottom(panelButtons);
 
-		button = ActionUtils.createButton(setSelectedObjectClassAction);
-		panelButtons.add(button, 0, 0);
-		button.prefWidthProperty().bind(panelButtons.widthProperty().divide(2));
-		button = ActionUtils.createToggleButton(autoClassifyAnnotationsAction);
-		panelButtons.add(button, 1, 0);
-		button.prefWidthProperty().bind(panelButtons.widthProperty().divide(2));
-		panelClasses.setBottom(panelButtons);
-		
-		pane.setCenter(paneColumns);
+			// Add the class list
+			BorderPane panelClasses = new BorderPane();
+			panelClasses.setCenter(listClasses);
+			//		panelClasses.setBorder(BorderFactory.createTitledBorder("Classes"));
+
+			GridPane paneColumns = PanelToolsFX.createColumnGrid(panelObjects, panelClasses);
+
+			panelButtons = PanelToolsFX.createColumnGrid(2);
+
+			Action setSelectedObjectClassAction = new Action("Set class", e -> {
+				hierarchy = QuPathGUI.getInstance().getImageData().getHierarchy();
+				if (hierarchy == null)
+					return;
+				PathObject pathObject = hierarchy.getSelectionModel().getSelectedObject();
+				if (!(pathObject instanceof PathAnnotationObject)) {
+					// TODO: Support classifying non-annotation objects?
+					logger.error("Sorry, only annotations can be classified manually.");
+					return;
+				}
+
+				PathClass pathClass = getSelectedPathClass();
+				if (pathObject.getPathClass() == pathClass)
+					return;
+				pathObject.setPathClass(pathClass);
+				hierarchy.fireObjectClassificationsChangedEvent(this, Collections.singleton(pathObject));
+				refreshList(listClasses);
+			});
+			setSelectedObjectClassAction.setLongText("Set the class of the currently-selected annotation");
+
+
+			Action autoClassifyAnnotationsAction = new Action("Auto set");
+			autoClassifyAnnotationsAction.setLongText("Automatically set all new annotations to the selected class");
+			autoClassifyAnnotationsAction.selectedProperty().addListener((e, f, g) ->
+					PathPrefs.setAutoSetAnnotationClass(g)
+			);
+
+			button = ActionUtils.createButton(setSelectedObjectClassAction);
+			panelButtons.add(button, 0, 0);
+			button.prefWidthProperty().bind(panelButtons.widthProperty().divide(2));
+			button = ActionUtils.createToggleButton(autoClassifyAnnotationsAction);
+			panelButtons.add(button, 1, 0);
+			button.prefWidthProperty().bind(panelButtons.widthProperty().divide(2));
+			panelClasses.setBottom(panelButtons);
+
+			pane.setCenter(paneColumns);
+
+		} else {
+			GridPane paneRow = PanelToolsFX.createRowGrid(panelObjects);
+
+			showAnswerClassAction = new Action("Show answer", e -> {
+				hierarchy = QuPathGUI.getInstance().getImageData().getHierarchy();
+				if (hierarchy == null)
+					return;
+				PathObject pathObject = hierarchy.getSelectionModel().getSelectedObject();
+
+				if (pathObject.getAnswer() != null) {
+					DisplayHelpers.showMessageDialog("Answer", pathObject.getAnswer());
+				}
+			});
+
+			showAnswerButton = ActionUtils.createButton(showAnswerClassAction);
+			showAnswerButton.prefWidthProperty().bind(paneRow.widthProperty());
+			showAnswerClassAction.disabledProperty().setValue(true);
+
+			VBox box = new VBox();
+			box.paddingProperty().set(new Insets(5));
+
+			information = new Text("");
+			information.wrappingWidthProperty().bind(paneRow.widthProperty());
+
+			box.getChildren().add(information);
+
+			pane.setTop(box);
+			pane.setBottom(showAnswerButton);
+			pane.setCenter(paneRow);
+		}
 
 		qupath.addImageDataChangeListener(this);
 	}
@@ -682,6 +714,8 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			PathObject selected = hierarchy.getSelectionModel().getSelectedObject();
 			listAnnotations.getItems().setAll(hierarchy.getObjects(null, PathAnnotationObject.class));
 			hierarchy.getSelectionModel().setSelectedObject(selected);
+
+			updateImageDescription();
 		} else {
 			listAnnotations.getItems().clear();
 		}
@@ -734,15 +768,15 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		GridPane panel = new GridPane();
 		panel.setVgap(5);
 		panel.setHgap(5);
-		TextField textField = new TextField();
+		TextField nameTextField = new TextField();
 		if (annotation.getName() != null)
-			textField.setText(annotation.getName());
-		textField.setPrefColumnCount(20);
+			nameTextField.setText(annotation.getName());
+		nameTextField.setPrefColumnCount(20);
 		// Post focus request to run later, after dialog displayed
-		Platform.runLater(() -> textField.requestFocus());
+		Platform.runLater(() -> nameTextField.requestFocus());
 		
 		panel.add(new Label("Name "), 0, 0);
-		panel.add(textField, 1, 0);
+		panel.add(nameTextField, 1, 0);
 
 		boolean promptForColor = true;
 		ColorPicker panelColor = null;
@@ -750,7 +784,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			panelColor = new ColorPicker(ColorToolsFX.getDisplayedColor(annotation));
 			panel.add(new Label("Color "), 0, 1);
 			panel.add(panelColor, 1, 1);
-			panelColor.prefWidthProperty().bind(textField.widthProperty());
+			panelColor.prefWidthProperty().bind(nameTextField.widthProperty());
 		}
 		
 		Label labDescription = new Label("Description");
@@ -761,10 +795,18 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		panel.add(labDescription, 0, 2);
 		panel.add(textAreaDescription, 1, 2);
 
+		Label labAnswer = new Label("Answer");
+		TextArea textAreaAnswer = new TextArea(annotation.getAnswer());
+		textAreaAnswer.setPrefRowCount(2);
+		textAreaAnswer.setPrefColumnCount(25);
+		labAnswer.setLabelFor(textAreaAnswer);
+		panel.add(labAnswer, 0, 3);
+		panel.add(textAreaAnswer, 1, 3);
+
 		if (!DisplayHelpers.showConfirmDialog("Set annotation properties", panel))
 			return false;
 
-		String name = textField.getText().trim();
+		String name = nameTextField.getText().trim();
 		if (name.length() > 0)
 			annotation.setName(name);
 		else
@@ -778,7 +820,14 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			annotation.setDescription(null);
 		else
 			annotation.setDescription(description);
-		
+
+		// Set the answer only if we have to
+		String answer = textAreaAnswer.getText();
+		if (answer == null || answer.isEmpty())
+			annotation.setAnswer(null);
+		else
+			annotation.setAnswer(answer);
+
 		return true;
 	}
 
@@ -815,8 +864,16 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			changingSelection = false;
 			return;
 		}
-		// Check if we're making changes
+
 		List<PathObject> currentlySelected = model.getSelectedItems();
+
+		if (currentlySelected.size() == 1 && hierarchy.getSelectionModel().getSelectedObject().getAnswer() != null) {
+			showAnswerClassAction.disabledProperty().setValue(false);
+		} else {
+			showAnswerClassAction.disabledProperty().setValue(true);
+		}
+
+		// Check if we're making changes
 		if (selected.size() == currentlySelected.size() && (hierarchy.getSelectionModel().getSelectedObjects().containsAll(currentlySelected))) {
 			changingSelection = false;
 			listAnnotations.refresh();
@@ -924,6 +981,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 	@Override
 	public void imageDataChanged(ImageDataWrapper<BufferedImage> source, ImageData<BufferedImage> imageDataOld, ImageData<BufferedImage> imageDataNew) {
 		setImageData(imageDataNew);
+		updateImageDescription();
 	}
 
 
@@ -959,6 +1017,29 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		}
 		// If the lists are different, we need to update accordingly
 		listAnnotations.getItems().setAll(newList);
+		updateImageDescription();
 	}
-	
+
+	private void updateImageDescription() { // Hacky way to achieve this, since no event is fired when ImageData is ready
+		Thread t = new Thread(() -> {
+			try {
+				Thread.sleep(250);
+			} catch (InterruptedException ex) {}
+
+			Platform.runLater(() -> {
+				ImageData<BufferedImage> data = QuPathGUI.getInstance().getImageData();
+
+				if (data == null)
+					return;
+
+				if (data.getProperty("Information") != null) {
+					information.setText((String) data.getProperty("Information"));
+				} else {
+					information.setText("No additional information available.");
+				}
+			});
+		});
+
+		t.start();
+	}
 }
