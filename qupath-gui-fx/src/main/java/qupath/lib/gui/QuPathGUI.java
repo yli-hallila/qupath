@@ -354,7 +354,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 								SHOW_ANNOTATIONS, FILL_ANNOTATIONS, SHOW_TMA_GRID, SHOW_TMA_GRID_LABELS, SHOW_OBJECTS, FILL_OBJECTS, 
 								SPECIFY_ANNOTATION, ANNOTATION_DUPLICATE, GRID_SPACING,
 								COUNTING_PANEL, CONVEX_POINTS, USE_SELECTED_COLOR, DETECTIONS_TO_POINTS,
-								ROTATE_IMAGE, MINI_VIEWER,
+								ROTATE_IMAGE, ROTATE_IMAGE_TOOLBAR, MINI_VIEWER,
 								RIGID_OBJECT_EDITOR, SHOW_COMMAND_LIST,
 								TMA_SCORE_IMPORTER, TMA_ADD_NOTE, COLOR_DECONVOLUTION_REFINE, SHOW_LOG, TMA_RELABEL,
 								SHOW_CELL_BOUNDARIES, SHOW_CELL_NUCLEI, SHOW_CELL_BOUNDARIES_AND_NUCLEI,
@@ -3366,6 +3366,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			return createCommandAction(new DetectionsToPointsCommand(this), "Convert detections to points");
 		case ROTATE_IMAGE:
 			return createCommandAction(new RotateImageCommand(this), "Rotate image");
+		case ROTATE_IMAGE_TOOLBAR:
+			return createCommandAction(new RotateImageCommand(this), "Rotate image", PathIconFactory.createNode(iconSize, iconSize, PathIcons.ELLIPSE_TOOL), new KeyCodeCombination(KeyCode.C, KeyCombination.SHIFT_DOWN));
 		case MINI_VIEWER:
 			return createCommandAction(new MiniViewerCommand(this), "Show mini viewer");
 		case TMA_SCORE_IMPORTER:
@@ -4041,6 +4043,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	// //		toolbar.getItems().add(sliderMag);
 			toolbar.getItems().add(labelMag);
 			toolbar.getItems().add(qupath.getActionToggleButton(GUIActions.ZOOM_TO_FIT, true, false));
+			toolbar.getItems().add(qupath.getActionButton(GUIActions.ROTATE_IMAGE_TOOLBAR, true));
 
 			toolbar.getItems().add(new Separator(Orientation.VERTICAL));
 			
