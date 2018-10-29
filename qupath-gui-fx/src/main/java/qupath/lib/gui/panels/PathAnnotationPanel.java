@@ -56,10 +56,7 @@ import javafx.scene.shape.Rectangle;
 import javafx.util.Callback;
 import qupath.lib.classifiers.PathClassificationLabellingHelper;
 import qupath.lib.geom.Point2;
-import qupath.lib.gui.ImageDataChangeListener;
-import qupath.lib.gui.ImageDataWrapper;
-import qupath.lib.gui.QuPathApp;
-import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.*;
 import qupath.lib.gui.helpers.ColorToolsFX;
 import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.gui.helpers.PanelToolsFX;
@@ -105,7 +102,8 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 	private ListView<PathObject> listAnnotations;
 	private PathObjectHierarchy hierarchy;
 
-	private Text information;
+	private Browser browser;
+
 	private Button showAnswerButton;
 	private Action showAnswerClassAction;
 
@@ -555,15 +553,9 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			showAnswerButton.prefWidthProperty().bind(pane.widthProperty());
 			showAnswerClassAction.disabledProperty().setValue(true);
 
-			VBox box = new VBox();
-			box.paddingProperty().set(new Insets(5));
+			browser = new Browser("Loading ...");
 
-			information = new Text("");
-			information.wrappingWidthProperty().bind(paneRow.widthProperty());
-
-			box.getChildren().add(information);
-
-			pane.setTop(box);
+			pane.setTop(browser);
 			pane.setBottom(showAnswerButton);
 			pane.setCenter(paneRow);
 		}
@@ -1033,9 +1025,9 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 					return;
 
 				if (data.getProperty("Information") != null) {
-					information.setText((String) data.getProperty("Information"));
+					browser.setContent((String) data.getProperty("Information"));
 				} else {
-					information.setText("No additional information available.");
+					browser.setContent("No additional information available.");
 				}
 			});
 		});
