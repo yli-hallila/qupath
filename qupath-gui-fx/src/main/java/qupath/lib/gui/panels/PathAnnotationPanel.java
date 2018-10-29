@@ -552,7 +552,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			});
 
 			showAnswerButton = ActionUtils.createButton(showAnswerClassAction);
-			showAnswerButton.prefWidthProperty().bind(paneRow.widthProperty());
+			showAnswerButton.prefWidthProperty().bind(pane.widthProperty());
 			showAnswerClassAction.disabledProperty().setValue(true);
 
 			VBox box = new VBox();
