@@ -2,7 +2,6 @@ package qupath.lib.gui;
 
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
 import javafx.concurrent.Worker.State;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
@@ -86,13 +85,18 @@ public class Browser extends Region {
     }
 
     private String getHtml(String content) {
-        return "<html><head>" +
+        String DATA_FOLDER_URI = "";
+        if (QuPathGUI.getInstance().getProjectDataDirectory(false) != null) {
+            DATA_FOLDER_URI = QuPathGUI.getInstance().getProjectDataDirectory(false).toPath().toUri().toString();
+        }
+
+        return ("<html><head>" +
                 "<style>" +
                 "body { overflow-x: hidden; overflow-y: hidden; }" +
                 "#content { -webkit-user-select: none; cursor: default; }" +
                 "</style>" +
                 "</head><body>" +
                 "<div id=\"content\">" + content + "</div>" +
-                "</body></html>";
+                "</body></html>").replace("<qupath>", DATA_FOLDER_URI);
     }
 }
