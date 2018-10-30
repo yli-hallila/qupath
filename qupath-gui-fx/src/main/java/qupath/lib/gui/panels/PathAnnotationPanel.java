@@ -55,6 +55,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.util.Callback;
 import qupath.lib.classifiers.PathClassificationLabellingHelper;
+import qupath.lib.common.GeneralTools;
 import qupath.lib.geom.Point2;
 import qupath.lib.gui.*;
 import qupath.lib.gui.helpers.ColorToolsFX;
@@ -77,6 +78,7 @@ import qupath.lib.objects.hierarchy.events.PathObjectHierarchyListener;
 import qupath.lib.objects.hierarchy.events.PathObjectSelectionListener;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectIO;
+import qupath.lib.roi.LineROI;
 import qupath.lib.roi.PointsROI;
 import qupath.lib.roi.interfaces.ROI;
 
@@ -313,8 +315,17 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 							setGraphic(null);
 							return;
 						}
-						setText(value.toString());
-						
+
+						if (value.getROI() instanceof LineROI) {
+							double width = qupath.getImageData().getServer().getPixelWidthMicrons();
+							double height = qupath.getImageData().getServer().getPixelHeightMicrons();
+							LineROI line = (LineROI) value.getROI();
+
+							setText(value.toString() + " (" + line.getScaledLength(width, height) + " " + GeneralTools.micrometerSymbol() + ")");
+						} else {
+							setText(value.toString());
+						}
+
 						int w = 16;
 						int h = 16;
 						
@@ -553,7 +564,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			showAnswerButton.prefWidthProperty().bind(pane.widthProperty());
 			showAnswerClassAction.disabledProperty().setValue(true);
 
-			browser = new Browser("Loading ...");
+			browser = new Browser("");
 
 			pane.setTop(browser);
 			pane.setBottom(showAnswerButton);
@@ -1027,7 +1038,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 				if (data.getProperty("Information") != null) {
 					browser.setContent((String) data.getProperty("Information"));
 				} else {
-					browser.setContent("No additional information available.");
+					browser.setContent("");
 				}
 			});
 		});
