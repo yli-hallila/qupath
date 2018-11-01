@@ -24,6 +24,16 @@ public class Browser extends Region {
     private WebView webView = new WebView();
     private WebEngine webEngine = webView.getEngine();
 
+    private boolean textHighlightable = true;
+
+    public boolean isTextHighlightable() {
+        return textHighlightable;
+    }
+
+    public void setTextHighlightable(boolean textHighlightable) {
+        this.textHighlightable = textHighlightable;
+    }
+
     public Browser(String content) {
         webView.setPrefHeight(5);
         this.setPadding(new Insets(5));
@@ -90,11 +100,14 @@ public class Browser extends Region {
             DATA_FOLDER_URI = QuPathGUI.getInstance().getProjectDataDirectory(false).toPath().toUri().toString();
         }
 
+        String CSS = "body { overflow-y: hidden; }";
+
+        if (!isTextHighlightable()) {
+            CSS += "#content { -webkit-user-select: none; cursor: default; }";
+        }
+
         return ("<html><head>" +
-                "<style>" +
-                "body { overflow-x: hidden; overflow-y: hidden; }" +
-                "#content { -webkit-user-select: none; cursor: default; }" +
-                "</style>" +
+                "<style>" + CSS + "</style>" +
                 "</head><body>" +
                 "<div id=\"content\">" + content + "</div>" +
                 "</body></html>").replace("<qupath>", DATA_FOLDER_URI);

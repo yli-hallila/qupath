@@ -565,6 +565,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			showAnswerClassAction.disabledProperty().setValue(true);
 
 			browser = new Browser("");
+			browser.setTextHighlightable(false);
 
 			pane.setTop(browser);
 			pane.setBottom(showAnswerButton);
