@@ -2282,7 +2282,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			}
 			else {
 				// Show an error message if we can't open the file
-				DisplayHelpers.showErrorNotification("Open image", "Sorry, I can't open " + pathNew);
+				DisplayHelpers.showErrorNotification("Open image", "Sorry, I can't open " + pathNew + "\n" +
+														"Check your folder structure if this is a relative path.");
 //				logger.error("Unable to build whole slide server for path '{}'", pathNew);
 			}
 		}

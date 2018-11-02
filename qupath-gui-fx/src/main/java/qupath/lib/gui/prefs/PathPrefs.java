@@ -1053,8 +1053,18 @@ public class PathPrefs {
 		return defaultPointRadius;
 	}
 
-	
-	
+
+	/**
+	 * Flag to indicate that when adding files to project, they will be referenced relatively to project.
+	 *
+	 * @return
+	 */
+	public static BooleanProperty useRelativePaths() {
+		return useRelativePaths;
+	}
+
+
+	private static BooleanProperty useRelativePaths = createPersistentPreference("useRelativePaths", false);
 	
 	/**
 	 * Create a persistent property, i.e. one that will be saved to/reloaded from the user preferences.

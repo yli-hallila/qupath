@@ -25,6 +25,8 @@ package qupath.lib.gui.commands;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -50,6 +52,7 @@ import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.gui.helpers.PanelToolsFX;
+import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.projects.ProjectIO;
 
 /**
@@ -135,6 +138,14 @@ public class ProjectImportImagesCommand implements PathCommand {
 				for (String path : listView.getItems()) {
 					updateMessage(path);
 					updateProgress(counter, max);
+
+					if (PathPrefs.useRelativePaths().get()) {
+						Path projectRoot = QuPathGUI.getInstance().getProjectDataDirectory(false).toPath();
+						Path imagePath = new File(path.trim()).toPath();
+
+						path = projectRoot.relativize(imagePath).toString();
+					}
+
 					if (qupath.getProject().addImage(path.trim()))
 						pathSucceeded.add(path);
 					else

@@ -37,7 +37,7 @@ import qupath.lib.images.servers.FileFormatInfo.ImageCheckType;
  *
  */
 public class OpenslideServerBuilder implements ImageServerBuilder<BufferedImage> {
-	
+
 	private static Logger logger = LoggerFactory.getLogger(OpenslideServerBuilder.class);
 	private static boolean openslideUnavailable = false;
 

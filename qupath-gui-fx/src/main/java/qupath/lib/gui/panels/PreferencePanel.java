@@ -160,6 +160,10 @@ public class PreferencePanel {
 			category,
 			"Amount to downsample TMA core images when exporting; higher downsample values give smaller image, choosing 1 exports cores at full-resolution (which may be slow)");
 
+		addPropertyPreference(PathPrefs.useRelativePaths(), Boolean.class,
+				"Use relative paths for project images",
+				category,
+				"When enabled, images will be referenced relatively to project root and not with an absolute path.");
 
 		/*
 		 * Viewer
