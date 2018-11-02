@@ -110,6 +110,6 @@ public class Browser extends Region {
                 "<style>" + CSS + "</style>" +
                 "</head><body>" +
                 "<div id=\"content\">" + content + "</div>" +
-                "</body></html>").replace("<qupath>", DATA_FOLDER_URI);
+                "</body></html>").replace("qupath://", DATA_FOLDER_URI);
     }
 }

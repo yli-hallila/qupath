@@ -426,7 +426,21 @@ public class DisplayHelpers {
 
 		return null;
 	}
-	
+
+	public static String showTextAreaDialogWithHeader(final String title, final String message, final String initialInput) {
+		if (Platform.isFxApplicationThread()) {
+			TextAreaDialog dialog = new TextAreaDialog(initialInput);
+			dialog.setTitle(title);
+			dialog.setHeaderText(message);
+			dialog.setContentText(null);
+			// Traditional way to get the response value.
+			Optional<String> result = dialog.showAndWait();
+			if (result.isPresent())
+				return result.get();
+		}
+
+		return null;
+	}
 	
 	public static <T> T showChoiceDialog(final String title, final String message, final T[] choices, final T defaultChoice) {
 		if (Platform.isFxApplicationThread()) {

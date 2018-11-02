@@ -247,7 +247,6 @@ import qupath.lib.gui.panels.PathImageDetailsPanel;
 import qupath.lib.gui.panels.PathObjectHierarchyView;
 import qupath.lib.gui.panels.PreferencePanel;
 import qupath.lib.gui.panels.ProjectBrowser;
-import qupath.lib.gui.panels.SelectedMeasurementTableView;
 import qupath.lib.gui.panels.SlideLabelView;
 import qupath.lib.gui.panels.WorkflowPanel;
 import qupath.lib.gui.panels.classify.RandomTrainingRegionSelector;
@@ -2868,8 +2867,11 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				null,
 				createCommandAction(() -> {
 					String initialInput = (String) QuPathGUI.getInstance().getImageData().getProperty("Information");
-					String text = DisplayHelpers.showTextAreaDialog("Annotate image", "", initialInput);
-					QuPathGUI.getInstance().getImageData().setProperty("Information", text);
+					String text = DisplayHelpers.showTextAreaDialogWithHeader("Annotate image", "Go to http://editor.roni.ml for guide on how to use this.", initialInput);
+
+					if (text != null) {
+						QuPathGUI.getInstance().getImageData().setProperty("Information", text);
+					}
 				}, "Annotate image")
 			);
 
