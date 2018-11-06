@@ -260,14 +260,7 @@ import qupath.lib.gui.viewer.QuPathViewerListener;
 import qupath.lib.gui.viewer.QuPathViewerPlus;
 import qupath.lib.gui.viewer.ViewerPlusDisplayOptions;
 import qupath.lib.gui.viewer.OverlayOptions.CellDisplayMode;
-import qupath.lib.gui.viewer.tools.BrushTool;
-import qupath.lib.gui.viewer.tools.EllipseTool;
-import qupath.lib.gui.viewer.tools.LineTool;
-import qupath.lib.gui.viewer.tools.MoveTool;
-import qupath.lib.gui.viewer.tools.PathTool;
-import qupath.lib.gui.viewer.tools.PointsTool;
-import qupath.lib.gui.viewer.tools.PolygonTool;
-import qupath.lib.gui.viewer.tools.RectangleTool;
+import qupath.lib.gui.viewer.tools.*;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerBuilder;
@@ -347,7 +340,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	
 	public enum GUIActions { OPEN_IMAGE, OPEN_IMAGE_OR_URL, TMA_EXPORT_DATA, SAVE_DATA, SAVE_DATA_AS,
 								COPY_VIEW, COPY_WINDOW, ZOOM_IN, ZOOM_OUT, ZOOM_TO_FIT,
-								MOVE_TOOL, RECTANGLE_TOOL, ELLIPSE_TOOL, POLYGON_TOOL, BRUSH_TOOL, LINE_TOOL, POINTS_TOOL, WAND_TOOL,
+								MOVE_TOOL, RECTANGLE_TOOL, ELLIPSE_TOOL, POLYGON_TOOL, BRUSH_TOOL, LINE_TOOL, POINTS_TOOL, WAND_TOOL, TEXT_TOOL,
 								BRIGHTNESS_CONTRAST,
 								SHOW_OVERVIEW, SHOW_LOCATION, SHOW_SCALEBAR, SHOW_GRID, SHOW_ANALYSIS_PANEL,
 								SHOW_ANNOTATIONS, FILL_ANNOTATIONS, SHOW_TMA_GRID, SHOW_TMA_GRID_LABELS, SHOW_OBJECTS, FILL_OBJECTS, 
@@ -367,7 +360,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 								};
 	
 	// Modes for input tools
-	public enum Modes { MOVE, RECTANGLE, ELLIPSE, LINE, POLYGON, BRUSH, POINTS, WAND }; //, TMA };
+	public enum Modes { MOVE, RECTANGLE, ELLIPSE, LINE, POLYGON, BRUSH, POINTS, WAND, TEXT }; //, TMA };
 	private Modes mode = Modes.MOVE;
 	
 	// ExecutorServices for single & multiple threads
@@ -1617,8 +1610,18 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		
 		// Enable drag and drop
 		dragAndDrop.setupTarget(viewer.getView());
-		
-		
+
+		viewer.getView().setOnZoom(e -> {
+			if (!PathPrefs.getUseZoomGestures())
+				return;
+			double zoomFactor = e.getZoomFactor();
+			if (Double.isNaN(zoomFactor))
+				return;
+
+			logger.debug("Zooming " + e.getZoomFactor() + " (" + e.getTotalZoomFactor() + ")");
+			viewer.setDownsampleFactor(viewer.getDownsampleFactor() / zoomFactor, e.getX(), e.getY());
+			e.consume();
+		});
 		
 		
 		// Listen to the scroll wheel
@@ -1646,18 +1649,6 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				return;
 //			logger.debug("Rotating: " + e.getAngle());
 			viewer.setRotation(viewer.getRotation() + Math.toRadians(e.getAngle()));
-			e.consume();
-		});
-
-		viewer.getView().addEventFilter(ZoomEvent.ANY, e -> {
-			if (!PathPrefs.getUseZoomGestures())
-				return;
-			double zoomFactor = e.getZoomFactor();
-			if (Double.isNaN(zoomFactor))
-				return;
-			
-			logger.debug("Zooming: " + e.getZoomFactor() + " (" + e.getTotalZoomFactor() + ")");
-			viewer.setDownsampleFactor(viewer.getDownsampleFactor() / zoomFactor, e.getX(), e.getY());
 			e.consume();
 		});
 		
@@ -1796,8 +1787,10 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				getActionCheckBoxMenuItem(GUIActions.POLYGON_TOOL, null),
 				getActionCheckBoxMenuItem(GUIActions.BRUSH_TOOL, null),
 				getActionCheckBoxMenuItem(GUIActions.POINTS_TOOL, null),
-				getActionCheckBoxMenuItem(GUIActions.WAND_TOOL, null)
-				);
+				getActionCheckBoxMenuItem(GUIActions.WAND_TOOL, null),
+				getActionCheckBoxMenuItem(GUIActions.TEXT_TOOL, null)
+
+		);
 
 		
 		// Add annotation options
@@ -2734,8 +2727,9 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				getActionCheckBoxMenuItem(GUIActions.POLYGON_TOOL, groupTools),
 				getActionCheckBoxMenuItem(GUIActions.BRUSH_TOOL, groupTools),
 				getActionCheckBoxMenuItem(GUIActions.WAND_TOOL, groupTools),
-				getActionCheckBoxMenuItem(GUIActions.POINTS_TOOL, groupTools)
-				);
+				getActionCheckBoxMenuItem(GUIActions.POINTS_TOOL, groupTools),
+				getActionCheckBoxMenuItem(GUIActions.TEXT_TOOL, groupTools)
+		);
 		
 		Menu menuGestures = createMenu("Multi-touch gestures");
 		addMenuItems(
@@ -2867,7 +2861,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				null,
 				createCommandAction(() -> {
 					String initialInput = (String) QuPathGUI.getInstance().getImageData().getProperty("Information");
-					String text = DisplayHelpers.showTextAreaDialogWithHeader("Annotate image", "Go to http://editor.roni.ml for guide on how to use this.", initialInput);
+					String text = DisplayHelpers.showTextAreaDialogWithHeader("Annotate image", "Go to https://qupath-editor.roni.ml for guide on how to use this.", initialInput);
 
 					if (text != null) {
 						QuPathGUI.getInstance().getImageData().setProperty("Information", text);
@@ -3301,6 +3295,10 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			action = createSelectableCommandAction(new ToolSelectable(this, Modes.WAND), "Wand tool", Modes.WAND, new KeyCodeCombination(KeyCode.W));
 			action.disabledProperty().bind(Bindings.createBooleanBinding(() -> !tools.containsKey(Modes.WAND), tools));
 			return action;
+		case TEXT_TOOL:
+				action = createSelectableCommandAction(new ToolSelectable(this, Modes.TEXT), "Text tool", Modes.TEXT, new KeyCodeCombination(KeyCode.T));
+				action.disabledProperty().bind(Bindings.createBooleanBinding(() -> !tools.containsKey(Modes.TEXT), tools));
+				return action;
 		case SHOW_GRID:
 			return createSelectableCommandAction(overlayOptions.showGridProperty(), "Show grid", PathIconFactory.PathIcons.GRID, new KeyCodeCombination(KeyCode.G, KeyCombination.SHIFT_DOWN));
 		case SHOW_LOCATION:
@@ -3499,6 +3497,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		putToolForMode(Modes.POINTS, new PointsTool(this));
 		putToolForMode(Modes.POLYGON, new PolygonTool(this));
 		putToolForMode(Modes.BRUSH, new BrushTool(this));
+		putToolForMode(Modes.TEXT, new TextTool(this));
 	}
 	
 	

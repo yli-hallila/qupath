@@ -74,15 +74,7 @@ import qupath.lib.objects.hierarchy.TMAGrid;
 import qupath.lib.objects.hierarchy.events.PathObjectSelectionModel;
 import qupath.lib.plugins.ParallelTileObject;
 import qupath.lib.regions.ImageRegion;
-import qupath.lib.roi.AreaROI;
-import qupath.lib.roi.EllipseROI;
-import qupath.lib.roi.LineROI;
-import qupath.lib.roi.PathROIToolsAwt;
-import qupath.lib.roi.PointsROI;
-import qupath.lib.roi.PolygonROI;
-import qupath.lib.roi.RectangleROI;
-import qupath.lib.roi.RoiEditor;
-import qupath.lib.roi.ShapeSimplifierAwt;
+import qupath.lib.roi.*;
 import qupath.lib.roi.interfaces.PathArea;
 import qupath.lib.roi.interfaces.PathPoints;
 import qupath.lib.roi.interfaces.PathShape;
@@ -423,15 +415,17 @@ public class PathHierarchyPaintingHelper {
 		
 		Graphics2D g2d = (Graphics2D)g.create();
 		if (pathROI instanceof PathShape) {
-			Shape shape = shapeProvider.getShape((PathShape)pathROI, downsample);
+			Shape shape = shapeProvider.getShape((PathShape) pathROI, downsample);
 //			Shape shape = PathROIToolsAwt.getShape(pathROI);
 			paintShape(shape, g, colorStroke, stroke, colorFill, downsample);
+		} else if (pathROI instanceof TextROI) {
+			paintText((TextROI) pathROI, g2d);
 		} else if (pathROI instanceof PathPoints) {
 			paintPoints((PathPoints)pathROI, g2d, PathPrefs.getDefaultPointRadius(), colorStroke, stroke, colorFill, downsample);
 		}
 		g2d.dispose();
 	}
-	
+
 
 	static abstract class ShapePool<T extends Shape> {
 		
@@ -642,6 +636,19 @@ public class PathHierarchyPaintingHelper {
 				g2d.draw(ellipse);
 			}
 		}
+	}
+
+	private static void paintText(TextROI pathROI, Graphics2D g2d) {
+		Point2 point = pathROI.getPointList().get(0);
+
+		logger.info("Rendering text: " + pathROI.getText());
+
+		g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		Font font = new Font("Sans-Serif", Font.PLAIN, 100);
+		g2d.setFont(font);
+		g2d.setColor(Color.WHITE);
+		g2d.setStroke(getCachedStroke(5));
+		g2d.drawString(pathROI.getText(), (int) point.getX(), (int) point.getY());
 	}
 	
 	
