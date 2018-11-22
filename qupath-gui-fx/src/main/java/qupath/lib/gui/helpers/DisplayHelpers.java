@@ -35,11 +35,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import javax.swing.JComponent;
-import javax.swing.JDialog;
-import javax.swing.JFrame;
-import javax.swing.JOptionPane;
+import javax.swing.*;
 
+import javafx.geometry.Insets;
+import javafx.scene.control.*;
+import javafx.scene.layout.Region;
+import javafx.util.Pair;
+import jfxtras.scene.layout.GridPane;
 import org.controlsfx.control.Notifications;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,23 +52,20 @@ import javafx.embed.swing.SwingFXUtils;
 import javafx.embed.swing.SwingNode;
 import javafx.scene.Node;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.image.WritableImage;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.ChoiceDialog;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
+import org.w3c.dom.Element;
 import qupath.lib.color.ColorDeconvolutionHelper;
 import qupath.lib.color.ColorDeconvolutionStains;
 import qupath.lib.color.ColorDeconvolutionStains.DEFAULT_CD_STAINS;
 import qupath.lib.color.StainVector;
 import qupath.lib.common.ColorTools;
+import qupath.lib.gui.Browser;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.helpers.dialogs.ParameterPanelFX;
 import qupath.lib.gui.helpers.dialogs.TextAreaDialog;
@@ -497,6 +496,39 @@ public class DisplayHelpers {
 	public static void showPlainNotification(final String title, final String message) {
 		logger.info(title + ": " + message);
 		Notifications.create().title(title).text(message).show();
+	}
+
+	public static String showHTML(final String content) {
+		if (Platform.isFxApplicationThread()) {
+			Browser browser = new Browser(content);
+
+			Dialog<String> dialog = new Dialog<>();
+			dialog.setResizable(true);
+			dialog.setTitle("Annotation editor");
+			dialog.getDialogPane().setPrefSize(1000, 400); // TODO: Magic numbers
+
+			ButtonType loginButton = new ButtonType("Save & Close", ButtonBar.ButtonData.OK_DONE);
+			dialog.getDialogPane().getButtonTypes().addAll(loginButton, ButtonType.CANCEL);
+			dialog.getDialogPane().setContent(browser);
+
+			dialog.setResultConverter(dialogButton -> {
+				logger.info("Result Converter");
+
+				if (dialogButton == loginButton) {
+					Element textArea = browser.getWebEngine().getDocument().getElementById("editor");
+					return textArea.getTextContent();
+				}
+
+				return null;
+			});
+
+			Optional<String> result = dialog.showAndWait();
+
+			if (result.isPresent())
+				return result.get();
+		}
+
+		return null;
 	}
 	
 	/**

@@ -112,4 +112,12 @@ public class Browser extends Region {
                 "<div id=\"content\">" + content + "</div>" +
                 "</body></html>").replace("qupath://", DATA_FOLDER_URI);
     }
+
+    public WebView getWebView() {
+        return webView;
+    }
+
+    public WebEngine getWebEngine() {
+        return webEngine;
+    }
 }

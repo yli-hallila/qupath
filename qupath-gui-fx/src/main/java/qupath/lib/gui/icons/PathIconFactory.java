@@ -23,8 +23,11 @@
 
 package qupath.lib.gui.icons;
 
+import java.awt.*;
 import java.awt.geom.Area;
 import java.awt.geom.PathIterator;
+
+import javafx.scene.text.Text;
 import org.controlsfx.glyphfont.Glyph;
 import org.controlsfx.glyphfont.GlyphFont;
 import org.controlsfx.glyphfont.GlyphFontRegistry;
@@ -43,11 +46,7 @@ import javafx.scene.shape.Rectangle;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.helpers.ColorToolsFX;
 import qupath.lib.gui.prefs.PathPrefs;
-import qupath.lib.roi.EllipseROI;
-import qupath.lib.roi.LineROI;
-import qupath.lib.roi.PathROIToolsAwt;
-import qupath.lib.roi.PointsROI;
-import qupath.lib.roi.RectangleROI;
+import qupath.lib.roi.*;
 import qupath.lib.roi.interfaces.ROI;
 
 /**
@@ -197,9 +196,9 @@ public class PathIconFactory {
 			return line;
 		} else if (pathROI instanceof PointsROI) {
 			// Just show generic points
-			Node node = PathIconFactory.createNode(Math.min(width, height), Math.min(width, height), PathIconFactory.PathIcons.POINTS_TOOL);	
+			Node node = PathIconFactory.createNode(Math.min(width, height), Math.min(width, height), PathIconFactory.PathIcons.POINTS_TOOL);
 			if (node instanceof Glyph)
-				((Glyph)node).setColor(color);
+				((Glyph) node).setColor(color);
 			return node;
 //		} else if (pathROI instanceof PolygonROI) {
 //			PolygonROI p = (PolygonROI)pathROI;
@@ -228,6 +227,9 @@ public class PathIconFactory {
 //			polygon.setStroke(c);
 //			polygon.setFill(null);
 //			return polygon;
+		} else if (pathROI instanceof TextROI) {
+			Text text = new Text("T");
+			return new Text("T");
 		} else {
 			Area area = PathROIToolsAwt.getArea(pathROI);
 			if (area != null) {

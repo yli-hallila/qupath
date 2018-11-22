@@ -68,7 +68,7 @@ import qupath.lib.projects.ProjectIO;
  */
 public class PathPrefs {
 	
-	final private static String NODE_NAME = "io.github.qupath";
+	final private static String NODE_NAME = "io.github.qupath2"; // TODO: Die more gracefully when missing configuration; currently doesn't even start
 	
 	private static Logger logger = LoggerFactory.getLogger(PathPrefs.class);
 	
@@ -417,7 +417,7 @@ public class PathPrefs {
 	}
 		
 	
-	private static StringProperty extensionsPath = createPersistentPreference("extensionsPath", (String)null); // Base directory containing extensions
+	private static StringProperty extensionsPath = createPersistentPreference("extensionsPath", (String) null); // Base directory containing extensions
 
 	
 	public static StringProperty extensionsPathProperty() {

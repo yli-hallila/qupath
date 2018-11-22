@@ -42,11 +42,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
 import java.util.*;
 import java.util.Locale.Category;
 import java.util.Map.Entry;
@@ -301,7 +297,7 @@ import qupath.lib.scripting.DefaultScriptEditor;
 import qupath.lib.scripting.QPEx;
 import qupath.lib.scripting.ScriptEditor;
 import qupath.lib.www.URLHelpers;
-
+import sun.misc.ClassLoaderUtil;
 
 
 /**
@@ -2859,9 +2855,22 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				createCommandAction(new MergeSelectedAnnotationsCommand(this), "Merge selected annotations"),
 				createCommandAction(new ShapeSimplifierCommand(this), "Simplify annotation shape"),
 				null,
-				createCommandAction(() -> {
+				createCommandAction(() -> { // TODO: Exctract to a class
 					String initialInput = (String) QuPathGUI.getInstance().getImageData().getProperty("Information");
-					String text = DisplayHelpers.showTextAreaDialogWithHeader("Annotate image", "Go to https://qupath-editor.roni.ml for guide on how to use this.", initialInput);
+					initialInput = initialInput == null ? "" : initialInput; // TODO: make method
+					String text = null;
+
+					try {
+						String HTML = GeneralTools.readInputStreamAsString(QuPathGUI.class.getResourceAsStream("/html/annotation-editor.html"));
+						HTML = HTML.replace("{{qupath-image-description}}", initialInput);
+
+						text = DisplayHelpers.showHTML(HTML);
+					} catch (Exception e) {
+						logger.info(e.getMessage());
+						e.printStackTrace();
+					}
+
+					logger.info("TEXT: " + text);
 
 					if (text != null) {
 						QuPathGUI.getInstance().getImageData().setProperty("Information", text);
@@ -3005,8 +3014,32 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				menuHelp
 				);
 	}
-	
-	
+
+	private String getFile(String fileName) {
+
+		StringBuilder result = new StringBuilder("");
+
+		//Get file from resources folder
+		ClassLoader classLoader = getClass().getClassLoader();
+		File file = new File(classLoader.getResource(fileName).getFile());
+
+		try (Scanner scanner = new Scanner(file)) {
+
+			while (scanner.hasNextLine()) {
+				String line = scanner.nextLine();
+				result.append(line).append("\n");
+			}
+
+			scanner.close();
+
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		return result.toString();
+
+	}
+
 	public Action createPluginAction(final String name, final Class<? extends PathPlugin> pluginClass, final String arg, final boolean includeRegionStore) {
 		return createPluginAction(name, pluginClass, this, includeRegionStore, arg);
 	}

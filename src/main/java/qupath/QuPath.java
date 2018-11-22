@@ -62,7 +62,6 @@ public class QuPath {
 	private final static Logger logger = LoggerFactory.getLogger(QuPath.class);
 	
 	public static void main(String[] args) {
-		
 		logger.info("Launching QuPath with args: {}", String.join(", ", args));
 		
 		if (args != null && args.length > 0 && "tma".equals(args[0].toLowerCase()))

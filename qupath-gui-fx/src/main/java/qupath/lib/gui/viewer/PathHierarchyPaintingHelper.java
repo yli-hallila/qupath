@@ -36,6 +36,8 @@ import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.Stroke;
 import java.awt.Transparency;
+import java.awt.font.FontRenderContext;
+import java.awt.font.TextLayout;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
@@ -419,7 +421,7 @@ public class PathHierarchyPaintingHelper {
 //			Shape shape = PathROIToolsAwt.getShape(pathROI);
 			paintShape(shape, g, colorStroke, stroke, colorFill, downsample);
 		} else if (pathROI instanceof TextROI) {
-			paintText((TextROI) pathROI, g2d);
+			paintText((TextROI) pathROI, g2d, colorStroke, stroke, colorFill);
 		} else if (pathROI instanceof PathPoints) {
 			paintPoints((PathPoints)pathROI, g2d, PathPrefs.getDefaultPointRadius(), colorStroke, stroke, colorFill, downsample);
 		}
@@ -638,21 +640,29 @@ public class PathHierarchyPaintingHelper {
 		}
 	}
 
-	private static void paintText(TextROI pathROI, Graphics2D g2d) {
-		Point2 point = pathROI.getPointList().get(0);
+	private static void paintText(TextROI pathROI, Graphics2D g2d, Color colorStroke, Stroke stroke, Color colorFill) {
+		Point2 point = pathROI.getPoint();
 
-		logger.info("Rendering text: " + pathROI.getText());
+		//logger.debug("Rendering text: " + pathROI.getText() + " (" + point.getX() + ", " + point.getY() + ")");
 
-		g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		//g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		Font font = new Font("Sans-Serif", Font.PLAIN, 100);
-		g2d.setFont(font);
-		g2d.setColor(Color.WHITE);
-		g2d.setStroke(getCachedStroke(5));
-		g2d.drawString(pathROI.getText(), (int) point.getX(), (int) point.getY());
+
+		TextLayout textLayout = new TextLayout(pathROI.getText(), font, new FontRenderContext(null,false,false));
+		AffineTransform transform = new AffineTransform();
+		transform.translate(point.getX(), point.getY());
+		Shape shape = textLayout.getOutline(transform);
+
+		g2d.setPaint(colorFill);
+		g2d.fill(shape);
+
+		if (colorStroke != null) {
+			g2d.setColor(colorStroke);
+			g2d.setStroke(stroke);
+			g2d.draw(shape);
+		}
 	}
-	
-	
-	
+
 	static Stroke getCachedStroke(final Number thickness) {
 		Stroke stroke = strokeMap.get(thickness);
 		if (stroke == null) {

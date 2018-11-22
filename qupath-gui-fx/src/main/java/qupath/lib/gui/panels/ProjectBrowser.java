@@ -103,10 +103,13 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 	private int thumbnailWidth = 1000;
 	private int thumbnailHeight = 600;
 
+	private final String DEFAULT_ROOT = "No project";
+	private final String UNASSIGNED_NODE = "(Unassigned)";
+	private final String UNNAMED_PROJECT = "Unnamed project";
+
 	private QuPathGUI qupath;
 	private BorderPane panel;
 
-	//private ProjectImageTreeModel model = new ProjectImageTreeModel(null);
 	private TreeView<Object> tree = new TreeView<>();
 
 	// Keep a record of servers we've requested - don't want to keep putting in requests if the server is unavailable
@@ -126,17 +129,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		panel = new BorderPane();
 
 		tree.setCellFactory(treeView -> new ImageEntryCell());
-
-		/*String root;
-		if (project == null) {
-			root = "No project";
-		} else {
-			root = project.getName().isEmpty() ? "Unnamed project" : project.getName();
-		}
-
-		TreeItem<Object> rootNode = new TreeItem<>(root);*/
 		tree.setRoot(null);
-
 		tree.setContextMenu(getPopup());
 
 		tree.setOnKeyPressed(e -> {
@@ -153,7 +146,6 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 			}
 		});
 		
-//		TextArea textDescription = new TextArea();
 		TextArea textDescription = new TextArea();
 		textDescription.textProperty().bind(descriptionText);
 		MasterDetailPane mdTree = new MasterDetailPane(Side.BOTTOM, tree, textDescription, false);
@@ -199,7 +191,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 				if (DisplayHelpers.showConfirmDialog("Delete project entry", "Remove " + entry.getImageName() + " from project?")) {
 					logger.info("Removing entry {} from project {}", path.getValue(), project);
 					project.removeImage(entry);
-					//model.rebuildModel();
+					buildTree();
 				}
 			} else {
 				Collection<ProjectImageEntry<BufferedImage>> entries = getImageEntries(path, null);
@@ -469,10 +461,6 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 	public void refreshProject() {
 		buildTree();
 	}
-
-	private final String DEFAULT_ROOT = "No project";
-	private final String UNASSIGNED_NODE = "(Unassigned)";
-	private final String UNNAMED_PROJECT = "Unnamed project";
 
 	private void buildTree() {
 		String rootName;
@@ -940,8 +928,6 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 				setText(entry.getImageName());
 
 				if (imageEntryCache.containsKey(entry.getImageName())) {
-					logger.info("Updating data from cache, for " + entry.getImageName());
-
 					ImageEntry cache = imageEntryCache.get(entry.getImageName());
 
 					tooltip.setText(cache.getDescription().toString());
@@ -960,8 +946,6 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 						}
 						sb.append("\n");
 					}
-
-					logger.info("Updating data for " + entry.getImageName());
 
 					File file = getImageDataPath(entry);
 					if (file != null && file.exists()) {
@@ -1000,6 +984,9 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		}
 	}
 
+	/*
+	 * Quick and dirty cache class to improve load times on slow networks.
+	 */
 	private class ImageEntry {
 
 		private String name;

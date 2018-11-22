@@ -61,7 +61,6 @@ public class PointsTool extends AbstractPathTool {
 		return (currentObject.getROI() instanceof PointsROI) ? (PointsROI)currentObject.getROI() : null;
 	}
 	
-	
 	@Override
 	public void mouseReleased(MouseEvent e) {
 		super.mouseReleased(e);
