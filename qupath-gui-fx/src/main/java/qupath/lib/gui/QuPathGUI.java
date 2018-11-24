@@ -56,6 +56,8 @@ import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
 import org.controlsfx.control.action.ActionUtils.ActionTextBehavior;
@@ -158,58 +160,9 @@ import qupath.lib.algorithms.TilerPlugin;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.common.SimpleThreadFactory;
 import qupath.lib.common.URLTools;
-import qupath.lib.gui.commands.AnnotationCombineCommand;
-import qupath.lib.gui.commands.BrightnessContrastCommand;
-import qupath.lib.gui.commands.CommandListDisplayCommand;
-import qupath.lib.gui.commands.CopyViewToClipboardCommand;
-import qupath.lib.gui.commands.CountingPanelCommand;
-import qupath.lib.gui.commands.EstimateStainVectorsCommand;
-import qupath.lib.gui.commands.LoadClassifierCommand;
-import qupath.lib.gui.commands.LogViewerCommand;
-import qupath.lib.gui.commands.MeasurementManager;
-import qupath.lib.gui.commands.MeasurementMapCommand;
-import qupath.lib.gui.commands.MiniViewerCommand;
-import qupath.lib.gui.commands.OpenCommand;
-import qupath.lib.gui.commands.PreferencesCommand;
-import qupath.lib.gui.commands.ProjectCloseCommand;
-import qupath.lib.gui.commands.ProjectCreateCommand;
-import qupath.lib.gui.commands.ProjectExportImageListCommand;
-import qupath.lib.gui.commands.ProjectImportImagesCommand;
-import qupath.lib.gui.commands.ProjectMetadataEditorCommand;
-import qupath.lib.gui.commands.ProjectOpenCommand;
-import qupath.lib.gui.commands.ProjectSaveCommand;
-import qupath.lib.gui.commands.QuPathSetupCommand;
-import qupath.lib.gui.commands.ResetPreferencesCommand;
-import qupath.lib.gui.commands.RevertCommand;
-import qupath.lib.gui.commands.RigidObjectEditorCommand;
-import qupath.lib.gui.commands.RotateImageCommand;
-import qupath.lib.gui.commands.SampleScriptLoader;
-import qupath.lib.gui.commands.ExportImageRegionCommand;
-import qupath.lib.gui.commands.SaveViewCommand;
-import qupath.lib.gui.commands.ScriptInterpreterCommand;
-import qupath.lib.gui.commands.SerializeImageDataCommand;
-import qupath.lib.gui.commands.SetGridSpacingCommand;
-import qupath.lib.gui.commands.OpenWebpageCommand;
-import qupath.lib.gui.commands.ShowInstalledExtensionsCommand;
-import qupath.lib.gui.commands.ShowLicensesCommand;
-import qupath.lib.gui.commands.ShowScriptEditorCommand;
-import qupath.lib.gui.commands.ShowSystemInfoCommand;
-import qupath.lib.gui.commands.TMAGridView;
-import qupath.lib.gui.commands.SingleFeatureClassifierCommand;
-import qupath.lib.gui.commands.SummaryMeasurementTableCommand;
-import qupath.lib.gui.commands.TMAAddNote;
-import qupath.lib.gui.commands.TMAViewerCommand;
-import qupath.lib.gui.commands.TMAGridAdd;
+import qupath.lib.gui.commands.*;
 import qupath.lib.gui.commands.TMAGridAdd.TMAAddType;
 import qupath.lib.gui.commands.TMAGridRemove.TMARemoveType;
-import qupath.lib.gui.commands.TMAGridReset;
-import qupath.lib.gui.commands.TMAGridRemove;
-import qupath.lib.gui.commands.TMAExporterCommand;
-import qupath.lib.gui.commands.TMAScoreImportCommand;
-import qupath.lib.gui.commands.ViewTrackerCommand;
-import qupath.lib.gui.commands.ViewerSetDownsampleCommand;
-import qupath.lib.gui.commands.WorkflowDisplayCommand;
-import qupath.lib.gui.commands.ZoomCommand;
 import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.commands.interfaces.PathSelectableCommand;
 import qupath.lib.gui.commands.scriptable.DeleteObjectsCommand;
@@ -2855,27 +2808,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				createCommandAction(new MergeSelectedAnnotationsCommand(this), "Merge selected annotations"),
 				createCommandAction(new ShapeSimplifierCommand(this), "Simplify annotation shape"),
 				null,
-				createCommandAction(() -> { // TODO: Exctract to a class
-					String initialInput = (String) QuPathGUI.getInstance().getImageData().getProperty("Information");
-					initialInput = initialInput == null ? "" : initialInput; // TODO: make method
-					String text = null;
-
-					try {
-						String HTML = GeneralTools.readInputStreamAsString(QuPathGUI.class.getResourceAsStream("/html/annotation-editor.html"));
-						HTML = HTML.replace("{{qupath-image-description}}", initialInput);
-
-						text = DisplayHelpers.showHTML(HTML);
-					} catch (Exception e) {
-						logger.info(e.getMessage());
-						e.printStackTrace();
-					}
-
-					logger.info("TEXT: " + text);
-
-					if (text != null) {
-						QuPathGUI.getInstance().getImageData().setProperty("Information", text);
-					}
-				}, "Annotate image")
+				createCommandAction(new AnnotateImageCommand(this), "Annotate image")
 			);
 
 		

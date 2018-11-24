@@ -68,7 +68,7 @@ import qupath.lib.projects.ProjectIO;
  */
 public class PathPrefs {
 	
-	final private static String NODE_NAME = "io.github.qupath2"; // TODO: Die more gracefully when missing configuration; currently doesn't even start
+	final private static String NODE_NAME = "io.github.qupath"; // TODO: Die more gracefully when missing configuration; currently doesn't even start
 	
 	private static Logger logger = LoggerFactory.getLogger(PathPrefs.class);
 	

@@ -14,7 +14,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.*;
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 
 // Based on: http://java-no-makanaikata.blogspot.com/2012/10/javafx-webview-size-trick.html
 public class Browser extends Region {
