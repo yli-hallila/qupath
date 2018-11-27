@@ -30,7 +30,10 @@ public class AnnotateImageCommand implements PathCommand {
 
     @Override
     public void run() {
-        String initialInput = (String) QuPathGUI.getInstance().getImageData().getProperty("Information");
+        if (qupath.getImageData() == null)
+            return;
+
+        String initialInput = (String) qupath.getImageData().getProperty("Information");
         initialInput = initialInput == null ? "" : initialInput; // TODO: make method
         String result = null;
 
@@ -52,9 +55,8 @@ public class AnnotateImageCommand implements PathCommand {
             HTML = HTML.replace("{{qupath-images-json}}", gson.toJson(images));
             HTML = HTML.replace("{{qupath-project-dir}}", qupath.getProjectDataDirectory(false).toURI().toString());
             result = DisplayHelpers.showHTML(HTML);
-        } catch (Exception e) {
-            logger.info(e.getMessage());
-            e.printStackTrace();
+        } catch (IOException e) {
+            logger.error("Error when opening annotation editor", e);
         }
 
         if (result != null) {
