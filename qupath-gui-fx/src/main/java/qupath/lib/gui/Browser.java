@@ -6,20 +6,17 @@ import javafx.concurrent.Worker.State;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.VPos;
+import javafx.scene.control.ButtonType;
 import javafx.scene.layout.Region;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
+import javafx.scene.control.Dialog;
 import netscape.javascript.JSException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.*;
-import java.io.File;
-import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
 
 // Based on: http://java-no-makanaikata.blogspot.com/2012/10/javafx-webview-size-trick.html
 public class Browser extends Region {
@@ -37,6 +34,10 @@ public class Browser extends Region {
 
     public void setTextHighlightable(boolean textHighlightable) {
         this.textHighlightable = textHighlightable;
+    }
+
+    public Browser() {
+        this("");
     }
 
     public Browser(String content) {
@@ -66,6 +67,9 @@ public class Browser extends Region {
                 });
             }
         });
+
+        webEngine.setOnAlert(event -> showAlert(event.getData()));
+        webEngine.setConfirmHandler(this::showConfirm);
 
         webView.setContextMenuEnabled(false);
 
@@ -105,7 +109,7 @@ public class Browser extends Region {
             DATA_FOLDER_URI = QuPathGUI.getInstance().getProjectDataDirectory(false).toPath().toUri().toString();
         }
 
-        String CSS = "body { overflow-y: hidden; }";
+        String CSS = ""; //"body { overflow-y: hidden; }";
 
         if (!isTextHighlightable()) {
             CSS += "#content { -webkit-user-select: none; cursor: default; }";
@@ -124,5 +128,21 @@ public class Browser extends Region {
 
     public WebEngine getWebEngine() {
         return webEngine;
+    }
+
+    private void showAlert(String message) {
+        Dialog<Void> alert = new Dialog<>();
+        alert.getDialogPane().setContentText(message);
+        alert.getDialogPane().getButtonTypes().add(ButtonType.OK);
+        alert.showAndWait();
+    }
+
+    private boolean showConfirm(String message) {
+        Dialog<ButtonType> confirm = new Dialog<>();
+        confirm.getDialogPane().setContentText(message);
+        confirm.getDialogPane().getButtonTypes().addAll(ButtonType.YES, ButtonType.NO);
+        boolean result = confirm.showAndWait().filter(ButtonType.YES::equals).isPresent();
+
+        return result;
     }
 }
