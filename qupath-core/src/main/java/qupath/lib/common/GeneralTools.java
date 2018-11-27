@@ -74,6 +74,13 @@ public class GeneralTools {
 	public static boolean blankString(final String s) {
 		return s == null || s.length() == 0;
 	}
+
+	/**
+	 * If the string is null return an empty string else return the given string
+	 * @param s
+	 * @return Empty string or the given string
+	 */
+	public static String stringOrEmptyString(final String s) { return s == null ? "" : s; }
 	
 	/**
 	 * Escape backslashes in an absolute file path - useful when scripting.

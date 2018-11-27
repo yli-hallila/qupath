@@ -7,9 +7,7 @@ import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.helpers.DisplayHelpers;
-import qupath.lib.gui.panels.PathAnnotationPanel;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -17,11 +15,11 @@ import java.util.List;
 
 public class AnnotateImageCommand implements PathCommand {
 
-    static Logger logger = LoggerFactory.getLogger(AnnotateImageCommand.class);
+    private final static Logger logger = LoggerFactory.getLogger(AnnotateImageCommand.class);
 
-    final private QuPathGUI qupath;
+    private final QuPathGUI qupath;
 
-    private String[] extensions = { ".png", ".jpg", ".jpeg", ".bmp", ".gif"};
+    private final String[] imageExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".gif" };
 
     public AnnotateImageCommand(QuPathGUI qupath) {
         super();
@@ -33,8 +31,8 @@ public class AnnotateImageCommand implements PathCommand {
         if (qupath.getImageData() == null)
             return;
 
-        String initialInput = (String) qupath.getImageData().getProperty("Information");
-        initialInput = initialInput == null ? "" : initialInput; // TODO: make method
+        String dataFolderURI = qupath.getProjectDataDirectory(true).toURI().toString();
+        String initialInput = GeneralTools.stringOrEmptyString((String) qupath.getImageData().getProperty("Information"));
         String result = null;
 
         try {
@@ -44,37 +42,22 @@ public class AnnotateImageCommand implements PathCommand {
             Files.list(qupath.getProjectDataDirectory(true).toPath()).forEach(item -> {
                 String fileName = item.getName(item.getNameCount() - 1).toString().toLowerCase();
 
-                if (endsWith(fileName, extensions)) {
+                if (GeneralTools.checkExtensions(fileName, imageExtensions)) {
                     images.add(fileName);
                 }
             });
 
-            Gson gson = new Gson();
-
-            HTML = HTML.replace("{{qupath-image-description}}", initialInput);
-            HTML = HTML.replace("{{qupath-images-json}}", gson.toJson(images));
-            HTML = HTML.replace("{{qupath-project-dir}}", qupath.getProjectDataDirectory(false).toURI().toString());
+            HTML = HTML.replace("{{qupath-image-description}}", initialInput)
+                       .replace("{{qupath-images-json}}", new Gson().toJson(images))
+                       .replace("{{qupath-project-dir}}", dataFolderURI);
             result = DisplayHelpers.showHTML(HTML);
         } catch (IOException e) {
             logger.error("Error when opening annotation editor", e);
         }
 
         if (result != null) {
-            result = result.replace(qupath.getProjectDataDirectory(false).toURI().toString(), "qupath://");
+            result = result.replace(dataFolderURI, "qupath://");
             qupath.getImageData().setProperty("Information", result);
         }
-    }
-
-    private boolean endsWith(String fileName, String[] extensions) {
-        boolean endsWith = false;
-
-        for (String extension : extensions) {
-            if (fileName.endsWith(extension)) {
-                endsWith = true;
-                break;
-            }
-        }
-
-        return endsWith;
     }
 }
