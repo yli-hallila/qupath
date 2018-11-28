@@ -48,7 +48,6 @@ import java.util.TreeMap;
 
 import javax.imageio.ImageIO;
 
-import javafx.scene.control.*;
 import org.controlsfx.control.MasterDetailPane;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
@@ -62,6 +61,21 @@ import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.geometry.Side;
 import javafx.scene.canvas.Canvas;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TitledPane;
+import javafx.scene.control.Tooltip;
+import javafx.scene.control.TreeCell;
+import javafx.scene.control.TreeItem;
+import javafx.scene.control.TreeView;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
@@ -69,6 +83,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
+import javafx.util.Callback;
 import qupath.lib.display.ChannelDisplayInfo;
 import qupath.lib.display.ImageDisplay;
 import qupath.lib.gui.ImageDataChangeListener;
@@ -103,21 +118,16 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 	private int thumbnailWidth = 1000;
 	private int thumbnailHeight = 600;
 
-	private final String DEFAULT_ROOT = "No project";
-	private final String UNASSIGNED_NODE = "(Unassigned)";
-	private final String UNNAMED_PROJECT = "Unnamed project";
-
 	private QuPathGUI qupath;
 	private BorderPane panel;
 
+	private ProjectImageTreeModel model = new ProjectImageTreeModel(null);
 	private TreeView<Object> tree = new TreeView<>();
 
 	// Keep a record of servers we've requested - don't want to keep putting in requests if the server is unavailable
 	private Set<String> serversRequested = new HashSet<>();
 	
 	private StringProperty descriptionText = new SimpleStringProperty();
-
-	private String sortKey = null;
 
 
 	public ProjectBrowser(final QuPathGUI qupath) {
@@ -191,7 +201,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 				if (DisplayHelpers.showConfirmDialog("Delete project entry", "Remove " + entry.getImageName() + " from project?")) {
 					logger.info("Removing entry {} from project {}", path.getValue(), project);
 					project.removeImage(entry);
-					buildTree();
+					model.rebuildModel();
 				}
 			} else {
 				Collection<ProjectImageEntry<BufferedImage>> entries = getImageEntries(path, null);
@@ -199,14 +209,14 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 						DisplayHelpers.showYesNoDialog("Remove project entries", String.format("Remove %d entries?", entries.size())))) {
 					logger.info("Removing {} entries from project {}", entries.size(), project);
 					project.removeAllImages(entries);
-					buildTree();
+					model.rebuildModel();
 				}
 			}
 			ProjectIO.writeProject(project);
 			if (tree != null) {
 				boolean isExpanded = tree.getRoot() != null && tree.getRoot().isExpanded();
-				//tree.setRoot(model.getRootFX());
-				//tree.getRoot().setExpanded(isExpanded);
+				tree.setRoot(model.getRootFX());
+				tree.getRoot().setExpanded(isExpanded);
 //				tree.refresh();
 			}
 		});
@@ -427,6 +437,9 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		return false;
 	}
 
+	
+
+
 	public boolean hasProject() {
 		return getProject() != null;
 	}
@@ -441,71 +454,30 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		return panel;
 	}
 
-	public String getSortKey() {
-		return sortKey;
-	}
-
-	public void setSortKey(String sortKey) {
-		this.sortKey = sortKey;
-	}
 
 	public void setProject(final Project<BufferedImage> project) {
 		if (this.project == project)
 			return;
-
-		imageEntryCache.clear();
 		this.project = project;
-		buildTree();
+		model = new ProjectImageTreeModel(project);
+		model.setMetadataKeys("OY");
+		tree.setRoot(model.getRootFX());
+		tree.getRoot().setExpanded(true);
+		expandChildren();
 	}
 	
 	public void refreshProject() {
-		buildTree();
-	}
-
-	private void buildTree() {
-		String rootName;
-		if (project == null) {
-			rootName = DEFAULT_ROOT;
-		} else {
-			rootName = project.getName().isEmpty() ? UNNAMED_PROJECT : project.getName();
-		}
-
-		TreeItem<Object> rootNode = new TreeItem<>(rootName);
-		tree.setRoot(rootNode);
+		model = new ProjectImageTreeModel(project);
+		model.setMetadataKeys("OY");
+		tree.setRoot(model.getRootFX());
 		tree.getRoot().setExpanded(true);
-
-		if (project == null)
-			return;
-
-		if (getSortKey() == null) {
-			for (ProjectImageEntry<?> entry : project.getImageList()) {
-				TreeItem<Object> item = new TreeItem<>(entry);
-				rootNode.getChildren().add(item);
-			}
-		} else {
-			for (ProjectImageEntry<?> entry : project.getImageList()) {
-				TreeItem<Object> empLeaf = new TreeItem<>(entry);
-				String sortValue = entry.getMetadataValue(sortKey) == null ? UNASSIGNED_NODE : entry.getMetadataValue(sortKey);
-				boolean found = false;
-
-				for (TreeItem<Object> depNode : rootNode.getChildren()) {
-					if (depNode.getValue().equals(sortValue)) {
-						depNode.getChildren().add(empLeaf);
-						found = true;
-						break;
-					}
-				}
-
-				if (!found) {
-					TreeItem<Object> depNode = new TreeItem<>(sortValue);
-					rootNode.getChildren().add(depNode);
-					depNode.getChildren().add(empLeaf);
-				}
-			}
-
-			rootNode.getChildren().sort(Comparator.comparing(TreeItem::toString));
-		}
+		expandChildren();
 	}
+
+	private void expandChildren() {
+		// TODO
+	}
+
 
 	void ensureServerInWorkspace(final ImageServer<BufferedImage> server) {
 		if (server == null || project == null)
@@ -517,7 +489,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		if (project.addImagesForServer(server)) {
 			ProjectImageEntry<BufferedImage> entry = project.getImageEntry(server.getPath());
 			//			tree.setModel(new ProjectImageTreeModel(project)); // TODO: Update the model more elegantly!!!
-
+			tree.setRoot(model.getRootFX());
 			if (entry != null) {
 				setSelectedEntry(tree, tree.getRoot(), entry);
 			}
@@ -752,9 +724,11 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 
 	Action createSortByKeyAction(final String name, final String key) {
 		return new Action(name, e -> {
-			setSortKey(key);
-			buildTree();
+			if (model == null)
+				return;
+			model.setMetadataKeys(key);
 			ProjectImageEntry<BufferedImage> entrySelected = getSelectedEntry();
+			tree.setRoot(model.getRootFX());
 			tree.getRoot().setExpanded(true);
 			if (entrySelected != null)
 				setSelectedEntry(tree, tree.getRoot(), entrySelected);
@@ -791,7 +765,8 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		if (entry == entryNew)
 			return false;
 		
-		buildTree();
+		model.rebuildModel();
+		tree.setRoot(model.getRootFX());
 		tree.getRoot().setExpanded(true);
 		tree.refresh();
 		if (recursiveSelectObject(tree, tree.getRoot(), entryNew)) {
@@ -871,6 +846,162 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		ProjectIO.writeProject(project);
 		
 		return entryNew;
+	}
+	
+
+
+	// I fully admit this is a horrible design - cobbled together from an earlier Swing version
+	// TODO: Greatly improve the project tree display...
+	static class ProjectImageTreeModel {
+
+		private Project<?> project;
+		private Map<String, List<ProjectImageEntry<?>>> map = new HashMap<>();
+		private List<String> mapKeyList = new ArrayList<>();
+
+		private List<String> sortKeys = new ArrayList<>();
+		private String PROJECT_KEY;
+		private String DEFAULT_ROOT = "No project";
+		private String UNASSIGNED_NODE = "(Unassigned)";
+
+		ProjectImageTreeModel(final Project<?> project) {
+			this(project, null);
+		}
+
+
+		ProjectImageTreeModel(final Project<?> project, final String metadataKey) {
+			this.project = project;
+			if (project == null)
+				PROJECT_KEY = "Unnamed project";
+			else
+				PROJECT_KEY = project.getName();
+			if (metadataKey != null)
+				setMetadataKeys(metadataKey);
+			//			rebuildModel();
+		}
+
+		public void setMetadataKeys(final String... metadataSortKeys) {
+			sortKeys.clear();
+			if (metadataSortKeys != null) {
+				for (String key : metadataSortKeys) {
+					if (key != null)
+						sortKeys.add(key);
+				}
+			}
+			rebuildModel();
+		}
+
+		public void resetMetadataKeys() {
+			setMetadataKeys();
+		}
+
+		public void rebuildModel() {
+			map.clear();
+			mapKeyList.clear();
+			if (project == null)
+				return;
+
+			// Populate the map
+			String emptyKey = sortKeys.isEmpty() ? PROJECT_KEY : UNASSIGNED_NODE;
+			for (ProjectImageEntry<?> entry : project.getImageList()) {
+				String localKey = emptyKey;
+				for (String metadataKey : sortKeys) {
+					String temp = entry.getMetadataValue(metadataKey);
+					if (temp != null) {
+						localKey = temp;
+						break;						
+					}
+				}
+				List<ProjectImageEntry<?>> list = map.get(localKey);
+				if (list == null) {
+					list = new ArrayList<>();
+					map.put(localKey, list);
+				}
+				list.add(entry);
+			}
+
+			// Sort all the lists
+			for (List<ProjectImageEntry<?>> list : map.values()) {
+				list.sort(new Comparator<ProjectImageEntry<?>>() {
+					@Override
+					public int compare(ProjectImageEntry<?> o1, ProjectImageEntry<?> o2) {
+						return o1.toString().compareTo(o2.toString());
+					}
+				});
+			}
+
+			// Populate the key list
+			mapKeyList.addAll(map.keySet());
+			Collections.sort(mapKeyList);
+			// Ensure unassigned is at the end
+			if (mapKeyList.remove(UNASSIGNED_NODE))
+				mapKeyList.add(UNASSIGNED_NODE);
+
+
+
+
+		}
+
+
+		public TreeItem<Object> getRootFX() {
+			rebuildModel();
+			TreeItem<Object> root = new TreeItem<>(getRoot());
+			List<TreeItem<Object>> items = root.getChildren();
+			if (project != null) {
+				if (sortKeys.isEmpty()) {
+					for (ProjectImageEntry<?> entry : project.getImageList())
+						items.add(new TreeItem<>(entry));
+				} else {
+					for (String key : mapKeyList) {
+						TreeItem<Object> item = new TreeItem<>(key);
+						for (ProjectImageEntry<?> entry : map.get(key))
+							item.getChildren().add(new TreeItem<>(entry));
+						items.add(item);
+					}
+				}
+			}
+			return root;
+		}
+
+
+
+		public Object getRoot() {
+			return project == null ? DEFAULT_ROOT : PROJECT_KEY;
+		}
+
+		public Object getChild(Object parent, int index) {
+			//			if (parent == project && project != null)
+			//				return project.getImageList().get(index);
+
+			if (project == null)
+				return null;
+			if (parent == PROJECT_KEY && !sortKeys.isEmpty())
+				return mapKeyList.get(index);
+			List<ProjectImageEntry<?>> list = map.get(parent);
+			return list.get(index);
+		}
+
+		public int getChildCount(Object parent) {
+			if (project == null)
+				return 0;
+			if (parent == PROJECT_KEY && !sortKeys.isEmpty())
+				return map.size();
+			List<ProjectImageEntry<?>> list = map.get(parent);
+			return list == null ? 0 : list.size();
+		}
+
+		public boolean isLeaf(Object node) {
+			return node instanceof ProjectImageEntry;
+		}
+
+		public int getIndexOfChild(Object parent, Object child) {
+			if (project == null)
+				return -1;
+			if (parent == PROJECT_KEY && !sortKeys.isEmpty())
+				return mapKeyList.indexOf(child);
+			List<ProjectImageEntry<?>> list = map.get(parent);
+			return list == null ? -1 : list.indexOf(child);
+		}
+
 	}
 
 	private Map<String, ImageEntry> imageEntryCache = new HashMap<>();
@@ -984,31 +1115,24 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		}
 	}
 
-	/*
-	 * Quick and dirty cache class to improve load times on slow networks.
-	 */
 	private class ImageEntry {
-
 		private String name;
 		private StringBuilder description;
 		private Image thumbnail;
-
 		private ImageEntry(String name, StringBuilder description, Image thumbnail) {
 			this.name = name;
 			this.description = description;
 			this.thumbnail = thumbnail;
 		}
-
 		public String getName() {
 			return name;
 		}
-
 		public StringBuilder getDescription() {
 			return description;
 		}
-
 		public Image getThumbnail() {
 			return thumbnail;
 		}
 	}
+
 }
