@@ -506,8 +506,9 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 			return;
 		ProjectImageEntry<BufferedImage> entry = project.getImageEntry(imageDataNew.getServerPath());
 		if (entry == null) {
-			if (DisplayHelpers.showYesNoDialog("Add to project", "Add " + imageDataNew.getServer().getShortServerName() + " to project?"))
-				ensureServerInWorkspace(imageDataNew.getServer());
+			//if (DisplayHelpers.showYesNoDialog("Add to project", "Add " + imageDataNew.getServer().getShortServerName() + " to project?"))
+			//	ensureServerInWorkspace(imageDataNew.getServer());
+			// TODO: Disable adding images to projects by drag-and-dropping. Has some issues with relative paths.
 		}
 		else if (!entry.equals(getSelectedEntry()))
 			setSelectedEntry(tree, tree.getRoot(), entry);
@@ -1009,7 +1010,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 	public class ImageEntryCell extends TreeCell<Object> {
 
 		final SimpleDateFormat dateFormat = new SimpleDateFormat();
-		
+
 		private Tooltip tooltip = new Tooltip();
 		private StackPane label = new StackPane();
 		private ImageView viewTooltip = new ImageView();
@@ -1045,7 +1046,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 				setStyle("-fx-font-weight: normal; -fx-font-family: arial");
 			else
 				setStyle("-fx-font-style: italic; -fx-font-family: arial");
-			
+
 			if (entry == null) {
 				setText(item.toString() + " (" + getTreeItem().getChildren().size() + ")");
 				tooltip.setText(item.toString());

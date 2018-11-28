@@ -91,7 +91,7 @@ public class OpenslideImageServer extends AbstractImageServer<BufferedImage> {
 		// from different classloader are likely to cause an error (although upon first further investigation it seems this doesn't really solve the problem...)
 		File file = new File(path);
 		if (!file.isAbsolute()) {
-			file = new File(QuPathGUI.getInstance().getProjectDataDirectory(false) + "\\" + path);
+			file = new File(QuPathGUI.getInstance().getCurrentProjectDirectory() + File.separator + path);
 		}
 
 		System.gc();
