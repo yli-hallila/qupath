@@ -59,8 +59,6 @@ import qupath.lib.roi.interfaces.ROI;
 import qupath.lib.roi.interfaces.PathShape;
 import qupath.lib.rois.vertices.Vertices;
 
-import javax.xml.soap.Text;
-
 /**
  * A collection of static methods to help converting between PathROIs and AWT shapes, or using AWT shapes to add
  * useful functionality when using PathROIs.

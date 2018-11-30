@@ -105,11 +105,11 @@ public class Browser extends Region {
 
     private String getHtml(String content) {
         String DATA_FOLDER_URI = "";
-        if (QuPathGUI.getInstance().getProjectDataDirectory(false) != null) {
-            DATA_FOLDER_URI = QuPathGUI.getInstance().getProjectDataDirectory(false).toPath().toUri().toString();
+        if (QuPathGUI.getInstance().getProjectDataDirectory(true) != null) {
+            DATA_FOLDER_URI = QuPathGUI.getInstance().getProjectDataDirectory(true).toPath().toUri().toString();
         }
 
-        String CSS = ""; //"body { overflow-y: hidden; }";
+        String CSS = "";
 
         if (!isTextHighlightable()) {
             CSS += "#content { -webkit-user-select: none; cursor: default; }";

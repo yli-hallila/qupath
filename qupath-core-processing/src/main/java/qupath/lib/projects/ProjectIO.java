@@ -90,9 +90,6 @@ public class ProjectIO {
 					for (int i = 0; i < pathClassesArray.size(); i++) {
 						JsonObject pathClassObject = pathClassesArray.get(i).getAsJsonObject();
 						String name = pathClassObject.get("name").getAsString();
-
-						logger.info("pathClasses name: " + name);
-
 						int color = pathClassObject.get("color").getAsInt();
 						PathClass pathClass = PathClassFactory.getPathClass(name, color);
 						pathClasses.add(pathClass);
@@ -124,10 +121,6 @@ public class ProjectIO {
 					description = imageObject.get("description").getAsString();
 				String path = imageObject.get("path").getAsString();
 				String name = imageObject.has("name") ? imageObject.get("name").getAsString() : null;
-
-				if (name != null && name.endsWith("_mac") && System.getProperty("os.name").startsWith("Windows"))
-					continue;
-
 				project.addImage(new ProjectImageEntry<>(project, path, name, description, metadataMap));
 			}
 
