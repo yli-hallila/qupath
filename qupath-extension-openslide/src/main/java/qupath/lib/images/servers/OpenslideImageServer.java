@@ -44,7 +44,6 @@ import com.google.gson.GsonBuilder;
 
 import qupath.lib.awt.common.AwtTools;
 import qupath.lib.awt.images.PathBufferedImage;
-import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.PathImage;
 import qupath.lib.regions.RegionRequest;
 
@@ -90,9 +89,6 @@ public class OpenslideImageServer extends AbstractImageServer<BufferedImage> {
 		// Ensure the garbage collector has run - otherwise any previous attempts to load the required native library
 		// from different classloader are likely to cause an error (although upon first further investigation it seems this doesn't really solve the problem...)
 		File file = new File(path);
-		if (!file.isAbsolute()) {
-			file = new File(QuPathGUI.getInstance().getCurrentProjectDirectory() + File.separator + path);
-		}
 
 		System.gc();
 		osr = new OpenSlide(file);

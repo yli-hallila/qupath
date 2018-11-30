@@ -8,5 +8,4 @@ configurations {
 dependencies {
   compile project(':qupath-core')
   compile project(':qupath-core-awt')
-  compile project(':qupath-gui-fx')
 }

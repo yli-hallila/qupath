@@ -125,10 +125,14 @@ public class Project<T> {
 	}
 
 	public boolean addImagesForServer(final ImageServer<T> server) {
+		return addImagesForServer(server, false);
+	}
+
+	public boolean addImagesForServer(final ImageServer<T> server, final boolean relative) {
 		
 		List<String> subImages = server.getSubImageList();
 		if (subImages.isEmpty()) {
-			return addImage(new ProjectImageEntry<>(this, server.getPath(), server.getDisplayedImageName(), null));
+			return addImage(new ProjectImageEntry<>(this, server.getPath(), server.getDisplayedImageName(), null, null, relative));
 		}
 		
 		boolean changes = false;
@@ -148,11 +152,15 @@ public class Project<T> {
 		cleanedPath = cleanedPath.replace("{$PROJECT_DIR}", getBaseDirectory().getAbsolutePath());
 		return cleanedPath;
 	}
-	
+
 	public boolean addImage(final String path) {
+		return addImage(path, false);
+	}
+
+	public boolean addImage(final String path, final boolean relative) {
 		try {
 			ImageServer<T> server = ImageServerProvider.buildServer(path, cls);
-			boolean changes = addImagesForServer(server);
+			boolean changes = addImagesForServer(server, relative);
 			server.close();
 			return changes;
 		} catch (Exception e) {

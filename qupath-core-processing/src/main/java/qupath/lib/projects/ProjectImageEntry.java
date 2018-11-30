@@ -24,6 +24,8 @@
 package qupath.lib.projects;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -54,15 +56,25 @@ public class ProjectImageEntry<T> implements Comparable<ProjectImageEntry<T>> {
 	
 	private String description;
 
-	public ProjectImageEntry(final Project<T> project, final String serverPath, final String imageName, final String description, final Map<String, String> metadataMap) {
-		this.project = project;
-		this.serverPath = serverPath;
-		
-		// TODO: Check if this is a remotely acceptable way to achieve relative pathnames!  I suspect it is not really...
-		String projectPath = project.getBaseDirectory().getAbsolutePath();
-		if (this.serverPath.startsWith(projectPath))
-			this.serverPath = "{$PROJECT_DIR}" + this.serverPath.substring(projectPath.length());
-		
+    public ProjectImageEntry(final Project<T> project, final String serverPath, final String imageName, final String description, final Map<String, String> metadataMap) {
+        this(project, serverPath, imageName, description, metadataMap, false);
+    }
+
+	public ProjectImageEntry(final Project<T> project, final String serverPath, final String imageName, final String description, final Map<String, String> metadataMap, final boolean relative) {
+        this.project = project;
+        this.serverPath = serverPath;
+
+        // TODO: Check if this is a remotely acceptable way to achieve relative pathnames!  I suspect it is not really...
+        String projectPath = project.getBaseDirectory().getAbsolutePath();
+        if (this.serverPath.startsWith(projectPath)) {
+            this.serverPath = "{$PROJECT_DIR}" + this.serverPath.substring(projectPath.length());
+        } else if (relative) {
+			Path projectRoot = Paths.get(project.getBaseDirectory().getAbsolutePath());
+			Path imagePath = Paths.get(this.serverPath);
+
+			this.serverPath = "{$PROJECT_DIR}" + File.separator + projectRoot.relativize(imagePath).toString();
+        }
+
 		if (imageName == null) {
 			if (URLTools.checkURL(serverPath))
 				this.imageName = URLTools.getNameFromBaseURL(serverPath);

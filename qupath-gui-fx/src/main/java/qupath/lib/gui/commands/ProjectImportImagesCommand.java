@@ -139,14 +139,7 @@ public class ProjectImportImagesCommand implements PathCommand {
 					updateMessage(path);
 					updateProgress(counter, max);
 
-					if (PathPrefs.useRelativePaths().get()) {
-						Path projectRoot = QuPathGUI.getInstance().getCurrentProjectDirectory().toPath();
-						Path imagePath = new File(path.trim()).toPath();
-
-						path = projectRoot.relativize(imagePath).toString();
-					}
-
-					if (qupath.getProject().addImage(path.trim()))
+					if (qupath.getProject().addImage(path.trim(), PathPrefs.useRelativePaths().get()))
 						pathSucceeded.add(path);
 					else
 						pathFailed.add(path);

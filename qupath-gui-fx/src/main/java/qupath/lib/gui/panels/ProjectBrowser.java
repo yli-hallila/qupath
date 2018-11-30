@@ -93,6 +93,7 @@ import qupath.lib.gui.QuPathGUI.GUIActions;
 import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.gui.helpers.PaintingToolsFX;
 import qupath.lib.gui.helpers.PanelToolsFX;
+import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerProvider;
@@ -475,7 +476,9 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 	}
 
 	private void expandChildren() {
-		// TODO
+		for (TreeItem<Object> child : tree.getRoot().getChildren()) {
+			child.setExpanded(true);
+		}
 	}
 
 
@@ -486,7 +489,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		//		project.addImagesForServer(server);
 		//		ProjectImageEntry entry = new ProjectImageEntry(project, server.getPath(), server.getDisplayedImageName());
 
-		if (project.addImagesForServer(server)) {
+		if (project.addImagesForServer(server, PathPrefs.useRelativePaths().get())) {
 			ProjectImageEntry<BufferedImage> entry = project.getImageEntry(server.getPath());
 			//			tree.setModel(new ProjectImageTreeModel(project)); // TODO: Update the model more elegantly!!!
 			tree.setRoot(model.getRootFX());
@@ -506,9 +509,8 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 			return;
 		ProjectImageEntry<BufferedImage> entry = project.getImageEntry(imageDataNew.getServerPath());
 		if (entry == null) {
-			//if (DisplayHelpers.showYesNoDialog("Add to project", "Add " + imageDataNew.getServer().getShortServerName() + " to project?"))
-			//	ensureServerInWorkspace(imageDataNew.getServer());
-			// TODO: Disable adding images to projects by drag-and-dropping. Has some issues with relative paths.
+			if (DisplayHelpers.showYesNoDialog("Add to project", "Add " + imageDataNew.getServer().getShortServerName() + " to project?"))
+				ensureServerInWorkspace(imageDataNew.getServer());
 		}
 		else if (!entry.equals(getSelectedEntry()))
 			setSelectedEntry(tree, tree.getRoot(), entry);
