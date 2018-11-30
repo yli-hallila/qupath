@@ -16,11 +16,11 @@ def nativesClassifier = null           // Maven classifier for requesting native
 import org.gradle.internal.os.OperatingSystem
 println 'Operating system: ' + OperatingSystem.current()
 def nativesCPP = null
-/*if (OperatingSystem.current().isMacOsX()) {*/
+if (OperatingSystem.current().isMacOsX()) {
   nativeBundle = 'mac.app'
   nativesClassifier = 'natives-osx'
   nativesCPP = 'macosx-x86_64'
-/*} else if (OperatingSystem.current().isLinux()) {
+} else if (OperatingSystem.current().isLinux()) {
   nativeBundle = 'linux.app'
   nativesClassifier = 'natives-linux'
   nativesCPP = 'linux-x86_64'
@@ -31,7 +31,7 @@ def nativesCPP = null
 } else {
   println 'Unknown operating system - will attempt all native bundles'
   nativeBundle = 'all'
-}*/
+}
 
 // At the time of writing, packaging as a JavaFX native package is only
 // working smoothing for Java 8.
@@ -83,7 +83,7 @@ subprojects {
     jpen 'net.sourceforge.jpen:jpen:2-150301'
     if (nativesClassifier != null)
       jpen 'net.sourceforge.jpen:jpen:2-150301:' + nativesClassifier
-    imagej 'net.imagej:ij:1.52h'
+    imagej 'net.imagej:ij:1.51s'
     openslide 'org.openslide:openslide:3.4.1_2'
     if (nativesClassifier != null)
       openslide 'org.openslide:openslide:3.4.1_2:' + nativesClassifier
@@ -297,7 +297,5 @@ jfx {
     if (!includeJRE) {
       bundleArguments['runtime'] = null
     }
-
-    runJavaParameter = '-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005'
 
 }

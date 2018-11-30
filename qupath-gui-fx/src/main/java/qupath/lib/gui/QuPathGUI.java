@@ -56,8 +56,6 @@ import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
 import org.controlsfx.control.action.ActionUtils.ActionTextBehavior;
@@ -160,9 +158,58 @@ import qupath.lib.algorithms.TilerPlugin;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.common.SimpleThreadFactory;
 import qupath.lib.common.URLTools;
-import qupath.lib.gui.commands.*;
+import qupath.lib.gui.commands.AnnotationCombineCommand;
+import qupath.lib.gui.commands.BrightnessContrastCommand;
+import qupath.lib.gui.commands.CommandListDisplayCommand;
+import qupath.lib.gui.commands.CopyViewToClipboardCommand;
+import qupath.lib.gui.commands.CountingPanelCommand;
+import qupath.lib.gui.commands.EstimateStainVectorsCommand;
+import qupath.lib.gui.commands.LoadClassifierCommand;
+import qupath.lib.gui.commands.LogViewerCommand;
+import qupath.lib.gui.commands.MeasurementManager;
+import qupath.lib.gui.commands.MeasurementMapCommand;
+import qupath.lib.gui.commands.MiniViewerCommand;
+import qupath.lib.gui.commands.OpenCommand;
+import qupath.lib.gui.commands.PreferencesCommand;
+import qupath.lib.gui.commands.ProjectCloseCommand;
+import qupath.lib.gui.commands.ProjectCreateCommand;
+import qupath.lib.gui.commands.ProjectExportImageListCommand;
+import qupath.lib.gui.commands.ProjectImportImagesCommand;
+import qupath.lib.gui.commands.ProjectMetadataEditorCommand;
+import qupath.lib.gui.commands.ProjectOpenCommand;
+import qupath.lib.gui.commands.ProjectSaveCommand;
+import qupath.lib.gui.commands.QuPathSetupCommand;
+import qupath.lib.gui.commands.ResetPreferencesCommand;
+import qupath.lib.gui.commands.RevertCommand;
+import qupath.lib.gui.commands.RigidObjectEditorCommand;
+import qupath.lib.gui.commands.RotateImageCommand;
+import qupath.lib.gui.commands.SampleScriptLoader;
+import qupath.lib.gui.commands.ExportImageRegionCommand;
+import qupath.lib.gui.commands.SaveViewCommand;
+import qupath.lib.gui.commands.ScriptInterpreterCommand;
+import qupath.lib.gui.commands.SerializeImageDataCommand;
+import qupath.lib.gui.commands.SetGridSpacingCommand;
+import qupath.lib.gui.commands.OpenWebpageCommand;
+import qupath.lib.gui.commands.ShowInstalledExtensionsCommand;
+import qupath.lib.gui.commands.ShowLicensesCommand;
+import qupath.lib.gui.commands.ShowScriptEditorCommand;
+import qupath.lib.gui.commands.ShowSystemInfoCommand;
+import qupath.lib.gui.commands.TMAGridView;
+import qupath.lib.gui.commands.SingleFeatureClassifierCommand;
+import qupath.lib.gui.commands.SummaryMeasurementTableCommand;
+import qupath.lib.gui.commands.TMAAddNote;
+import qupath.lib.gui.commands.TMAViewerCommand;
+import qupath.lib.gui.commands.TMAGridAdd;
 import qupath.lib.gui.commands.TMAGridAdd.TMAAddType;
 import qupath.lib.gui.commands.TMAGridRemove.TMARemoveType;
+import qupath.lib.gui.commands.TMAGridReset;
+import qupath.lib.gui.commands.TMAGridRemove;
+import qupath.lib.gui.commands.TMAExporterCommand;
+import qupath.lib.gui.commands.TMAScoreImportCommand;
+import qupath.lib.gui.commands.ViewTrackerCommand;
+import qupath.lib.gui.commands.ViewerSetDownsampleCommand;
+import qupath.lib.gui.commands.WorkflowDisplayCommand;
+import qupath.lib.gui.commands.ZoomCommand;
 import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.commands.interfaces.PathSelectableCommand;
 import qupath.lib.gui.commands.scriptable.DeleteObjectsCommand;
@@ -209,7 +256,14 @@ import qupath.lib.gui.viewer.QuPathViewerListener;
 import qupath.lib.gui.viewer.QuPathViewerPlus;
 import qupath.lib.gui.viewer.ViewerPlusDisplayOptions;
 import qupath.lib.gui.viewer.OverlayOptions.CellDisplayMode;
-import qupath.lib.gui.viewer.tools.*;
+import qupath.lib.gui.viewer.tools.BrushTool;
+import qupath.lib.gui.viewer.tools.EllipseTool;
+import qupath.lib.gui.viewer.tools.LineTool;
+import qupath.lib.gui.viewer.tools.MoveTool;
+import qupath.lib.gui.viewer.tools.PathTool;
+import qupath.lib.gui.viewer.tools.PointsTool;
+import qupath.lib.gui.viewer.tools.PolygonTool;
+import qupath.lib.gui.viewer.tools.RectangleTool;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerBuilder;
@@ -250,7 +304,7 @@ import qupath.lib.scripting.DefaultScriptEditor;
 import qupath.lib.scripting.QPEx;
 import qupath.lib.scripting.ScriptEditor;
 import qupath.lib.www.URLHelpers;
-import sun.misc.ClassLoaderUtil;
+
 
 
 /**
@@ -289,13 +343,13 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	
 	public enum GUIActions { OPEN_IMAGE, OPEN_IMAGE_OR_URL, TMA_EXPORT_DATA, SAVE_DATA, SAVE_DATA_AS,
 								COPY_VIEW, COPY_WINDOW, ZOOM_IN, ZOOM_OUT, ZOOM_TO_FIT,
-								MOVE_TOOL, RECTANGLE_TOOL, ELLIPSE_TOOL, POLYGON_TOOL, BRUSH_TOOL, LINE_TOOL, POINTS_TOOL, WAND_TOOL, TEXT_TOOL,
+								MOVE_TOOL, RECTANGLE_TOOL, ELLIPSE_TOOL, POLYGON_TOOL, BRUSH_TOOL, LINE_TOOL, POINTS_TOOL, WAND_TOOL,
 								BRIGHTNESS_CONTRAST,
 								SHOW_OVERVIEW, SHOW_LOCATION, SHOW_SCALEBAR, SHOW_GRID, SHOW_ANALYSIS_PANEL,
 								SHOW_ANNOTATIONS, FILL_ANNOTATIONS, SHOW_TMA_GRID, SHOW_TMA_GRID_LABELS, SHOW_OBJECTS, FILL_OBJECTS, 
 								SPECIFY_ANNOTATION, ANNOTATION_DUPLICATE, GRID_SPACING,
 								COUNTING_PANEL, CONVEX_POINTS, USE_SELECTED_COLOR, DETECTIONS_TO_POINTS,
-								ROTATE_IMAGE, ROTATE_IMAGE_TOOLBAR, MINI_VIEWER,
+								ROTATE_IMAGE, MINI_VIEWER,
 								RIGID_OBJECT_EDITOR, SHOW_COMMAND_LIST,
 								TMA_SCORE_IMPORTER, TMA_ADD_NOTE, COLOR_DECONVOLUTION_REFINE, SHOW_LOG, TMA_RELABEL,
 								SHOW_CELL_BOUNDARIES, SHOW_CELL_NUCLEI, SHOW_CELL_BOUNDARIES_AND_NUCLEI,
@@ -309,7 +363,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 								};
 	
 	// Modes for input tools
-	public enum Modes { MOVE, RECTANGLE, ELLIPSE, LINE, POLYGON, BRUSH, POINTS, WAND, TEXT }; //, TMA };
+	public enum Modes { MOVE, RECTANGLE, ELLIPSE, LINE, POLYGON, BRUSH, POINTS, WAND }; //, TMA };
 	private Modes mode = Modes.MOVE;
 	
 	// ExecutorServices for single & multiple threads
@@ -1560,17 +1614,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		// Enable drag and drop
 		dragAndDrop.setupTarget(viewer.getView());
 
-		viewer.getView().setOnZoom(e -> {
-			if (!PathPrefs.getUseZoomGestures())
-				return;
-			double zoomFactor = e.getZoomFactor();
-			if (Double.isNaN(zoomFactor))
-				return;
 
-			logger.debug("Zooming " + e.getZoomFactor() + " (" + e.getTotalZoomFactor() + ")");
-			viewer.setDownsampleFactor(viewer.getDownsampleFactor() / zoomFactor, e.getX(), e.getY());
-			e.consume();
-		});
 		
 		
 		// Listen to the scroll wheel
@@ -1600,7 +1644,19 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			viewer.setRotation(viewer.getRotation() + Math.toRadians(e.getAngle()));
 			e.consume();
 		});
-		
+
+		viewer.getView().addEventFilter(ZoomEvent.ANY, e -> {
+			if (!PathPrefs.getUseZoomGestures())
+				return;
+			double zoomFactor = e.getZoomFactor();
+			if (Double.isNaN(zoomFactor))
+				return;
+
+			logger.debug("Zooming: " + e.getZoomFactor() + " (" + e.getTotalZoomFactor() + ")");
+			viewer.setDownsampleFactor(viewer.getDownsampleFactor() / zoomFactor, e.getX(), e.getY());
+			e.consume();
+		});
+
 		viewer.getView().addEventFilter(ScrollEvent.ANY, e -> {
 			if (e.isInertia()) {
 				e.consume();
@@ -1736,10 +1792,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				getActionCheckBoxMenuItem(GUIActions.POLYGON_TOOL, null),
 				getActionCheckBoxMenuItem(GUIActions.BRUSH_TOOL, null),
 				getActionCheckBoxMenuItem(GUIActions.POINTS_TOOL, null),
-				getActionCheckBoxMenuItem(GUIActions.WAND_TOOL, null),
-				getActionCheckBoxMenuItem(GUIActions.TEXT_TOOL, null)
-
-		);
+				getActionCheckBoxMenuItem(GUIActions.WAND_TOOL, null)
+				);
 
 		
 		// Add annotation options
@@ -2676,9 +2730,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				getActionCheckBoxMenuItem(GUIActions.POLYGON_TOOL, groupTools),
 				getActionCheckBoxMenuItem(GUIActions.BRUSH_TOOL, groupTools),
 				getActionCheckBoxMenuItem(GUIActions.WAND_TOOL, groupTools),
-				getActionCheckBoxMenuItem(GUIActions.POINTS_TOOL, groupTools),
-				getActionCheckBoxMenuItem(GUIActions.TEXT_TOOL, groupTools)
-		);
+				getActionCheckBoxMenuItem(GUIActions.POINTS_TOOL, groupTools)
+				);
 		
 		Menu menuGestures = createMenu("Multi-touch gestures");
 		addMenuItems(
@@ -2808,7 +2861,14 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				createCommandAction(new MergeSelectedAnnotationsCommand(this), "Merge selected annotations"),
 				createCommandAction(new ShapeSimplifierCommand(this), "Simplify annotation shape"),
 				null,
-				createCommandAction(new AnnotateImageCommand(this), "Annotate image")
+				createCommandAction(() -> {
+					String initialInput = (String) QuPathGUI.getInstance().getImageData().getProperty("Information");
+					String text = DisplayHelpers.showTextAreaDialogWithHeader("Annotate image", "Go to http://editor.roni.ml for guide on how to use this.", initialInput);
+
+					if (text != null) {
+						QuPathGUI.getInstance().getImageData().setProperty("Information", text);
+					}
+				}, "Annotate image")
 			);
 
 		
@@ -2947,32 +3007,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				menuHelp
 				);
 	}
-
-	private String getFile(String fileName) {
-
-		StringBuilder result = new StringBuilder("");
-
-		//Get file from resources folder
-		ClassLoader classLoader = getClass().getClassLoader();
-		File file = new File(classLoader.getResource(fileName).getFile());
-
-		try (Scanner scanner = new Scanner(file)) {
-
-			while (scanner.hasNextLine()) {
-				String line = scanner.nextLine();
-				result.append(line).append("\n");
-			}
-
-			scanner.close();
-
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-
-		return result.toString();
-
-	}
-
+	
+	
 	public Action createPluginAction(final String name, final Class<? extends PathPlugin> pluginClass, final String arg, final boolean includeRegionStore) {
 		return createPluginAction(name, pluginClass, this, includeRegionStore, arg);
 	}
@@ -3261,10 +3297,6 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			action = createSelectableCommandAction(new ToolSelectable(this, Modes.WAND), "Wand tool", Modes.WAND, new KeyCodeCombination(KeyCode.W));
 			action.disabledProperty().bind(Bindings.createBooleanBinding(() -> !tools.containsKey(Modes.WAND), tools));
 			return action;
-		case TEXT_TOOL:
-				action = createSelectableCommandAction(new ToolSelectable(this, Modes.TEXT), "Text tool", Modes.TEXT, new KeyCodeCombination(KeyCode.T));
-				action.disabledProperty().bind(Bindings.createBooleanBinding(() -> !tools.containsKey(Modes.TEXT), tools));
-				return action;
 		case SHOW_GRID:
 			return createSelectableCommandAction(overlayOptions.showGridProperty(), "Show grid", PathIconFactory.PathIcons.GRID, new KeyCodeCombination(KeyCode.G, KeyCombination.SHIFT_DOWN));
 		case SHOW_LOCATION:
@@ -3333,8 +3365,6 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			return createCommandAction(new DetectionsToPointsCommand(this), "Convert detections to points");
 		case ROTATE_IMAGE:
 			return createCommandAction(new RotateImageCommand(this), "Rotate image");
-		case ROTATE_IMAGE_TOOLBAR:
-			return createCommandAction(new RotateImageCommand(this), "Rotate image", PathIconFactory.createNode(iconSize, iconSize, PathIcons.ELLIPSE_TOOL), new KeyCodeCombination(KeyCode.C, KeyCombination.SHIFT_DOWN));
 		case MINI_VIEWER:
 			return createCommandAction(new MiniViewerCommand(this), "Show mini viewer");
 		case TMA_SCORE_IMPORTER:
@@ -3463,7 +3493,6 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		putToolForMode(Modes.POINTS, new PointsTool(this));
 		putToolForMode(Modes.POLYGON, new PolygonTool(this));
 		putToolForMode(Modes.BRUSH, new BrushTool(this));
-		putToolForMode(Modes.TEXT, new TextTool(this));
 	}
 	
 	
@@ -4011,7 +4040,6 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	// //		toolbar.getItems().add(sliderMag);
 			toolbar.getItems().add(labelMag);
 			toolbar.getItems().add(qupath.getActionToggleButton(GUIActions.ZOOM_TO_FIT, true, false));
-			toolbar.getItems().add(qupath.getActionButton(GUIActions.ROTATE_IMAGE_TOOLBAR, true));
 
 			toolbar.getItems().add(new Separator(Orientation.VERTICAL));
 			

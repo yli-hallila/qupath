@@ -40,7 +40,6 @@ import qupath.lib.measurements.MeasurementList;
 import qupath.lib.measurements.MeasurementListFactory;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.roi.PointsROI;
-import qupath.lib.roi.TextROI;
 import qupath.lib.roi.interfaces.PathPoints;
 import qupath.lib.roi.interfaces.ROI;
 
@@ -146,7 +145,7 @@ public abstract class PathObject implements Externalizable {
 	
 	protected String objectCountPostfix() {
 		ROI pathROI = getROI();
-		if (pathROI instanceof PathPoints && !(pathROI instanceof TextROI)) {
+		if (pathROI instanceof PathPoints) {
 			int nPoints = ((PathPoints)pathROI).getNPoints();
 			if (nPoints == 1)
 				return " - 1 point";

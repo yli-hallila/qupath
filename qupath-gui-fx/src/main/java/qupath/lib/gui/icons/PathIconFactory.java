@@ -227,9 +227,6 @@ public class PathIconFactory {
 //			polygon.setStroke(c);
 //			polygon.setFill(null);
 //			return polygon;
-		} else if (pathROI instanceof TextROI) {
-			Text text = new Text("T");
-			return new Text("T");
 		} else {
 			Area area = PathROIToolsAwt.getArea(pathROI);
 			if (area != null) {

@@ -228,7 +228,7 @@ public class PointsROI extends AbstractPathROI implements ROIWithHull, PathPoint
 //		return false;
 //	}
 	
-	protected void addPoint(double x, double y) {
+	private void addPoint(double x, double y) {
 //		addPoint(x, y, -1);
 		// Can't add NaN
 		if (Double.isNaN(x) || Double.isNaN(y))
