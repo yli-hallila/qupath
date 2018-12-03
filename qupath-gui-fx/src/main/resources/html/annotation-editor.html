@@ -2,14 +2,14 @@
 <html>
 <head>
     <title>QuPath Editori</title>
-    <script src="https://cdn.ckeditor.com/4.11.1/standard-all/ckeditor.js"></script>
+    <script src="https://cdn.ckeditor.com/4.11.1/full-all/ckeditor.js"></script>
     <script>
         var project_dir = "{{qupath-project-dir}}";
-        var images = {{qupath-images-json}};
+        var images = {{qupath-images}};
         var dialogOpenedOnce = false;
 
         var CKEDITOR_IMAGE_URL_CONTAINER = ".cke_dialog_image_url";
-        var CKEDITOR_IMAGE_URL_INPUT     = ".cke_dialog_ui_input_text input";
+        var CKEDITOR_IMAGE_URL_INPUT     = ".cke_dialog_image_url input";
     </script>
 </head>
 <body>
@@ -20,9 +20,52 @@
     CKEDITOR.disableAutoInline = true;
 
     CKEDITOR.replace('editor', {
-        extraPlugins: 'sourcedialog,image2',
-        removePlugins: 'sourcearea,scayt,wsc,elementspath',
-        removeButtons: 'Anchor,Spell Checker,Maximize,About'
+        toolbar: [
+            { name: 'clipboard', items: [ 'Undo', 'Redo' ] },
+            { name: 'styles', items: [ 'Format', 'Font', 'FontSize' ] },
+            { name: 'basicstyles', items: [ 'Bold', 'Italic', 'Underline', 'Strike', 'RemoveFormat' ] },
+            { name: 'colors', items: [ 'TextColor', 'BGColor' ] },
+            { name: 'align', items: [ 'JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock' ] },
+            { name: 'links', items: [ 'Link', 'Unlink' ] },
+            { name: 'paragraph', items: [ 'NumberedList', 'BulletedList', '-', 'Outdent', 'Indent', '-', 'Blockquote' ] },
+            { name: 'insert', items: [ 'Image', 'Table' ] }
+        ],
+        height: 600,
+        extraPlugins: 'autoembed,embedsemantic,sourcedialog,image2',
+        removePlugins: 'image,elementspath',
+        format_tags: 'p;h1;h2;h3;pre',
+        removeDialogTabs: 'image:advanced;link:advanced',
+        stylesSet: [
+            /* Inline Styles */
+            { name: 'Marker', element: 'span', attributes: { 'class': 'marker' } },
+            { name: 'Cited Work', element: 'cite' },
+            { name: 'Inline Quotation', element: 'q' },
+            /* Object Styles */
+            {
+                name: 'Special Container',
+                element: 'div',
+                styles: {
+                    padding: '5px 10px',
+                    background: '#eee',
+                    border: '1px solid #ccc'
+                }
+            },
+            {
+                name: 'Compact table',
+                element: 'table',
+                attributes: {
+                    cellpadding: '5',
+                    cellspacing: '0',
+                    border: '1',
+                    bordercolor: '#ccc'
+                },
+                styles: {
+                    'border-collapse': 'collapse'
+                }
+            },
+            { name: 'Borderless Table', element: 'table', styles: { 'border-style': 'hidden', 'background-color': '#E6E6FA' } },
+            { name: 'Square Bulleted List', element: 'ul', styles: { 'list-style-type': 'square' } }
+        ]
     });
 
     CKEDITOR.instances["editor"].on('change', function() {
@@ -39,6 +82,7 @@
         let HTML = "";
 
         HTML += `
+            <br>
 			<label> ... or select image from project</label><br>
 			<select class="cke_dialog_ui_input_select" onChange="addImage(this.value)">
 			<option>Select image</option>

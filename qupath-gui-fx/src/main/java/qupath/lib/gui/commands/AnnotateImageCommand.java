@@ -28,7 +28,7 @@ public class AnnotateImageCommand implements PathCommand {
 
     @Override
     public void run() {
-        if (qupath.getImageData() == null)
+        if (qupath.getImageData() == null || qupath.getProject() == null) // TODO: Support images without projects
             return;
 
         String dataFolderURI = qupath.getProjectDataDirectory(true).toURI().toString();
@@ -48,7 +48,7 @@ public class AnnotateImageCommand implements PathCommand {
             });
 
             HTML = HTML.replace("{{qupath-image-description}}", initialInput)
-                       .replace("{{qupath-images-json}}", new Gson().toJson(images))
+                       .replace("{{qupath-images}}", new Gson().toJson(images))
                        .replace("{{qupath-project-dir}}", dataFolderURI);
             result = DisplayHelpers.showHTML(HTML);
         } catch (IOException e) {

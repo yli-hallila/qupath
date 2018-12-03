@@ -37,9 +37,11 @@ import java.util.stream.Collectors;
 
 import javax.swing.*;
 
+import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.Region;
+import javafx.stage.WindowEvent;
 import javafx.util.Pair;
 import jfxtras.scene.layout.GridPane;
 import org.controlsfx.control.Notifications;
@@ -504,17 +506,16 @@ public class DisplayHelpers {
 
 			Dialog<String> dialog = new Dialog<>();
 			dialog.setResizable(true);
+			dialog.setOnCloseRequest(confirmCloseEventHandler);
 			dialog.setTitle("Annotation editor");
-			dialog.getDialogPane().setPrefSize(1000, 400); // TODO: Magic numbers
+			dialog.getDialogPane().setPrefSize(1000, 800); // TODO: Magic numbers
 
-			ButtonType loginButton = new ButtonType("Save & Close", ButtonBar.ButtonData.OK_DONE);
-			dialog.getDialogPane().getButtonTypes().addAll(loginButton, ButtonType.CANCEL);
+			ButtonType closeButton = new ButtonType("Save & Close", ButtonBar.ButtonData.OK_DONE);
+			dialog.getDialogPane().getButtonTypes().addAll(closeButton, ButtonType.CANCEL);
 			dialog.getDialogPane().setContent(browser);
 
 			dialog.setResultConverter(dialogButton -> {
-				logger.info("Result Converter");
-
-				if (dialogButton == loginButton) {
+				if (dialogButton == closeButton) {
 					Element textArea = browser.getWebEngine().getDocument().getElementById("editor");
 					return textArea.getTextContent();
 				}
@@ -530,6 +531,14 @@ public class DisplayHelpers {
 
 		return null;
 	}
+
+	private static EventHandler<DialogEvent> confirmCloseEventHandler = event -> {
+		boolean cancel = showConfirmDialog("Exit", "Press 'OK' if you want to exit.");
+
+		if (!cancel) {
+			event.consume();
+		}
+	};
 	
 	/**
 	 * Try to open a file in the native application.
