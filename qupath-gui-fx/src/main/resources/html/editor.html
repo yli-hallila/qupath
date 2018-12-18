@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>QuPath Editori</title>
-    <script src="https://cdn.ckeditor.com/4.11.1/full-all/ckeditor.js"></script>
     <script>
         var project_dir = "{{qupath-project-dir}}";
         var images = {{qupath-images}};
@@ -11,11 +9,22 @@
         var CKEDITOR_IMAGE_URL_CONTAINER = ".cke_dialog_image_url";
         var CKEDITOR_IMAGE_URL_INPUT     = ".cke_dialog_image_url input";
     </script>
+    <style>
+        #loading {
+            font-family: Calibri, sans-serif;
+            text-align: center;
+        }
+    </style>
 </head>
-<body>
+<body id="content">
 
-<textarea cols="80" id="editor" name="editor" rows="20">{{qupath-image-description}}</textarea>
+<p id="loading">Loading editor ...</p>
 
+<div id="editor-container" style="display: none">
+    <textarea cols="80" id="editor" name="editor" rows="20">{{qupath-input}}</textarea>
+</div>
+
+<script src="https://cdn.ckeditor.com/4.11.1/full-all/ckeditor.js"></script>
 <script>
     CKEDITOR.disableAutoInline = true;
 
@@ -79,9 +88,7 @@
 
         dialogOpenedOnce = true;
         let element = document.querySelectorAll(CKEDITOR_IMAGE_URL_CONTAINER)[0];
-        let HTML = "";
-
-        HTML += `
+        let HTML = `
             <br>
 			<label> ... or select image from project</label><br>
 			<select class="cke_dialog_ui_input_select" onChange="addImage(this.value)">
@@ -89,12 +96,17 @@
         `;
 
         images.forEach(i => {
-            HTML += ('<option>' + i + '</option> ');
+            HTML += ('<option>' + i + '</option>');
         });
 
         HTML += '</select>';
 
         element.innerHTML += HTML;
+    });
+
+    CKEDITOR.instances["editor"].on('instanceReady', function() {
+        document.getElementById("loading").innerHTML = null;
+        document.getElementById("editor-container").style.display = "block";
     });
 
     function addImage(value) {

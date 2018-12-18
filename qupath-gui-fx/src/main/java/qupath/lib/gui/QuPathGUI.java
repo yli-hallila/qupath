@@ -307,7 +307,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 								SUMMARY_TMA, SUMMARY_ANNOTATIONS, SUMMARY_DETECTIONS,
 								VIEW_TRACKER, MEASUREMENT_MAP, WORKFLOW_DISPLAY,
 								DELETE_SELECTED_OBJECTS, CLEAR_HIERARCHY, CLEAR_DETECTIONS, CLEAR_TMA_CORES, CLEAR_ANNOTATIONS,
-								PROJECT_NEW, PROJECT_OPEN, PROJECT_CLOSE, PROJECT_SAVE, PROJECT_IMPORT_IMAGES, PROJECT_EXPORT_IMAGE_LIST, PROJECT_METADATA,
+								PROJECT_NEW, PROJECT_OPEN, PROJECT_CLOSE, PROJECT_SAVE, PROJECT_IMPORT_IMAGES, PROJECT_EXPORT_IMAGE_LIST, PROJECT_METADATA, PROJECT_DESCRIPTION,
 								PREFERENCES, QUPATH_SETUP,
 								TRANSFER_ANNOTATION, SELECT_ALL_ANNOTATION, TOGGLE_SYNCHRONIZE_VIEWERS,
 								UNDO, REDO
@@ -334,6 +334,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	private ObjectProperty<Project<BufferedImage>> project = new SimpleObjectProperty<>();
 
 	private ProjectBrowser projectBrowser;
+
+	private Browser browser;
 	
 	/**
 	 * Preference panel, which may be used by extensions to add in their on preferences if needed
@@ -1385,9 +1387,20 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 //		paneCommands.setRight(cbPin);
 		
 		Node paneViewer = CommandFinderTools.createCommandFinderPane(this, viewerManager.getNode(), PathPrefs.commandBarDisplayProperty());
+
+		TabPane tabbedPanel = new TabPane();
+		tabbedPanel.setTabClosingPolicy(TabClosingPolicy.UNAVAILABLE);
+
+		browser = new Browser();
+		browser.setTextHighlightable(false);
+
+		tabbedPanel.getTabs().add(new Tab("Project Information", browser));
+		tabbedPanel.getTabs().add(new Tab("Viewer", paneViewer));
+
+
 //		paneViewer.setTop(tfCommands);
 //		paneViewer.setCenter(viewerManager.getNode());
-		splitPane.getItems().addAll(analysisPanel, paneViewer);
+		splitPane.getItems().addAll(analysisPanel, tabbedPanel);
 //		splitPane.getItems().addAll(viewerManager.getComponent());
 		SplitPane.setResizableWithParent(viewerManager.getNode(), Boolean.TRUE);
 		
@@ -2607,7 +2620,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 						getActionMenuItem(GUIActions.PROJECT_IMPORT_IMAGES),
 						getActionMenuItem(GUIActions.PROJECT_EXPORT_IMAGE_LIST),
 						null,
-						getActionMenuItem(GUIActions.PROJECT_METADATA)
+						getActionMenuItem(GUIActions.PROJECT_METADATA),
+						getActionMenuItem(GUIActions.PROJECT_DESCRIPTION)
 						),
 				menuRecent,
 				null,
@@ -3382,7 +3396,9 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			return createCommandAction(new ProjectExportImageListCommand(this), "Export image list");			
 		case PROJECT_METADATA:
 			return createCommandAction(new ProjectMetadataEditorCommand(this), "Edit project metadata");
-			
+		case PROJECT_DESCRIPTION:
+			return createCommandAction(new ProjectDescriptionEditorCommand(this), "Edit project description");
+
 		case PREFERENCES:
 			return createCommandAction(new PreferencesCommand(this, prefsPanel), "Preferences...", PathIconFactory.createNode(iconSize, iconSize, PathIcons.COG), new KeyCodeCombination(KeyCode.COMMA, KeyCombination.SHORTCUT_DOWN));
 		
@@ -4169,7 +4185,13 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		
 		this.project.set(project);
 		this.projectBrowser.setProject(project);
-		
+
+		if (project == null || project.getDescription() == null) {
+			this.browser.setContent("No description available for this project");
+		} else {
+			this.browser.setContent(project.getDescription());
+		}
+
 		// Enable disable actions
 		updateProjectActionStates();
 		
@@ -4199,6 +4221,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		getAction(GUIActions.PROJECT_IMPORT_IMAGES).setDisabled(project == null);
 		getAction(GUIActions.PROJECT_EXPORT_IMAGE_LIST).setDisabled(project == null);
 		getAction(GUIActions.PROJECT_METADATA).setDisabled(project == null);
+		getAction(GUIActions.PROJECT_DESCRIPTION).setDisabled(project == null);
 		
 		// Ensure the URLHelpers status is appropriately set
 		FileSystem fileSystem = null;

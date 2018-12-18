@@ -60,6 +60,8 @@ public class Project<T> {
 	private Map<String, ProjectImageEntry<T>> images = new TreeMap<>();
 	long creationTimestamp;
 	long modificationTimestamp;
+
+	String description;
 	
 	public Project(final File file, final Class<T> cls) {
 		this.file = file;
@@ -209,7 +211,15 @@ public class Project<T> {
 		}
 		return dirBase.getName();
 	}
-	
+
+	public String getDescription() {
+		return description;
+	}
+
+	public void setDescription(String description) {
+		this.description = description;
+	}
+
 	@Override
 	public String toString() {
 		return "Project: " + getName();

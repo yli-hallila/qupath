@@ -29,6 +29,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -37,11 +38,13 @@ import java.util.stream.Collectors;
 
 import javax.swing.*;
 
+import com.google.gson.Gson;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.control.*;
 import javafx.scene.layout.Region;
-import javafx.stage.WindowEvent;
+import javafx.stage.*;
 import javafx.util.Pair;
 import jfxtras.scene.layout.GridPane;
 import org.controlsfx.control.Notifications;
@@ -58,15 +61,13 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
-import javafx.stage.Modality;
-import javafx.stage.Stage;
-import javafx.stage.Window;
 import org.w3c.dom.Element;
 import qupath.lib.color.ColorDeconvolutionHelper;
 import qupath.lib.color.ColorDeconvolutionStains;
 import qupath.lib.color.ColorDeconvolutionStains.DEFAULT_CD_STAINS;
 import qupath.lib.color.StainVector;
 import qupath.lib.common.ColorTools;
+import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.Browser;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.helpers.dialogs.ParameterPanelFX;
@@ -500,15 +501,59 @@ public class DisplayHelpers {
 		Notifications.create().title(title).text(message).show();
 	}
 
+    private static final String[] imageExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".gif" };
+
+    public static Optional<String> showEditor(String input) {
+        QuPathGUI qupath = QuPathGUI.getInstance();
+        String dataFolderURI = qupath.getProjectDataDirectory(true).toURI().toString();
+        String result = null;
+
+        try {
+            String HTML = GeneralTools.readInputStreamAsString(QuPathGUI.class.getResourceAsStream("/html/editor.html"));
+
+            List<String> images = new ArrayList<>();
+            Files.list(qupath.getProjectDataDirectory(true).toPath()).forEach(item -> {
+                String fileName = item.getName(item.getNameCount() - 1).toString().toLowerCase();
+
+                if (GeneralTools.checkExtensions(fileName, imageExtensions)) {
+                    images.add(fileName);
+                }
+            });
+
+            HTML = HTML.replace("{{qupath-input}}", input)
+                       .replace("{{qupath-images}}", new Gson().toJson(images))
+                       .replace("{{qupath-project-dir}}", dataFolderURI);
+
+            result = DisplayHelpers.showHTML(HTML);
+        } catch (IOException e) {
+            logger.error("Error when opening editor", e);
+            DisplayHelpers.showErrorNotification("Error when opening editor", e);
+        }
+
+        if (result != null) {
+            return Optional.of(result.replace(dataFolderURI, "qupath://"));
+        }
+
+        return Optional.empty();
+    }
+
 	public static String showHTML(final String content) {
 		if (Platform.isFxApplicationThread()) {
-			Browser browser = new Browser(content);
+			Browser browser = new Browser();
+			browser.setContent(content, false);
 
 			Dialog<String> dialog = new Dialog<>();
 			dialog.setResizable(true);
 			dialog.setOnCloseRequest(confirmCloseEventHandler);
-			dialog.setTitle("Annotation editor");
-			dialog.getDialogPane().setPrefSize(1000, 800); // TODO: Magic numbers
+			dialog.setTitle("Editor");
+
+			try {
+				Rectangle2D bounds = Screen.getPrimary().getVisualBounds();
+				dialog.getDialogPane().setPrefSize(bounds.getWidth() * 0.8, bounds.getHeight() * 0.8);
+			} catch (Exception e) {
+				logger.debug("Unable to set stage size using primary screen {}", Screen.getPrimary());
+				dialog.getDialogPane().setPrefSize(1000, 800);
+			}
 
 			ButtonType closeButton = new ButtonType("Save & Close", ButtonBar.ButtonData.OK_DONE);
 			dialog.getDialogPane().getButtonTypes().addAll(closeButton, ButtonType.CANCEL);

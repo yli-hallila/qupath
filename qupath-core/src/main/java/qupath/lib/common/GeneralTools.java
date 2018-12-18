@@ -80,7 +80,18 @@ public class GeneralTools {
 	 * @param s
 	 * @return Empty string or the given string
 	 */
-	public static String stringOrEmptyString(final String s) { return s == null ? "" : s; }
+	public static String nullableString(final String s) {
+		return nullableString(s, "");
+	}
+
+	/**
+	 * If the string is null return an empty string else return the given string
+	 * @param s
+	 * @return Empty string or the given string
+	 */
+	public static String nullableString(final String s, final String s2) {
+		return s == null ? s2 : s;
+	}
 	
 	/**
 	 * Escape backslashes in an absolute file path - useful when scripting.

@@ -124,6 +124,11 @@ public class ProjectIO {
 				project.addImage(new ProjectImageEntry<>(project, path, name, description, metadataMap));
 			}
 
+            String description = null;
+            if (element.has("description"))
+                description = element.get("description").getAsString();
+            project.description = description;
+
 			return project;
 		} catch (Exception e) {
 			logger.error("Unable to read project from " + fileProject.getAbsolutePath(), e);
@@ -203,6 +208,8 @@ public class ProjectIO {
 			if (fileProject.renameTo(fileBackup))
 				logger.debug("Existing project file backed up at {}", fileBackup.getAbsolutePath());
 		}
+
+		builder.addProperty("description", project.getDescription());
 
 		// Write project
 		try (PrintWriter writer = new PrintWriter(fileProject)) {

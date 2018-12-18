@@ -21,7 +21,7 @@ import java.net.URI;
 // Based on: http://java-no-makanaikata.blogspot.com/2012/10/javafx-webview-size-trick.html
 public class Browser extends Region {
 
-    static Logger logger = LoggerFactory.getLogger(Browser.class);
+    private final Logger logger = LoggerFactory.getLogger(Browser.class);
 
     private WebView webView = new WebView();
     private WebEngine webEngine = webView.getEngine();
@@ -78,8 +78,12 @@ public class Browser extends Region {
     }
 
     public void setContent(String content) {
+        setContent(content, true);
+    }
+
+    public void setContent(String content, boolean body) {
         Platform.runLater(() -> {
-            webEngine.loadContent(getHtml(content));
+            webEngine.loadContent(getHtml(content, body));
             Platform.runLater(this::adjustHeight);
         });
     }
@@ -103,9 +107,9 @@ public class Browser extends Region {
         });
     }
 
-    private String getHtml(String content) {
+    private String getHtml(String content, boolean body) {
         String DATA_FOLDER_URI = "";
-        if (QuPathGUI.getInstance().getProjectDataDirectory(true) != null) {
+        if (QuPathGUI.getInstance().getProject() != null) {
             DATA_FOLDER_URI = QuPathGUI.getInstance().getProjectDataDirectory(true).toPath().toUri().toString();
         }
 
@@ -115,11 +119,17 @@ public class Browser extends Region {
             CSS += "#content { -webkit-user-select: none; cursor: default; }";
         }
 
-        return ("<html><head>" +
-                "<style>" + CSS + "</style>" +
-                "</head><body>" +
-                "<div id=\"content\">" + content + "</div>" +
-                "</body></html>").replace("qupath://", DATA_FOLDER_URI);
+        content = content.replace("qupath://", DATA_FOLDER_URI);
+
+        if (body) {
+            return ("<html><head>" +
+                    "<style>" + CSS + "</style>" +
+                    "</head><body>" +
+                    "<div id=\"content\">" + content + "</div>" +
+                    "</body></html>");
+        }
+
+        return content;
     }
 
     public WebView getWebView() {
