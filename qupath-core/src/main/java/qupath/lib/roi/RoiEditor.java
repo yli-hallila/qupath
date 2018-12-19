@@ -99,6 +99,8 @@ public class RoiEditor {
 			adjuster = new EllipseHandleAdjuster((EllipseROI)pathROI);
 		else if (pathROI instanceof PolygonROI)
 			adjuster = new PolygonHandleAdjuster((PolygonROI)pathROI);
+		else if (pathROI instanceof ArrowROI)
+			adjuster = new LineHandleAdjuster((ArrowROI)pathROI);
 		else if (pathROI instanceof LineROI)
 			adjuster = new LineHandleAdjuster((LineROI)pathROI);
 		else if (pathROI instanceof PointsROI)
@@ -779,8 +781,12 @@ public class RoiEditor {
 			}
 			
 			activeHandle.setLocation(xNew, yNew);
-			
-			roi = new LineROI(inactiveHandle.getX(), inactiveHandle.getY(), activeHandle.getX(), activeHandle.getY(), roi.getC(), roi.getZ(), roi.getT());
+
+			if (roi instanceof ArrowROI) {
+				roi = new ArrowROI(inactiveHandle.getX(), inactiveHandle.getY(), activeHandle.getX(), activeHandle.getY(), roi.getC(), roi.getZ(), roi.getT());
+			} else {
+				roi = new LineROI(inactiveHandle.getX(), inactiveHandle.getY(), activeHandle.getX(), activeHandle.getY(), roi.getC(), roi.getZ(), roi.getT());
+			}
 			return roi;
 		}
 		

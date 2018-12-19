@@ -207,14 +207,7 @@ import qupath.lib.gui.viewer.QuPathViewerListener;
 import qupath.lib.gui.viewer.QuPathViewerPlus;
 import qupath.lib.gui.viewer.ViewerPlusDisplayOptions;
 import qupath.lib.gui.viewer.OverlayOptions.CellDisplayMode;
-import qupath.lib.gui.viewer.tools.BrushTool;
-import qupath.lib.gui.viewer.tools.EllipseTool;
-import qupath.lib.gui.viewer.tools.LineTool;
-import qupath.lib.gui.viewer.tools.MoveTool;
-import qupath.lib.gui.viewer.tools.PathTool;
-import qupath.lib.gui.viewer.tools.PointsTool;
-import qupath.lib.gui.viewer.tools.PolygonTool;
-import qupath.lib.gui.viewer.tools.RectangleTool;
+import qupath.lib.gui.viewer.tools.*;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerBuilder;
@@ -294,7 +287,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	
 	public enum GUIActions { OPEN_IMAGE, OPEN_IMAGE_OR_URL, TMA_EXPORT_DATA, SAVE_DATA, SAVE_DATA_AS,
 								COPY_VIEW, COPY_WINDOW, ZOOM_IN, ZOOM_OUT, ZOOM_TO_FIT,
-								MOVE_TOOL, RECTANGLE_TOOL, ELLIPSE_TOOL, POLYGON_TOOL, BRUSH_TOOL, LINE_TOOL, POINTS_TOOL, WAND_TOOL,
+								MOVE_TOOL, RECTANGLE_TOOL, ELLIPSE_TOOL, POLYGON_TOOL, BRUSH_TOOL, LINE_TOOL, ARROW_TOOL, POINTS_TOOL, WAND_TOOL,
 								BRIGHTNESS_CONTRAST,
 								SHOW_OVERVIEW, SHOW_LOCATION, SHOW_SCALEBAR, SHOW_GRID, SHOW_ANALYSIS_PANEL,
 								SHOW_ANNOTATIONS, FILL_ANNOTATIONS, SHOW_TMA_GRID, SHOW_TMA_GRID_LABELS, SHOW_OBJECTS, FILL_OBJECTS, 
@@ -314,7 +307,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 								};
 	
 	// Modes for input tools
-	public enum Modes { MOVE, RECTANGLE, ELLIPSE, LINE, POLYGON, BRUSH, POINTS, WAND }; //, TMA };
+	public enum Modes { MOVE, RECTANGLE, ELLIPSE, LINE, ARROW, POLYGON, BRUSH, POINTS, WAND }; //, TMA };
 	private Modes mode = Modes.MOVE;
 	
 	// ExecutorServices for single & multiple threads
@@ -1753,6 +1746,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				getActionCheckBoxMenuItem(GUIActions.RECTANGLE_TOOL, null),
 				getActionCheckBoxMenuItem(GUIActions.ELLIPSE_TOOL, null),
 				getActionCheckBoxMenuItem(GUIActions.LINE_TOOL, null),
+				getActionCheckBoxMenuItem(GUIActions.ARROW_TOOL, null),
 				getActionCheckBoxMenuItem(GUIActions.POLYGON_TOOL, null),
 				getActionCheckBoxMenuItem(GUIActions.BRUSH_TOOL, null),
 				getActionCheckBoxMenuItem(GUIActions.POINTS_TOOL, null),
@@ -2692,6 +2686,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				getActionCheckBoxMenuItem(GUIActions.RECTANGLE_TOOL, groupTools),
 				getActionCheckBoxMenuItem(GUIActions.ELLIPSE_TOOL, groupTools),
 				getActionCheckBoxMenuItem(GUIActions.LINE_TOOL, groupTools),
+				getActionCheckBoxMenuItem(GUIActions.ARROW_TOOL, groupTools),
 				getActionCheckBoxMenuItem(GUIActions.POLYGON_TOOL, groupTools),
 				getActionCheckBoxMenuItem(GUIActions.BRUSH_TOOL, groupTools),
 				getActionCheckBoxMenuItem(GUIActions.WAND_TOOL, groupTools),
@@ -3227,6 +3222,10 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			action = createSelectableCommandAction(new ToolSelectable(this, Modes.LINE), "Line tool", Modes.LINE, new KeyCodeCombination(KeyCode.L));
 			action.disabledProperty().bind(Bindings.createBooleanBinding(() -> !tools.containsKey(Modes.LINE), tools));
 			return action;
+		case ARROW_TOOL:
+			action = createSelectableCommandAction(new ToolSelectable(this, Modes.ARROW), "Arrow tool", Modes.ARROW, new KeyCodeCombination(KeyCode.A));
+			action.disabledProperty().bind(Bindings.createBooleanBinding(() -> !tools.containsKey(Modes.ARROW), tools));
+			return action;
 		case ELLIPSE_TOOL:
 			action = createSelectableCommandAction(new ToolSelectable(this, Modes.ELLIPSE), "Ellipse tool", Modes.ELLIPSE, new KeyCodeCombination(KeyCode.O));
 			action.disabledProperty().bind(Bindings.createBooleanBinding(() -> !tools.containsKey(Modes.ELLIPSE), tools));
@@ -3450,6 +3449,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		putToolForMode(Modes.RECTANGLE, new RectangleTool(this));
 		putToolForMode(Modes.ELLIPSE, new EllipseTool(this));
 		putToolForMode(Modes.LINE, new LineTool(this));
+		putToolForMode(Modes.ARROW, new ArrowTool(this));
 		putToolForMode(Modes.POINTS, new PointsTool(this));
 		putToolForMode(Modes.POLYGON, new PolygonTool(this));
 		putToolForMode(Modes.BRUSH, new BrushTool(this));
@@ -3934,6 +3934,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			toolbar.getItems().add(qupath.getActionToggleButton(GUIActions.RECTANGLE_TOOL, true, groupTools, false));
 			toolbar.getItems().add(qupath.getActionToggleButton(GUIActions.ELLIPSE_TOOL, true, groupTools, false));
 			toolbar.getItems().add(qupath.getActionToggleButton(GUIActions.LINE_TOOL, true, groupTools, false));
+			toolbar.getItems().add(qupath.getActionToggleButton(GUIActions.ARROW_TOOL, true, groupTools, false));
 			toolbar.getItems().add(qupath.getActionToggleButton(GUIActions.POLYGON_TOOL, true, groupTools, false));
 			toolbar.getItems().add(new Separator(Orientation.VERTICAL));
 			ToggleButton btnBrush = qupath.getActionToggleButton(GUIActions.BRUSH_TOOL, true, groupTools, false);

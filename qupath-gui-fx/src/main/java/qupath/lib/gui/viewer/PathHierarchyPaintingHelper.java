@@ -23,19 +23,7 @@
 
 package qupath.lib.gui.viewer;
 
-import java.awt.AlphaComposite;
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics2D;
-import java.awt.GraphicsConfiguration;
-import java.awt.GraphicsEnvironment;
-import java.awt.Rectangle;
-import java.awt.RenderingHints;
-import java.awt.Shape;
-import java.awt.Stroke;
-import java.awt.Transparency;
+import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
@@ -56,6 +44,8 @@ import org.slf4j.LoggerFactory;
 
 import qupath.lib.awt.color.ColorToolsAwt;
 import qupath.lib.awt.common.AwtTools;
+import qupath.lib.geom.Arrow;
+import qupath.lib.geom.Arrow2D;
 import qupath.lib.geom.Point2;
 import qupath.lib.gui.helpers.MeasurementMapper;
 import qupath.lib.gui.prefs.PathPrefs;
@@ -469,6 +459,15 @@ public class PathHierarchyPaintingHelper {
 		}
 		
 	}
+
+	static class ArrowPool extends ShapePool<Arrow2D> {
+
+		@Override
+		protected Arrow2D createShape() {
+			return new Arrow2D();
+		}
+
+	}
 	
 	/**
 	 * 
@@ -489,7 +488,8 @@ public class PathHierarchyPaintingHelper {
 		private RectanglePool rectanglePool = new RectanglePool();
 		private EllipsePool ellipsePool = new EllipsePool();
 		private LinePool linePool = new LinePool();
-		
+		private ArrowPool arrowPool = new ArrowPool();
+
 		// TODO: Consider if it makes sense to map to PathHierarchyImageServer preferred downsamples
 		// (Only if shape simplification is often used for detection objects)
 		private Map<PathShape, Shape> map50 = Collections.synchronizedMap(new WeakHashMap<>());
@@ -541,6 +541,19 @@ public class PathHierarchyPaintingHelper {
 				return ellipse;
 			}
 
+			if (roi instanceof ArrowROI) {
+				Arrow2D arrow = arrowPool.getShape();
+				ArrowROI a = (ArrowROI)roi;
+				arrow.setLine(a.getX1(), a.getY1(), a.getX2(), a.getY2());
+				return arrow;
+				/*ArrowROI arrow = (ArrowROI) roi;
+				Point2D origin = new Point2D.Double(arrow.getX1(), arrow.getY1());
+				Point2D head = new Point2D.Double(arrow.getX2(), arrow.getY2());
+
+				return Arrow.BLACK_DIAMOND.getPath(origin, head);*/
+				//return new Line2D.Float((float)arrow.getX1(), (float)arrow.getY1(), (float)arrow.getX2(), (float)arrow.getY2());
+			}
+
 			if (roi instanceof LineROI) {
 				Line2D line = linePool.getShape();
 				LineROI l = (LineROI)roi;
@@ -587,8 +600,7 @@ public class PathHierarchyPaintingHelper {
 //			g2d.draw(PathROIToolsAwt.getShape(new PolygonROI(v.getPoints())));
 //			//				g2d.fill(PathROIToolsAwt.getShape(new PolygonROI(v.getPoints())));
 //		}
-		
-		
+
 		if (colorFill != null) {
 			g2d.setColor(colorFill);
 			g2d.fill(shape); 
@@ -599,8 +611,25 @@ public class PathHierarchyPaintingHelper {
 			g2d.setColor(colorStroke);
 			g2d.draw(shape);
 		}
+
+		if (shape instanceof Arrow2D) {
+			Arrow2D arrow = (Arrow2D) shape;
+			double angle = Math.atan2(arrow.getY2() - arrow.getY1(), arrow.getX2() - arrow.getX1());
+			AffineTransform old = g2d.getTransform();
+			AffineTransform tx = g2d.getTransform();
+			tx.translate(arrow.getX2(), arrow.getY2());
+			tx.rotate(angle - Math.PI / 2d);
+			g2d.setTransform(tx);
+
+			Polygon arrowHead = new Polygon();
+			arrowHead.addPoint(0, 15);
+			arrowHead.addPoint(-15, -15);
+			arrowHead.addPoint(15, -15);
+			g2d.fill(arrowHead);
+			g2d.setTransform(old);
+		}
 	}
-	
+
 	
 	public static void paintPoints(PathPoints pathPoints, Graphics2D g2d, double radius, Color colorStroke, Stroke stroke, Color colorFill, double downsample) {
 		PointsROI pathPointsROI = pathPoints instanceof PointsROI ? (PointsROI)pathPoints : null;

@@ -67,6 +67,7 @@ import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.viewer.OverlayOptions;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.images.ImageData;
+import qupath.lib.images.servers.ImageServer;
 import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
@@ -78,6 +79,7 @@ import qupath.lib.objects.hierarchy.events.PathObjectHierarchyListener;
 import qupath.lib.objects.hierarchy.events.PathObjectSelectionListener;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectIO;
+import qupath.lib.roi.ArrowROI;
 import qupath.lib.roi.LineROI;
 import qupath.lib.roi.PointsROI;
 import qupath.lib.roi.interfaces.ROI;
@@ -315,10 +317,12 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 							setGraphic(null);
 							return;
 						}
-
-						if (value.getROI() instanceof LineROI) {
-							double width = qupath.getImageData().getServer().getPixelWidthMicrons();
-							double height = qupath.getImageData().getServer().getPixelHeightMicrons();
+						if (value.getROI() instanceof ArrowROI) {
+							setText(value.toString());
+						} else if (value.getROI() instanceof LineROI) {
+							ImageServer<?> server = qupath.getImageData().getServer();
+							double width = server.getPixelWidthMicrons();
+							double height = server.getPixelHeightMicrons();
 							LineROI line = (LineROI) value.getROI();
 
 							setText(value.toString() + " (" + line.getScaledLength(width, height) + " " + GeneralTools.micrometerSymbol() + ")");
