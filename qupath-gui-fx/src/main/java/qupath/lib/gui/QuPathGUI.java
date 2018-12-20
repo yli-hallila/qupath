@@ -23,8 +23,7 @@
 
 package qupath.lib.gui;
 
-import java.awt.Desktop;
-import java.awt.Shape;
+import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Area;
 import java.awt.image.BufferedImage;
@@ -44,6 +43,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.*;
 import java.util.*;
+import java.util.List;
 import java.util.Locale.Category;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutorCompletionService;
@@ -56,6 +56,14 @@ import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
+import com.google.gson.*;
+import javafx.beans.value.ChangeListener;
+import javafx.event.EventHandler;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.*;
+import javafx.scene.text.*;
+import javafx.scene.text.Font;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
 import org.controlsfx.control.action.ActionUtils.ActionTextBehavior;
@@ -135,16 +143,9 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.input.RotateEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.input.ZoomEvent;
-import javafx.scene.layout.Border;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.BorderStroke;
-import javafx.scene.layout.BorderStrokeStyle;
-import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Ellipse;
 import javafx.scene.shape.Rectangle;
-import javafx.scene.text.Font;
-import javafx.scene.text.TextAlignment;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.Window;
@@ -1321,6 +1322,91 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			updateListsAndTables(getStage().getScene().getRoot());
 		
 		return true;
+	}
+
+	public void showWorkspaceDialog() {
+		Optional<String> workspace = loadWorkspaceFile();
+		if (!workspace.isPresent())
+			return;
+
+		Dialog dialog = new Dialog();
+		dialog.setTitle("Select project");
+		dialog.initOwner(getStage());
+		dialog.getDialogPane().setPrefWidth(500);
+		dialog.getDialogPane().setMaxHeight(600);
+
+		ScrollPane scrollPane = new ScrollPane();
+		VBox list = new VBox();
+
+		JsonObject jsonObject = new JsonParser().parse(workspace.get()).getAsJsonObject();
+		JsonArray jsonArray = jsonObject.get("projects").getAsJsonArray();
+
+		for (JsonElement el : jsonArray) {
+			JsonObject object = el.getAsJsonObject();
+			HBox item = createListItem(object);
+
+			item.setOnMouseClicked(event -> {
+				if (event.getButton() == MouseButton.PRIMARY) {
+					File file = new File(object.get("path").getAsString().replace("{$INSTALL_DIR}", System.getProperty("user.dir")));
+					Project<BufferedImage> project = ProjectIO.loadProject(file, BufferedImage.class);
+
+					if (project == null) {
+						DisplayHelpers.showErrorMessage("Load project", "Error when trying to load project");
+					} else {
+						setProject(project);
+						dialog.close();
+					}
+				}
+			});
+
+			list.getChildren().add(item);
+		}
+
+		// TODO: Center window
+		scrollPane.setContent(list);
+		dialog.getDialogPane().setContent(scrollPane);
+		dialog.getDialogPane().getButtonTypes().setAll(ButtonType.CLOSE);
+		dialog.showAndWait();
+	}
+
+	private Optional<String> loadWorkspaceFile() {
+		try {
+			URL url = new URL("<snip>"); // TODO: Make URL a setting?
+			String workspace = URLTools.readURLAsString(url, 2000);
+
+			//Path cache = Paths.get(System.getProperty("java.io.tmpdir"), "workspace.qpdata"); // TODO: Cache workspace file
+			//Files.write(cache, workspace.getBytes());
+
+			return Optional.of(workspace);
+		} catch (IOException e) {
+			logger.error("Couldn't load workspace file", e);
+		}
+
+		return Optional.empty();
+	}
+
+	private HBox createListItem(JsonObject object) {
+		HBox item = new HBox();
+		item.setStyle("-fx-cursor: hand; -fx-border-style: hidden hidden solid hidden; -fx-border-width: 1; -fx-border-color: #ccc;");
+		item.setPadding(new Insets(5));
+
+		StackPane leftSide = new StackPane(new ImageView(loadIcon(48)));
+		leftSide.setAlignment(Pos.TOP_LEFT);
+
+		VBox rightSide = new VBox();
+		rightSide.setAlignment(Pos.CENTER_LEFT);
+		rightSide.setPadding(new Insets(0, 0, 0, 10));
+
+		Text header = new Text(object.get("name").getAsString());
+		header.setFont(Font.font("Calibri", FontWeight.BOLD, FontPosture.REGULAR, 15));
+
+		Text description = new Text(object.get("description").getAsString());
+		description.setWrappingWidth(400);
+
+		rightSide.getChildren().addAll(header, description);
+		item.getChildren().addAll(leftSide, rightSide);
+
+		return item;
 	}
 	
 	/**
