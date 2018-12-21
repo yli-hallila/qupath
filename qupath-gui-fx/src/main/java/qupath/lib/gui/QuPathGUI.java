@@ -59,7 +59,15 @@ import javax.imageio.ImageIO;
 import com.google.gson.*;
 import javafx.beans.value.ChangeListener;
 import javafx.event.EventHandler;
+import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.*;
 import javafx.scene.text.*;
@@ -99,38 +107,9 @@ import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.CheckMenuItem;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.Control;
-import javafx.scene.control.Dialog;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListView;
-import javafx.scene.control.Menu;
-import javafx.scene.control.MenuBar;
-import javafx.scene.control.MenuItem;
-import javafx.scene.control.RadioMenuItem;
-import javafx.scene.control.Separator;
-import javafx.scene.control.SeparatorMenuItem;
-import javafx.scene.control.Slider;
-import javafx.scene.control.SplitPane;
 import javafx.scene.control.SplitPane.Divider;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
 import javafx.scene.control.TabPane.TabClosingPolicy;
-import javafx.scene.control.TableView;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextInputControl;
-import javafx.scene.control.TitledPane;
-import javafx.scene.control.ToggleButton;
-import javafx.scene.control.ToggleGroup;
-import javafx.scene.control.ToolBar;
-import javafx.scene.control.Tooltip;
-import javafx.scene.control.TreeTableView;
-import javafx.scene.control.TreeView;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -1370,16 +1349,21 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	}
 
 	private Optional<String> loadWorkspaceFile() {
+		Path cache = Paths.get(System.getProperty("java.io.tmpdir"), "workspace.qpdata");
+
 		try {
 			URL url = new URL("<snip>"); // TODO: Make URL a setting?
 			String workspace = URLTools.readURLAsString(url, 2000);
 
-			//Path cache = Paths.get(System.getProperty("java.io.tmpdir"), "workspace.qpdata"); // TODO: Cache workspace file
-			//Files.write(cache, workspace.getBytes());
-
-			return Optional.of(workspace);
+			Files.write(cache, workspace.getBytes());
 		} catch (IOException e) {
-			logger.error("Couldn't load workspace file", e);
+			logger.error("Couldn't load workspace file. Trying to load it from disk...", e);
+		}
+
+		try {
+			return Optional.of(GeneralTools.readFileAsString(cache));
+		} catch (IOException e) {
+			logger.error("Error reading cache file", e);
 		}
 
 		return Optional.empty();
