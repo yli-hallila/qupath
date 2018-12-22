@@ -506,7 +506,12 @@ public class DisplayHelpers {
     public static Optional<String> showEditor(String input) {
         QuPathGUI qupath = QuPathGUI.getInstance();
         String dataFolderURI = qupath.getProjectDataDirectory(true).toURI().toString();
+        String resourceRoot = QuPathGUI.class.getResource("/ckeditor/ckeditor.js").toString();
+        resourceRoot = resourceRoot.substring(0, resourceRoot.length() - 20); // hacky wacky way to get jar:file: ... URI
+
         String result = null;
+
+        logger.info(resourceRoot);
 
         try {
             String HTML = GeneralTools.readInputStreamAsString(QuPathGUI.class.getResourceAsStream("/html/editor.html"));
@@ -521,8 +526,9 @@ public class DisplayHelpers {
             });
 
             HTML = HTML.replace("{{qupath-input}}", input)
-                       .replace("{{qupath-images}}", new Gson().toJson(images))
-                       .replace("{{qupath-project-dir}}", dataFolderURI);
+					   .replace("{{qupath-images}}", new Gson().toJson(images))
+					   .replace("{{qupath-project-dir}}", dataFolderURI)
+					   .replace("{{qupath-resource-root}}", resourceRoot);
 
             result = DisplayHelpers.showHTML(HTML);
         } catch (IOException e) {

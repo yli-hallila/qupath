@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="{{qupath-resource-root}}" />
     <script>
         var project_dir = "{{qupath-project-dir}}";
         var images = {{qupath-images}};
@@ -24,9 +25,10 @@
     <textarea cols="80" id="editor" name="editor" rows="20">{{qupath-input}}</textarea>
 </div>
 
-<script src="https://cdn.ckeditor.com/4.11.1/full-all/ckeditor.js"></script>
+<script src="ckeditor/ckeditor.js"></script>
 <script>
     CKEDITOR.disableAutoInline = true;
+    CKEDITOR.config.defaultLanguage = 'en';
 
     CKEDITOR.replace('editor', {
         toolbar: [
