@@ -101,7 +101,7 @@ public class Browser extends Region {
                 Object result = webEngine.executeScript("document.getElementById('content').offsetHeight");
                 if (result instanceof Integer) {
                     double height = new Double(result.toString());
-                    webView.setPrefHeight(height + 8);
+                    webView.setPrefHeight(height);
                 }
             } catch (JSException ignored) {}
         });
@@ -113,7 +113,7 @@ public class Browser extends Region {
             DATA_FOLDER_URI = QuPathGUI.getInstance().getProjectDataDirectory(true).toPath().toUri().toString();
         }
 
-        String CSS = "";
+        String CSS = "blockquote,span[lang]{font-style:italic}figure,figure>figcaption{text-align:center}body{font-family:sans-serif,Arial,Verdana,\"Trebuchet MS\";font-size:12px;color:#333;background-color:#fff;margin:10px}blockquote{font-family:Georgia,Times,\"Times New Roman\",serif;padding:2px 0;border-style:solid;border-color:#ccc;border-width:0}a{color:#0782C1}dl,ol,ul{padding:0 40px}h1,h2,h3,h4,h5,h6{font-weight:400;line-height:1.2}hr{border:0;border-top:1px solid #ccc}img.left,img.right{border:1px solid #ccc;padding:5px}img.right{float:right;margin-left:15px}img.left{float:left;margin-right:15px}pre{white-space:pre-wrap;word-wrap:break-word;tab-size:4}.marker{background-color:#ff0}figure{outline:#ccc solid 1px;background:rgba(0,0,0,.05);padding:10px;margin:10px 20px;display:inline-block}a>img{padding:1px;margin:1px;border:none;outline:#0782C1 solid 1px}";
 
         if (!isTextHighlightable()) {
             CSS += "#content { -webkit-user-select: none; cursor: default; }";
@@ -122,11 +122,12 @@ public class Browser extends Region {
         content = content.replace("qupath://", DATA_FOLDER_URI);
 
         if (body) {
-            return ("<html><head>" +
-                    "<style>" + CSS + "</style>" +
-                    "</head><body>" +
-                    "<div id=\"content\">" + content + "</div>" +
-                    "</body></html>");
+            return ("<html id=\"content\">" +
+                    "<head>" +
+                        "<style>" + CSS + "</style>" +
+                    "</head>" +
+                    "<body>" + content + "</body>" +
+                    "</html>");
         }
 
         return content;

@@ -345,7 +345,8 @@
 					// This internal is required by the editor.
 					'data-cke-saved-src': this.data.src,
 
-					alt: this.data.alt
+					alt: this.data.alt,
+					draggable: false
 				} );
 
 				// If shifting non-captioned -> captioned, remove classes
@@ -373,6 +374,7 @@
 						alt: image.getAttribute( 'alt' ) || '',
 						width: image.getAttribute( 'width' ) || '',
 						height: image.getAttribute( 'height' ) || '',
+						draggale: false,
 
 						// Lock ratio is on by default (https://dev.ckeditor.com/ticket/10833).
 						lock: this.ready ? helpers.checkHasNaturalRatio( image ) : true

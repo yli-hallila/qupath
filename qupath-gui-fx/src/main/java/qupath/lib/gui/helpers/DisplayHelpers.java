@@ -511,8 +511,6 @@ public class DisplayHelpers {
 
         String result = null;
 
-        logger.info(resourceRoot);
-
         try {
             String HTML = GeneralTools.readInputStreamAsString(QuPathGUI.class.getResourceAsStream("/html/editor.html"));
 
