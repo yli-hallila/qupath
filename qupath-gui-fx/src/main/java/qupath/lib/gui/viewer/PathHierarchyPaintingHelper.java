@@ -24,13 +24,7 @@
 package qupath.lib.gui.viewer;
 
 import java.awt.*;
-import java.awt.geom.AffineTransform;
-import java.awt.geom.Ellipse2D;
-import java.awt.geom.Line2D;
-import java.awt.geom.Path2D;
-import java.awt.geom.Point2D;
-import java.awt.geom.Rectangle2D;
-import java.awt.geom.RectangularShape;
+import java.awt.geom.*;
 import java.awt.image.BufferedImage;
 import java.util.Collection;
 import java.util.Collections;
@@ -39,12 +33,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
+import javafx.scene.shape.Path;
+import javafx.scene.shape.PathBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import qupath.lib.awt.color.ColorToolsAwt;
 import qupath.lib.awt.common.AwtTools;
-import qupath.lib.geom.Arrow;
 import qupath.lib.geom.Arrow2D;
 import qupath.lib.geom.Point2;
 import qupath.lib.gui.helpers.MeasurementMapper;
@@ -270,12 +265,16 @@ public class PathHierarchyPaintingHelper {
 			double roiBoundsY = pathROI.getBoundsY();
 			double roiBoundsWidth = pathROI.getBoundsWidth();
 			double roiBoundsHeight = pathROI.getBoundsHeight();
-			if (pathObject.isPoint() || boundsDisplayed == null || 
-					pathROI instanceof LineROI || 
-					boundsDisplayed.intersects(roiBoundsX, roiBoundsY, Math.max(roiBoundsWidth, 1), Math.max(roiBoundsHeight, 1))) {
+			if (pathObject.isPoint()
+					|| boundsDisplayed == null
+					|| pathROI instanceof LineROI
+					|| boundsDisplayed.intersects(roiBoundsX, roiBoundsY, Math.max(roiBoundsWidth, 1), Math.max(roiBoundsHeight, 1))) {
 			
 				// Paint the ROI, if necessary
-				if (isSelected || (overlayOptions.getShowObjects() && isDetectedObject) || (overlayOptions.getShowAnnotations() && pathObject.isAnnotation()) || (overlayOptions.getShowTMAGrid() && pathObject.isTMACore())) {
+				if (isSelected
+						|| (overlayOptions.getShowObjects() && isDetectedObject)
+						|| (overlayOptions.getShowAnnotations() && pathObject.isAnnotation())
+						|| (overlayOptions.getShowTMAGrid() && pathObject.isTMACore())) {
 		
 					boolean doFill = overlayOptions.getFillObjects() || pathObject instanceof ParallelTileObject;
 					boolean doOutline = true;
@@ -369,7 +368,9 @@ public class PathHierarchyPaintingHelper {
 								paintROI(cell.getNucleusROI(), g, colorStroke, stroke, colorFill, downsample);
 							painted = true;
 						} else {
-							if ((overlayOptions.getFillAnnotations() && pathObject.isAnnotation()) || (pathObject.isTMACore() && overlayOptions.getShowTMACoreLabels()))
+							if (pathROI instanceof ArrowROI
+									|| (overlayOptions.getFillAnnotations() && pathObject.isAnnotation())
+									|| (pathObject.isTMACore() && overlayOptions.getShowTMACoreLabels()))
 								paintROI(pathROI, g, colorStroke, stroke, ColorToolsAwt.getMoreTranslucentColor(colorStroke), downsample);
 							else
 								paintROI(pathROI, g, colorStroke, stroke, colorFill, downsample);
@@ -384,7 +385,8 @@ public class PathHierarchyPaintingHelper {
 			for (PathObject childObject : pathObject.getChildObjects()) {
 				// Only call the painting method if required
 				ROI childROI = childObject.getROI();
-				if ((childROI != null && boundsDisplayed.intersects(childROI.getBoundsX(), childROI.getBoundsY(), childROI.getBoundsWidth(), childROI.getBoundsHeight())) || childObject.hasChildren())
+				if ((childROI != null && boundsDisplayed.intersects(childROI.getBoundsX(), childROI.getBoundsY(), childROI.getBoundsWidth(), childROI.getBoundsHeight()))
+						|| childObject.hasChildren())
 					painted = paintObject(childObject, paintChildren, g, boundsDisplayed, overlayOptions, selectionModel, downsample) | painted;
 			}
 		}
@@ -544,14 +546,23 @@ public class PathHierarchyPaintingHelper {
 			if (roi instanceof ArrowROI) {
 				Arrow2D arrow = arrowPool.getShape();
 				ArrowROI a = (ArrowROI)roi;
-				arrow.setLine(a.getX1(), a.getY1(), a.getX2(), a.getY2());
-				return arrow;
-				/*ArrowROI arrow = (ArrowROI) roi;
-				Point2D origin = new Point2D.Double(arrow.getX1(), arrow.getY1());
-				Point2D head = new Point2D.Double(arrow.getX2(), arrow.getY2());
 
-				return Arrow.BLACK_DIAMOND.getPath(origin, head);*/
-				//return new Line2D.Float((float)arrow.getX1(), (float)arrow.getY1(), (float)arrow.getX2(), (float)arrow.getY2());
+				double angle = Math.atan2(a.getY2() - a.getY1(), a.getX2() - a.getX1());
+				AffineTransform tx = new AffineTransform();
+				tx.translate(a.getX1(), a.getY1());
+				tx.rotate(angle);
+
+				double len = Math.hypot(a.getX2() - a.getX1(), a.getY2() - a.getY1());
+			//	double len = Math.sqrt(Math.pow(a.getX2() - a.getX1(), 2) + Math.pow(a.getY2() - a.getY1(), 2));
+				Path2D shape = new Path2D.Double();
+				shape.moveTo(0, 0);
+				shape.lineTo(len, 0);
+				shape.lineTo(len, -10);
+				shape.lineTo(len + 12, 0);
+				shape.lineTo(len, 10);
+				shape.lineTo(len, 0);
+
+				return shape.createTransformedShape(tx);
 			}
 
 			if (roi instanceof LineROI) {
@@ -610,23 +621,6 @@ public class PathHierarchyPaintingHelper {
 				g2d.setStroke(stroke);
 			g2d.setColor(colorStroke);
 			g2d.draw(shape);
-		}
-
-		if (shape instanceof Arrow2D) {
-			Arrow2D arrow = (Arrow2D) shape;
-			double angle = Math.atan2(arrow.getY2() - arrow.getY1(), arrow.getX2() - arrow.getX1());
-			AffineTransform old = g2d.getTransform();
-			AffineTransform tx = g2d.getTransform();
-			tx.translate(arrow.getX2(), arrow.getY2());
-			tx.rotate(angle - Math.PI / 2d);
-			g2d.setTransform(tx);
-
-			Polygon arrowHead = new Polygon();
-			arrowHead.addPoint(0, 15);
-			arrowHead.addPoint(-15, -15);
-			arrowHead.addPoint(15, -15);
-			g2d.fill(arrowHead);
-			g2d.setTransform(old);
 		}
 	}
 

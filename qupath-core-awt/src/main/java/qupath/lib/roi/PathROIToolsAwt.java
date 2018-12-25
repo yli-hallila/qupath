@@ -36,18 +36,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import qupath.lib.awt.common.AwtTools;
-import qupath.lib.geom.Arrow;
 import qupath.lib.geom.Arrow2D;
 import qupath.lib.geom.ImmutableDimension;
 import qupath.lib.geom.Point2;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
-import qupath.lib.roi.EllipseROI;
-import qupath.lib.roi.LineROI;
-import qupath.lib.roi.AreaROI;
-import qupath.lib.roi.ROIHelpers;
-import qupath.lib.roi.PolygonROI;
-import qupath.lib.roi.RectangleROI;
 import qupath.lib.roi.interfaces.PathArea;
 import qupath.lib.roi.interfaces.ROI;
 import qupath.lib.roi.interfaces.PathShape;

@@ -6,9 +6,7 @@ public class Arrow2D extends Line2D {
 
     private double x1, y1, x2, y2;
 
-    public Arrow2D() {
-
-    }
+    public Arrow2D() {}
 
     public Arrow2D(double x1, double y1, double x2, double y2) {
         setLine(x1, y1, x2, y2);
@@ -53,7 +51,7 @@ public class Arrow2D extends Line2D {
     }
 
     @Override
-    public Rectangle2D getBounds2D() {
+    public Rectangle2D getBounds2D() { // todo: calculate proper bounds for arrow
         double x, y, w, h;
         if (x1 < x2) {
             x = x1;
