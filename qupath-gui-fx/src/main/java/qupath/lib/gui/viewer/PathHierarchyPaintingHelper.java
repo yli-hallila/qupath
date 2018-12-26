@@ -547,22 +547,7 @@ public class PathHierarchyPaintingHelper {
 				Arrow2D arrow = arrowPool.getShape();
 				ArrowROI a = (ArrowROI)roi;
 
-				double angle = Math.atan2(a.getY2() - a.getY1(), a.getX2() - a.getX1());
-				AffineTransform tx = new AffineTransform();
-				tx.translate(a.getX1(), a.getY1());
-				tx.rotate(angle);
-
-				double len = Math.hypot(a.getX2() - a.getX1(), a.getY2() - a.getY1());
-			//	double len = Math.sqrt(Math.pow(a.getX2() - a.getX1(), 2) + Math.pow(a.getY2() - a.getY1(), 2));
-				Path2D shape = new Path2D.Double();
-				shape.moveTo(0, 0);
-				shape.lineTo(len, 0);
-				shape.lineTo(len, -10);
-				shape.lineTo(len + 12, 0);
-				shape.lineTo(len, 10);
-				shape.lineTo(len, 0);
-
-				return shape.createTransformedShape(tx);
+				return arrow.createShape(a.getX1(), a.getY1(), a.getX2(), a.getY2());
 			}
 
 			if (roi instanceof LineROI) {

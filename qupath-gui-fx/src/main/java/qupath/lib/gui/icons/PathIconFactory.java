@@ -24,6 +24,7 @@
 package qupath.lib.gui.icons;
 
 import java.awt.*;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Area;
 import java.awt.geom.PathIterator;
 
@@ -69,6 +70,7 @@ public class PathIconFactory {
 	
 	public static enum PathIcons {	ANNOTATIONS("\ue901", PathPrefs.colorDefaultAnnotationsProperty()),
 									ANNOTATIONS_FILL("\ue900", PathPrefs.colorDefaultAnnotationsProperty()),
+									ARROW_TOOL("\uea3b", PathPrefs.colorDefaultAnnotationsProperty()),
 									
 									BRUSH_TOOL("\ue902", PathPrefs.colorDefaultAnnotationsProperty()),
 									
@@ -175,12 +177,17 @@ public class PathIconFactory {
 			rect.setFill(null);
 			return rect;
 		} else if (pathROI instanceof EllipseROI) {
-			double w = pathROI.getBoundsWidth()*scale;
-			double h = pathROI.getBoundsHeight()*scale;
-			Ellipse ellipse = new Ellipse(w/2, height/2, w/2, h/2);
+			double w = pathROI.getBoundsWidth() * scale;
+			double h = pathROI.getBoundsHeight() * scale;
+			Ellipse ellipse = new Ellipse(w / 2, height / 2, w / 2, h / 2);
 			ellipse.setStroke(color);
 			ellipse.setFill(null);
 			return ellipse;
+		} else if (pathROI instanceof ArrowROI) {
+			Node node = PathIconFactory.createNode(Math.min(width, height), Math.min(width, height), PathIcons.ARROW_TOOL);
+			if (node instanceof Glyph)
+				((Glyph) node).setColor(color);
+			return node;
 		} else if (pathROI instanceof LineROI) {
 			LineROI l = (LineROI)pathROI;
 			double xMin = Math.min(l.getX1(), l.getX2());
@@ -300,6 +307,8 @@ public class PathIconFactory {
 		switch (mode) {
 		case LINE:
 			return createNode(width, height, PathIcons.LINE_TOOL);
+		case ARROW:
+			return createNode(width, height, PathIcons.ARROW_TOOL);
 		case MOVE:
 			return createNode(width, height, PathIcons.MOVE_TOOL);
 		case ELLIPSE:
