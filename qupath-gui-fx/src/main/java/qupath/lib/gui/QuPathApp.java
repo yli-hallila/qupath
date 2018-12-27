@@ -87,8 +87,9 @@ public class QuPathApp extends Application {
 			});
 		}
 
-		// TODO: Add setting to not show this dialog
-		gui.showWorkspaceDialog();
+		if (PathPrefs.showWorkspaceDialogOnStartupProperty().get()) {
+			Platform.runLater(gui::showWorkspaceDialog);
+		}
 	}
 
 }

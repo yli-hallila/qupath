@@ -165,6 +165,11 @@ public class PreferencePanel {
 				category,
 				"When enabled, images will be referenced relatively to project root and not with an absolute path.");
 
+		addPropertyPreference(PathPrefs.showWorkspaceDialogOnStartupProperty(), Boolean.class,
+				"Show workspaces dialog on startup",
+				category,
+				"If enabled, opens the project selector on startup.");
+
 		/*
 		 * Viewer
 		 */

@@ -1065,6 +1065,18 @@ public class PathPrefs {
 
 
 	private static BooleanProperty useRelativePaths = createPersistentPreference("useRelativePaths", false);
+
+	/**
+	 * Flag to indicate whether to show workspace dialog on startup
+	 *
+	 * @return
+	 */
+	public static BooleanProperty showWorkspaceDialogOnStartupProperty() {
+		return showWorkspaceDialog;
+	}
+
+
+	private static BooleanProperty showWorkspaceDialog = createPersistentPreference("showWorkspaceDialog", true);
 	
 	/**
 	 * Create a persistent property, i.e. one that will be saved to/reloaded from the user preferences.

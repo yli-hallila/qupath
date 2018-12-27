@@ -57,8 +57,8 @@ import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 
 import com.google.gson.*;
-import javafx.beans.value.ChangeListener;
-import javafx.event.EventHandler;
+import javafx.scene.*;
+import javafx.scene.Cursor;
 import javafx.scene.control.*;
 import javafx.scene.control.Button;
 import javafx.scene.control.Dialog;
@@ -68,10 +68,10 @@ import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
 import javafx.scene.layout.*;
 import javafx.scene.text.*;
 import javafx.scene.text.Font;
+import javafx.stage.Modality;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
 import org.controlsfx.control.action.ActionUtils.ActionTextBehavior;
@@ -103,10 +103,6 @@ import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
-import javafx.scene.Cursor;
-import javafx.scene.Node;
-import javafx.scene.Parent;
-import javafx.scene.Scene;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.SplitPane.Divider;
 import javafx.scene.control.TabPane.TabClosingPolicy;
@@ -451,6 +447,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		logger.trace("Time to scene: {} ms", (System.currentTimeMillis() - startTime));
 		
 		stage.setScene(scene);
+		stage.setMaximized(true);
 
 		// Remove this to only accept drag-and-drop into a viewer
 		dragAndDrop.setupTarget(scene);
@@ -1308,7 +1305,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		if (!workspace.isPresent())
 			return;
 
-		Dialog dialog = new Dialog();
+		Dialog dialog = new Dialog(); // see: https://stackoverflow.com/questions/36949595
 		dialog.setTitle("Select project");
 		dialog.initOwner(getStage());
 		dialog.getDialogPane().setPrefWidth(500);
@@ -1322,29 +1319,26 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 
 		for (JsonElement el : jsonArray) {
 			JsonObject object = el.getAsJsonObject();
-			HBox item = createListItem(object);
-
-			item.setOnMouseClicked(event -> {
-				if (event.getButton() == MouseButton.PRIMARY) {
-					File file = new File(object.get("path").getAsString().replace("{$INSTALL_DIR}", System.getProperty("user.dir")));
-					Project<BufferedImage> project = ProjectIO.loadProject(file, BufferedImage.class);
-
-					if (project == null) {
-						DisplayHelpers.showErrorMessage("Load project", "Error when trying to load project");
-					} else {
-						setProject(project);
-						dialog.close();
-					}
-				}
-			});
-
-			list.getChildren().add(item);
+			list.getChildren().add(createListItem(object, dialog));
 		}
+
+		dialog.setDialogPane(new DialogPane() {
+			@Override
+			protected Node createDetailsButton() {
+				CheckBox checkbox = new CheckBox("Show on startup");
+				checkbox.setSelected(PathPrefs.showWorkspaceDialogOnStartupProperty().get());
+				checkbox.setOnAction(e -> PathPrefs.showWorkspaceDialogOnStartupProperty().set(checkbox.isSelected()));
+				return checkbox;
+			}
+		});
 
 		// TODO: Center window
 		scrollPane.setContent(list);
 		dialog.getDialogPane().setContent(scrollPane);
 		dialog.getDialogPane().getButtonTypes().setAll(ButtonType.CLOSE);
+		dialog.getDialogPane().setExpandableContent(new Group());
+		dialog.getDialogPane().setExpanded(true);
+		dialog.setResizable(false);
 		dialog.showAndWait();
 	}
 
@@ -1369,7 +1363,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		return Optional.empty();
 	}
 
-	private HBox createListItem(JsonObject object) {
+	private HBox createListItem(JsonObject object, Dialog parent) {
 		HBox item = new HBox();
 		item.setStyle("-fx-cursor: hand; -fx-border-style: hidden hidden solid hidden; -fx-border-width: 1; -fx-border-color: #ccc;");
 		item.setPadding(new Insets(5));
@@ -1389,6 +1383,20 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 
 		rightSide.getChildren().addAll(header, description);
 		item.getChildren().addAll(leftSide, rightSide);
+
+		item.setOnMouseClicked(event -> {
+			if (event.getButton() == MouseButton.PRIMARY) {
+				File file = new File(object.get("path").getAsString().replace("{$INSTALL_DIR}", System.getProperty("user.dir")));
+				Project<BufferedImage> project = ProjectIO.loadProject(file, BufferedImage.class);
+
+				if (project == null) {
+					DisplayHelpers.showErrorMessage("Load project", "Error when trying to load project");
+				} else {
+					setProject(project);
+					parent.close();
+				}
+			}
+		});
 
 		return item;
 	}
@@ -3002,6 +3010,9 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				"Help",
 //				createCommandAction(new HelpCommand(this), "Documentation"),
 				getAction(GUIActions.QUPATH_SETUP),
+				ActionUtils.createMenuItem(new Action("Show workspaces dialog", e -> {
+					showWorkspaceDialog();
+				})),
 				null,
 				createCommandAction(new OpenWebpageCommand(this, URL_DOCS), "Documentation (web)"),
 				createCommandAction(new OpenWebpageCommand(this, URL_VIDEOS), "Demo videos (web)"),
