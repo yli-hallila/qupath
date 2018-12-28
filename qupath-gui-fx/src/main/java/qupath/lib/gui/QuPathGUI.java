@@ -1312,6 +1312,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		dialog.getDialogPane().setMaxHeight(600);
 
 		ScrollPane scrollPane = new ScrollPane();
+		scrollPane.setPrefSize(525, 600);
 		VBox list = new VBox();
 
 		JsonObject jsonObject = new JsonParser().parse(workspace.get()).getAsJsonObject();
@@ -1365,7 +1366,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 
 	private HBox createListItem(JsonObject object, Dialog parent) {
 		HBox item = new HBox();
-		item.setStyle("-fx-cursor: hand; -fx-border-style: hidden hidden solid hidden; -fx-border-width: 1; -fx-border-color: #ccc;");
+		item.setStyle("-fx-cursor: hand; -fx-border-style: hidden hidden solid hidden; -fx-border-width: 1; -fx-border-color: #ccc; ");
 		item.setPadding(new Insets(5));
 
 		StackPane leftSide = new StackPane(new ImageView(loadIcon(48)));
