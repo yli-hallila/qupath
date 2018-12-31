@@ -27,6 +27,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Type;
+import java.nio.file.Path;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -322,7 +323,10 @@ public class GeneralTools {
 		}
 		return false;
 	}
-	
+
+	public static String readFileAsString(Path path) throws IOException {
+		return readFileAsString(path.toString());
+	}
 	
 	/**
 	 * Read the entire contents of a file into a single String.

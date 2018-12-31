@@ -86,7 +86,10 @@ public class QuPathApp extends Application {
 				}
 			});
 		}
-		
+
+		if (PathPrefs.showWorkspaceDialogOnStartupProperty().get()) {
+			Platform.runLater(gui::showWorkspaceDialog);
+		}
 	}
 
 }

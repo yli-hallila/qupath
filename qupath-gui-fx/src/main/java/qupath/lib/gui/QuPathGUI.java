@@ -23,8 +23,7 @@
 
 package qupath.lib.gui;
 
-import java.awt.Desktop;
-import java.awt.Shape;
+import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Area;
 import java.awt.image.BufferedImage;
@@ -44,6 +43,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.*;
 import java.util.*;
+import java.util.List;
 import java.util.Locale.Category;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutorCompletionService;
@@ -56,6 +56,22 @@ import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
+import com.google.gson.*;
+import javafx.scene.*;
+import javafx.scene.Cursor;
+import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
+import javafx.scene.layout.*;
+import javafx.scene.text.*;
+import javafx.scene.text.Font;
+import javafx.stage.Modality;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
 import org.controlsfx.control.action.ActionUtils.ActionTextBehavior;
@@ -87,42 +103,9 @@ import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
-import javafx.scene.Cursor;
-import javafx.scene.Node;
-import javafx.scene.Parent;
-import javafx.scene.Scene;
-import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.CheckMenuItem;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.Control;
-import javafx.scene.control.Dialog;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListView;
-import javafx.scene.control.Menu;
-import javafx.scene.control.MenuBar;
-import javafx.scene.control.MenuItem;
-import javafx.scene.control.RadioMenuItem;
-import javafx.scene.control.Separator;
-import javafx.scene.control.SeparatorMenuItem;
-import javafx.scene.control.Slider;
-import javafx.scene.control.SplitPane;
 import javafx.scene.control.SplitPane.Divider;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
 import javafx.scene.control.TabPane.TabClosingPolicy;
-import javafx.scene.control.TableView;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextInputControl;
-import javafx.scene.control.TitledPane;
-import javafx.scene.control.ToggleButton;
-import javafx.scene.control.ToggleGroup;
-import javafx.scene.control.ToolBar;
-import javafx.scene.control.Tooltip;
-import javafx.scene.control.TreeTableView;
-import javafx.scene.control.TreeView;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -135,16 +118,9 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.input.RotateEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.input.ZoomEvent;
-import javafx.scene.layout.Border;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.BorderStroke;
-import javafx.scene.layout.BorderStrokeStyle;
-import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Ellipse;
 import javafx.scene.shape.Rectangle;
-import javafx.scene.text.Font;
-import javafx.scene.text.TextAlignment;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.Window;
@@ -464,6 +440,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		logger.trace("Time to scene: {} ms", (System.currentTimeMillis() - startTime));
 		
 		stage.setScene(scene);
+		stage.setMaximized(true);
 
 		// Remove this to only accept drag-and-drop into a viewer
 		dragAndDrop.setupTarget(scene);
@@ -1314,6 +1291,108 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			updateListsAndTables(getStage().getScene().getRoot());
 		
 		return true;
+	}
+
+	public void showWorkspaceDialog() {
+		Optional<String> workspace = loadWorkspaceFile();
+		if (!workspace.isPresent())
+			return;
+
+		Dialog dialog = new Dialog(); // see: https://stackoverflow.com/questions/36949595
+		dialog.setTitle("Select project");
+		dialog.initOwner(getStage());
+		dialog.getDialogPane().setPrefWidth(500);
+		dialog.getDialogPane().setMaxHeight(600);
+
+		ScrollPane scrollPane = new ScrollPane();
+		scrollPane.setPrefSize(525, 600);
+		VBox list = new VBox();
+
+		JsonObject jsonObject = new JsonParser().parse(workspace.get()).getAsJsonObject();
+		JsonArray jsonArray = jsonObject.get("projects").getAsJsonArray();
+
+		for (JsonElement el : jsonArray) {
+			JsonObject object = el.getAsJsonObject();
+			list.getChildren().add(createListItem(object, dialog));
+		}
+
+		dialog.setDialogPane(new DialogPane() {
+			@Override
+			protected Node createDetailsButton() {
+				CheckBox checkbox = new CheckBox("Show on startup");
+				checkbox.setSelected(PathPrefs.showWorkspaceDialogOnStartupProperty().get());
+				checkbox.setOnAction(e -> PathPrefs.showWorkspaceDialogOnStartupProperty().set(checkbox.isSelected()));
+				return checkbox;
+			}
+		});
+
+		// TODO: Center window
+		scrollPane.setContent(list);
+		dialog.getDialogPane().setContent(scrollPane);
+		dialog.getDialogPane().getButtonTypes().setAll(ButtonType.CLOSE);
+		dialog.getDialogPane().setExpandableContent(new Group());
+		dialog.getDialogPane().setExpanded(true);
+		dialog.setResizable(false);
+		dialog.showAndWait();
+	}
+
+	private Optional<String> loadWorkspaceFile() {
+		Path cache = Paths.get(System.getProperty("java.io.tmpdir"), "workspace.qpdata");
+
+		try {
+			URL url = new URL("<snip>"); // TODO: Make URL a setting?
+			String workspace = URLTools.readURLAsString(url, 2000);
+
+			Files.write(cache, workspace.getBytes());
+		} catch (IOException e) {
+			logger.error("Couldn't load workspace file. Trying to load it from disk...", e);
+		}
+
+		try {
+			return Optional.of(GeneralTools.readFileAsString(cache));
+		} catch (IOException e) {
+			logger.error("Error reading cache file", e);
+		}
+
+		return Optional.empty();
+	}
+
+	private HBox createListItem(JsonObject object, Dialog parent) {
+		HBox item = new HBox();
+		item.setStyle("-fx-cursor: hand; -fx-border-style: hidden hidden solid hidden; -fx-border-width: 1; -fx-border-color: #ccc; ");
+		item.setPadding(new Insets(5));
+
+		StackPane leftSide = new StackPane(new ImageView(loadIcon(48)));
+		leftSide.setAlignment(Pos.TOP_LEFT);
+
+		VBox rightSide = new VBox();
+		rightSide.setAlignment(Pos.CENTER_LEFT);
+		rightSide.setPadding(new Insets(0, 0, 0, 10));
+
+		Text header = new Text(object.get("name").getAsString());
+		header.setFont(Font.font("Calibri", FontWeight.BOLD, FontPosture.REGULAR, 15));
+
+		Text description = new Text(object.get("description").getAsString());
+		description.setWrappingWidth(400);
+
+		rightSide.getChildren().addAll(header, description);
+		item.getChildren().addAll(leftSide, rightSide);
+
+		item.setOnMouseClicked(event -> {
+			if (event.getButton() == MouseButton.PRIMARY) {
+				File file = new File(object.get("path").getAsString().replace("{$INSTALL_DIR}", System.getProperty("user.dir")));
+				Project<BufferedImage> project = ProjectIO.loadProject(file, BufferedImage.class);
+
+				if (project == null) {
+					DisplayHelpers.showErrorMessage("Load project", "Error when trying to load project");
+				} else {
+					setProject(project);
+					parent.close();
+				}
+			}
+		});
+
+		return item;
 	}
 	
 	/**
@@ -2927,6 +3006,9 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				"Help",
 //				createCommandAction(new HelpCommand(this), "Documentation"),
 				getAction(GUIActions.QUPATH_SETUP),
+				ActionUtils.createMenuItem(new Action("Show workspaces dialog", e -> {
+					showWorkspaceDialog();
+				})),
 				null,
 				createCommandAction(new OpenWebpageCommand(this, URL_DOCS), "Documentation (web)"),
 				createCommandAction(new OpenWebpageCommand(this, URL_VIDEOS), "Demo videos (web)"),
