@@ -9,12 +9,12 @@
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public
  * License along with this program.  If not, see
  * <http://www.gnu.org/licenses/gpl-3.0.html>.
@@ -24,25 +24,24 @@
 package qupath.lib.gui.viewer.tools;
 
 import qupath.lib.gui.viewer.ModeWrapper;
+import qupath.lib.roi.ArrowROI;
 import qupath.lib.roi.LineROI;
 import qupath.lib.roi.interfaces.ROI;
 
 /**
- * PathTool for drawing arrows.
- * 
+ * PathTool for drawing lines.
+ *
  * @author Pete Bankhead
  *
  */
-public class LineTool extends AbstractPathDraggingROITool {
+public class ArrowTool extends AbstractPathDraggingROITool {
 
-	public LineTool(ModeWrapper modes) {
-		super(modes);
-	}
-	
-	
-	@Override
-	protected ROI createNewROI(double x, double y, int z, int t) {
-		return new LineROI(x, y, x, y, -1, z, t);
-	}
+    public ArrowTool(ModeWrapper modes) {
+        super(modes);
+    }
 
+    @Override
+    protected ROI createNewROI(double x, double y, int z, int t) {
+        return new ArrowROI(x, y, x, y, -1, z, t);
+    }
 }

@@ -23,26 +23,8 @@
 
 package qupath.lib.gui.viewer;
 
-import java.awt.AlphaComposite;
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics2D;
-import java.awt.GraphicsConfiguration;
-import java.awt.GraphicsEnvironment;
-import java.awt.Rectangle;
-import java.awt.RenderingHints;
-import java.awt.Shape;
-import java.awt.Stroke;
-import java.awt.Transparency;
-import java.awt.geom.AffineTransform;
-import java.awt.geom.Ellipse2D;
-import java.awt.geom.Line2D;
-import java.awt.geom.Path2D;
-import java.awt.geom.Point2D;
-import java.awt.geom.Rectangle2D;
-import java.awt.geom.RectangularShape;
+import java.awt.*;
+import java.awt.geom.*;
 import java.awt.image.BufferedImage;
 import java.util.Collection;
 import java.util.Collections;
@@ -51,11 +33,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
+import javafx.scene.shape.Path;
+import javafx.scene.shape.PathBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import qupath.lib.awt.color.ColorToolsAwt;
 import qupath.lib.awt.common.AwtTools;
+import qupath.lib.geom.Arrow2D;
 import qupath.lib.geom.Point2;
 import qupath.lib.gui.helpers.MeasurementMapper;
 import qupath.lib.gui.prefs.PathPrefs;
@@ -280,12 +265,16 @@ public class PathHierarchyPaintingHelper {
 			double roiBoundsY = pathROI.getBoundsY();
 			double roiBoundsWidth = pathROI.getBoundsWidth();
 			double roiBoundsHeight = pathROI.getBoundsHeight();
-			if (pathObject.isPoint() || boundsDisplayed == null || 
-					pathROI instanceof LineROI || 
-					boundsDisplayed.intersects(roiBoundsX, roiBoundsY, Math.max(roiBoundsWidth, 1), Math.max(roiBoundsHeight, 1))) {
+			if (pathObject.isPoint()
+					|| boundsDisplayed == null
+					|| pathROI instanceof LineROI
+					|| boundsDisplayed.intersects(roiBoundsX, roiBoundsY, Math.max(roiBoundsWidth, 1), Math.max(roiBoundsHeight, 1))) {
 			
 				// Paint the ROI, if necessary
-				if (isSelected || (overlayOptions.getShowObjects() && isDetectedObject) || (overlayOptions.getShowAnnotations() && pathObject.isAnnotation()) || (overlayOptions.getShowTMAGrid() && pathObject.isTMACore())) {
+				if (isSelected
+						|| (overlayOptions.getShowObjects() && isDetectedObject)
+						|| (overlayOptions.getShowAnnotations() && pathObject.isAnnotation())
+						|| (overlayOptions.getShowTMAGrid() && pathObject.isTMACore())) {
 		
 					boolean doFill = overlayOptions.getFillObjects() || pathObject instanceof ParallelTileObject;
 					boolean doOutline = true;
@@ -379,7 +368,9 @@ public class PathHierarchyPaintingHelper {
 								paintROI(cell.getNucleusROI(), g, colorStroke, stroke, colorFill, downsample);
 							painted = true;
 						} else {
-							if ((overlayOptions.getFillAnnotations() && pathObject.isAnnotation()) || (pathObject.isTMACore() && overlayOptions.getShowTMACoreLabels()))
+							if (pathROI instanceof ArrowROI
+									|| (overlayOptions.getFillAnnotations() && pathObject.isAnnotation())
+									|| (pathObject.isTMACore() && overlayOptions.getShowTMACoreLabels()))
 								paintROI(pathROI, g, colorStroke, stroke, ColorToolsAwt.getMoreTranslucentColor(colorStroke), downsample);
 							else
 								paintROI(pathROI, g, colorStroke, stroke, colorFill, downsample);
@@ -394,7 +385,8 @@ public class PathHierarchyPaintingHelper {
 			for (PathObject childObject : pathObject.getChildObjects()) {
 				// Only call the painting method if required
 				ROI childROI = childObject.getROI();
-				if ((childROI != null && boundsDisplayed.intersects(childROI.getBoundsX(), childROI.getBoundsY(), childROI.getBoundsWidth(), childROI.getBoundsHeight())) || childObject.hasChildren())
+				if ((childROI != null && boundsDisplayed.intersects(childROI.getBoundsX(), childROI.getBoundsY(), childROI.getBoundsWidth(), childROI.getBoundsHeight()))
+						|| childObject.hasChildren())
 					painted = paintObject(childObject, paintChildren, g, boundsDisplayed, overlayOptions, selectionModel, downsample) | painted;
 			}
 		}
@@ -469,6 +461,15 @@ public class PathHierarchyPaintingHelper {
 		}
 		
 	}
+
+	static class ArrowPool extends ShapePool<Arrow2D> {
+
+		@Override
+		protected Arrow2D createShape() {
+			return new Arrow2D();
+		}
+
+	}
 	
 	/**
 	 * 
@@ -489,7 +490,8 @@ public class PathHierarchyPaintingHelper {
 		private RectanglePool rectanglePool = new RectanglePool();
 		private EllipsePool ellipsePool = new EllipsePool();
 		private LinePool linePool = new LinePool();
-		
+		private ArrowPool arrowPool = new ArrowPool();
+
 		// TODO: Consider if it makes sense to map to PathHierarchyImageServer preferred downsamples
 		// (Only if shape simplification is often used for detection objects)
 		private Map<PathShape, Shape> map50 = Collections.synchronizedMap(new WeakHashMap<>());
@@ -541,6 +543,13 @@ public class PathHierarchyPaintingHelper {
 				return ellipse;
 			}
 
+			if (roi instanceof ArrowROI) {
+				Arrow2D arrow = arrowPool.getShape();
+				ArrowROI a = (ArrowROI)roi;
+
+				return arrow.createShape(a.getX1(), a.getY1(), a.getX2(), a.getY2());
+			}
+
 			if (roi instanceof LineROI) {
 				Line2D line = linePool.getShape();
 				LineROI l = (LineROI)roi;
@@ -587,8 +596,7 @@ public class PathHierarchyPaintingHelper {
 //			g2d.draw(PathROIToolsAwt.getShape(new PolygonROI(v.getPoints())));
 //			//				g2d.fill(PathROIToolsAwt.getShape(new PolygonROI(v.getPoints())));
 //		}
-		
-		
+
 		if (colorFill != null) {
 			g2d.setColor(colorFill);
 			g2d.fill(shape); 
@@ -600,7 +608,7 @@ public class PathHierarchyPaintingHelper {
 			g2d.draw(shape);
 		}
 	}
-	
+
 	
 	public static void paintPoints(PathPoints pathPoints, Graphics2D g2d, double radius, Color colorStroke, Stroke stroke, Color colorFill, double downsample) {
 		PointsROI pathPointsROI = pathPoints instanceof PointsROI ? (PointsROI)pathPoints : null;

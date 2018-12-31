@@ -44,7 +44,7 @@ public class LineROI extends AbstractPathROI implements PathLine, TranslatableRO
 	
 	private static final long serialVersionUID = 1L;
 	
-	private double x = Double.NaN, y = Double.NaN, x2 = Double.NaN, y2 = Double.NaN;
+	protected double x = Double.NaN, y = Double.NaN, x2 = Double.NaN, y2 = Double.NaN;
 	
 	protected LineROI() {
 		super();

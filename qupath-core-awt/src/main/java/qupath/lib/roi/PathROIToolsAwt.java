@@ -23,16 +23,8 @@
 
 package qupath.lib.roi;
 
-import java.awt.Rectangle;
-import java.awt.Shape;
-import java.awt.geom.AffineTransform;
-import java.awt.geom.Area;
-import java.awt.geom.Ellipse2D;
-import java.awt.geom.Line2D;
-import java.awt.geom.Path2D;
-import java.awt.geom.PathIterator;
-import java.awt.geom.Rectangle2D;
-import java.awt.geom.RoundRectangle2D;
+import java.awt.*;
+import java.awt.geom.*;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -44,16 +36,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import qupath.lib.awt.common.AwtTools;
+import qupath.lib.geom.Arrow2D;
 import qupath.lib.geom.ImmutableDimension;
 import qupath.lib.geom.Point2;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
-import qupath.lib.roi.EllipseROI;
-import qupath.lib.roi.LineROI;
-import qupath.lib.roi.AreaROI;
-import qupath.lib.roi.ROIHelpers;
-import qupath.lib.roi.PolygonROI;
-import qupath.lib.roi.RectangleROI;
 import qupath.lib.roi.interfaces.PathArea;
 import qupath.lib.roi.interfaces.ROI;
 import qupath.lib.roi.interfaces.PathShape;
@@ -208,6 +195,11 @@ public class PathROIToolsAwt {
 
 		if (roi instanceof EllipseROI)
 			return new Ellipse2D.Float((float)roi.getBoundsX(), (float)roi.getBoundsY(), (float)roi.getBoundsWidth(), (float)roi.getBoundsHeight());
+
+		if (roi instanceof ArrowROI) {
+			ArrowROI arrow = (ArrowROI)roi;
+			return new Arrow2D(arrow.getX1(), arrow.getY1(), arrow.getX2(), arrow.getY2());
+		}
 
 		if (roi instanceof LineROI) {
 			LineROI line = (LineROI)roi;
