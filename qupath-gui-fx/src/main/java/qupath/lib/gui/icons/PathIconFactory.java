@@ -177,9 +177,9 @@ public class PathIconFactory {
 			rect.setFill(null);
 			return rect;
 		} else if (pathROI instanceof EllipseROI) {
-			double w = pathROI.getBoundsWidth() * scale;
-			double h = pathROI.getBoundsHeight() * scale;
-			Ellipse ellipse = new Ellipse(w / 2, height / 2, w / 2, h / 2);
+			double w = pathROI.getBoundsWidth()*scale;
+			double h = pathROI.getBoundsHeight()*scale;
+			Ellipse ellipse = new Ellipse(w/2, height/2, w/2, h/2);
 			ellipse.setStroke(color);
 			ellipse.setFill(null);
 			return ellipse;

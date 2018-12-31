@@ -199,11 +199,6 @@ public class PathROIToolsAwt {
 		if (roi instanceof ArrowROI) {
 			ArrowROI arrow = (ArrowROI)roi;
 			return new Arrow2D(arrow.getX1(), arrow.getY1(), arrow.getX2(), arrow.getY2());
-			/*ArrowROI arrow = (ArrowROI)roi;
-			Point2D origin = new Point2D.Double(arrow.getX1(), arrow.getY1());
-			Point2D head = new Point2D.Double(arrow.getX2(), arrow.getY2());
-
-			return Arrow.BLACK_DIAMOND.getPath(origin, head);*/
 		}
 
 		if (roi instanceof LineROI) {

@@ -28,7 +28,7 @@ import qupath.lib.roi.LineROI;
 import qupath.lib.roi.interfaces.ROI;
 
 /**
- * PathTool for drawing lines.
+ * PathTool for drawing arrows.
  * 
  * @author Pete Bankhead
  *
