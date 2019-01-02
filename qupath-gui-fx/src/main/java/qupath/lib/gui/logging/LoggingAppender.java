@@ -92,6 +92,7 @@ public class LoggingAppender extends AppenderBase<ILoggingEvent> {
 			final boolean isError = event.getLevel().isGreaterOrEqual(Level.WARN);
 			String tempMessage = event.getLevel() + ": " + event.getFormattedMessage() + "\n";
 			if (event.getThrowableProxy() != null && event.getLevel().isGreaterOrEqual(Level.ERROR)) {
+				tempMessage += event.getThrowableProxy().getClassName() + ": " + event.getThrowableProxy().getMessage() + "\n";
 				for (StackTraceElementProxy element : event.getThrowableProxy().getStackTraceElementProxyArray())
 					tempMessage += "    " + element.getSTEAsString() + "\n";
 				
