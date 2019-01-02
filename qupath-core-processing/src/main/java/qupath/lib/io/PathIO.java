@@ -33,6 +33,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InvalidClassException;
+import java.io.InvalidObjectException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
@@ -165,7 +167,6 @@ public class PathIO {
 				serverPath = (String)inStream.readObject();
 				serverPath = serverPath.substring("Image path: ".length()).trim();
 				
-				
 				while (true) {
 //					logger.debug("Starting read: " + inStream.available());
 					try {
@@ -200,7 +201,9 @@ public class PathIO {
 							logger.error("Null object will be skipped");
 						} else
 							logger.error("Unsupported object of class {} will be skipped: {}", input.getClass().getName(), input);
-						
+					} catch (InvalidObjectException | InvalidClassException e) {
+						logger.error("Error when reading project", e);
+						break;
 					} catch (ClassNotFoundException e) {
 						logger.error("Unable to find class", e);
 					} catch (EOFException e) {
