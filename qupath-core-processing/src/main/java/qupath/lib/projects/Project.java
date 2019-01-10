@@ -150,9 +150,10 @@ public class Project<T> {
 	}
 
 	String cleanServerPath(final String path) {
-		String cleanedPath = path.replace("%20", " ").replace("%5C", "\\");
-		cleanedPath = cleanedPath.replace("{$PROJECT_DIR}", getBaseDirectory().getAbsolutePath());
-		return cleanedPath;
+		return path.replace("%20", " ")
+				   .replace("%5C", "\\")
+				   .replace("\\", "/")
+				   .replace("{$PROJECT_DIR}", getBaseDirectory().getAbsolutePath());
 	}
 
 	public boolean addImage(final String path) {
