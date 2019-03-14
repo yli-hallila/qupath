@@ -611,8 +611,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		logger.debug("Startup time: {} ms", (endTime - startTime));
 		
 		// Do auto-update check
-		if (!disableAutoUpdateCheck)
-			checkForUpdate(true);
+		//if (!disableAutoUpdateCheck)
+		//	checkForUpdate(true);
 
 	}
 	
