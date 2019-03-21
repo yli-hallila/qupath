@@ -173,7 +173,7 @@ public class Project<T> {
 	}
 	
 	public void removeImage(final ProjectImageEntry<?> entry) {
-		removeImage(entry.getServerPath());
+		removeImage(cleanServerPath(entry.getServerPath()));
 	}
 
 	public void removeAllImages(final Collection<ProjectImageEntry<T>> entries) {
