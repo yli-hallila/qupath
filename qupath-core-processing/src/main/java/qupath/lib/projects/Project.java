@@ -150,10 +150,11 @@ public class Project<T> {
 	}
 
 	String cleanServerPath(final String path) {
-		return path.replace("%20", " ")
+		return path.replace("{$PROJECT_DIR}", getBaseDirectory().getAbsolutePath())
+				   .replace("{$INSTALL_DIR}", System.getProperty("user.dir"))
+				   .replace("%20", " ")
 				   .replace("%5C", "\\")
-				   .replace("\\", "/")
-				   .replace("{$PROJECT_DIR}", getBaseDirectory().getAbsolutePath());
+				   .replace("\\", "/");
 	}
 
 	public boolean addImage(final String path) {

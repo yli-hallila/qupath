@@ -1300,20 +1300,34 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 
 		Dialog dialog = new Dialog(); // see: https://stackoverflow.com/questions/36949595
 		dialog.setTitle("Select project");
+
+		TabPane tabPane = new TabPane();
+		tabPane.setTabClosingPolicy(TabClosingPolicy.UNAVAILABLE);
+		tabPane.getStyleClass().add("floating");
+
 		dialog.initOwner(getStage());
 		dialog.getDialogPane().setPrefWidth(500);
 		dialog.getDialogPane().setMaxHeight(600);
 
-		ScrollPane scrollPane = new ScrollPane();
-		scrollPane.setPrefSize(525, 600);
-		VBox list = new VBox();
-
 		JsonObject jsonObject = new JsonParser().parse(workspace.get()).getAsJsonObject();
-		JsonArray jsonArray = jsonObject.get("projects").getAsJsonArray();
+		JsonArray workspaces = jsonObject.get("workspaces").getAsJsonArray();
 
-		for (JsonElement el : jsonArray) {
-			JsonObject object = el.getAsJsonObject();
-			list.getChildren().add(createListItem(object, dialog));
+		for (JsonElement workspaceElement : workspaces) {
+			JsonObject workspaceObject = workspaceElement.getAsJsonObject();
+
+			ScrollPane scrollPane = new ScrollPane();
+			scrollPane.setPrefSize(525, 600);
+			VBox list = new VBox();
+
+			JsonArray jsonArray = workspaceObject.get("projects").getAsJsonArray();
+
+			for (JsonElement el : jsonArray) {
+				JsonObject object = el.getAsJsonObject();
+				list.getChildren().add(createListItem(object, dialog));
+			}
+
+			scrollPane.setContent(list);
+			tabPane.getTabs().add(new Tab(workspaceObject.get("name").getAsString(), scrollPane));
 		}
 
 		dialog.setDialogPane(new DialogPane() {
@@ -1327,8 +1341,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		});
 
 		// TODO: Center window
-		scrollPane.setContent(list);
-		dialog.getDialogPane().setContent(scrollPane);
+		dialog.getDialogPane().setContent(tabPane);
+		dialog.getDialogPane().setPadding(new Insets(0));
 		dialog.getDialogPane().getButtonTypes().setAll(ButtonType.CLOSE);
 		dialog.getDialogPane().setExpandableContent(new Group());
 		dialog.getDialogPane().setExpanded(true);
@@ -1337,21 +1351,17 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	}
 
 	private Optional<String> loadWorkspaceFile() {
-		Path cache = Paths.get(System.getProperty("java.io.tmpdir"), "workspace.qpdata");
+		String QuPathInstallPath = System.getProperty("user.dir");
+		Path workspacePath = Paths.get(QuPathInstallPath, "workspace.qpdata");
 
-		try {
-			URL url = new URL("<snip>"); // TODO: Make URL a setting?
-			String workspace = URLTools.readURLAsString(url, 2000);
-
-			Files.write(cache, workspace.getBytes());
-		} catch (IOException e) {
-			logger.error("Couldn't load workspace file. Trying to load it from disk...", e);
-		}
-
-		try {
-			return Optional.of(GeneralTools.readFileAsString(cache));
-		} catch (IOException e) {
-			logger.error("Error reading cache file", e);
+		if (Files.exists(workspacePath, LinkOption.NOFOLLOW_LINKS)) {
+			try {
+				String workspace = GeneralTools.readFileAsString(workspacePath);
+				return Optional.of(workspace);
+			} catch (IOException e) {
+				DisplayHelpers.showErrorMessage("Error reading workspace file", e);
+				logger.info("Path: ", workspacePath);
+			}
 		}
 
 		return Optional.empty();
@@ -1373,7 +1383,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		header.setFont(Font.font("Calibri", FontWeight.BOLD, FontPosture.REGULAR, 15));
 
 		Text description = new Text(object.get("description").getAsString());
-		description.setWrappingWidth(400);
+		description.setWrappingWidth(440);
 
 		rightSide.getChildren().addAll(header, description);
 		item.getChildren().addAll(leftSide, rightSide);
@@ -1384,7 +1394,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				Project<BufferedImage> project = ProjectIO.loadProject(file, BufferedImage.class);
 
 				if (project == null) {
-					DisplayHelpers.showErrorMessage("Load project", "Error when trying to load project");
+					DisplayHelpers.showErrorMessage("Load project", "Error when trying to load project. See log for additional information.");
 				} else {
 					setProject(project);
 					parent.close();
