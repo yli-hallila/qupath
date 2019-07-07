@@ -139,20 +139,7 @@ import qupath.lib.gui.commands.TMAGridAdd.TMAAddType;
 import qupath.lib.gui.commands.TMAGridRemove.TMARemoveType;
 import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.commands.interfaces.PathSelectableCommand;
-import qupath.lib.gui.commands.scriptable.DeleteObjectsCommand;
-import qupath.lib.gui.commands.scriptable.DeleteSelectedObjectsCommand;
-import qupath.lib.gui.commands.scriptable.DetectionsToPointsCommand;
-import qupath.lib.gui.commands.scriptable.DuplicateAnnotationCommand;
-import qupath.lib.gui.commands.scriptable.InverseObjectCommand;
-import qupath.lib.gui.commands.scriptable.MergeSelectedAnnotationsCommand;
-import qupath.lib.gui.commands.scriptable.ResetClassificationsCommand;
-import qupath.lib.gui.commands.scriptable.ResetSelectionCommand;
-import qupath.lib.gui.commands.scriptable.SelectAllAnnotationCommand;
-import qupath.lib.gui.commands.scriptable.SelectObjectsByClassCommand;
-import qupath.lib.gui.commands.scriptable.SelectObjectsByMeasurementCommand;
-import qupath.lib.gui.commands.scriptable.ShapeSimplifierCommand;
-import qupath.lib.gui.commands.scriptable.SpecifyAnnotationCommand;
-import qupath.lib.gui.commands.scriptable.TMAGridRelabel;
+import qupath.lib.gui.commands.scriptable.*;
 import qupath.lib.gui.commands.selectable.CellDisplaySelectable;
 import qupath.lib.gui.commands.selectable.ToolSelectable;
 import qupath.lib.gui.extensions.QuPathExtension;
@@ -278,7 +265,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 								DELETE_SELECTED_OBJECTS, CLEAR_HIERARCHY, CLEAR_DETECTIONS, CLEAR_TMA_CORES, CLEAR_ANNOTATIONS,
 								PROJECT_NEW, PROJECT_OPEN, PROJECT_CLOSE, PROJECT_SAVE, PROJECT_IMPORT_IMAGES, PROJECT_EXPORT_IMAGE_LIST, PROJECT_METADATA, PROJECT_DESCRIPTION,
 								PREFERENCES, QUPATH_SETUP,
-								TRANSFER_ANNOTATION, SELECT_ALL_ANNOTATION, TOGGLE_SYNCHRONIZE_VIEWERS,
+								TRANSFER_ANNOTATION, SELECT_ALL_ANNOTATION, COPY_ANNOTATION, PASTE_ANNOTATION, TOGGLE_SYNCHRONIZE_VIEWERS,
 								UNDO, REDO
 								};
 	
@@ -2905,6 +2892,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				getActionMenuItem(GUIActions.SELECT_ALL_ANNOTATION),
 				getActionMenuItem(GUIActions.ANNOTATION_DUPLICATE),
 				getActionMenuItem(GUIActions.TRANSFER_ANNOTATION),
+				getActionMenuItem(GUIActions.COPY_ANNOTATION),
+				getActionMenuItem(GUIActions.PASTE_ANNOTATION),
 				null,
 				createCommandAction(new InverseObjectCommand(this), "Make inverse annotation"),
 				createCommandAction(new MergeSelectedAnnotationsCommand(this), "Merge selected annotations"),
@@ -3503,7 +3492,11 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			return createCommandAction(new TransferAnnotationCommand(this), "Transfer last annotation", null, new KeyCodeCombination(KeyCode.E, KeyCombination.SHIFT_DOWN));
 		case SELECT_ALL_ANNOTATION:
 			return createCommandAction(new SelectAllAnnotationCommand(this), "Create full image annotation", null, new KeyCodeCombination(KeyCode.A, KeyCombination.SHIFT_DOWN, KeyCombination.SHORTCUT_DOWN));
-		
+		case COPY_ANNOTATION:
+			return createCommandAction(new CopyAnnotationsCommand(this), "Copy annotation(s)");
+		case PASTE_ANNOTATION:
+			return createCommandAction(new PasteAnnotationsCommand(this), "Paste annotation(s)");
+
 		case TOGGLE_SYNCHRONIZE_VIEWERS:
 			return createSelectableCommandAction(viewerManager.synchronizeViewersProperty(), "Synchronize viewers", (Node)null, new KeyCodeCombination(KeyCode.S, KeyCombination.SHIFT_DOWN, KeyCombination.ALT_DOWN, KeyCombination.SHORTCUT_DOWN));
 			

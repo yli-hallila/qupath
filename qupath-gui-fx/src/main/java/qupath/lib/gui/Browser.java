@@ -84,7 +84,7 @@ public class Browser extends Region {
     public void setContent(String content, boolean body) {
         Platform.runLater(() -> {
             webEngine.loadContent(getHtml(content, body));
-            Platform.runLater(this::adjustHeight);
+            adjustHeight();
         });
     }
 
