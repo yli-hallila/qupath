@@ -150,7 +150,7 @@ public class Project<T> {
 	}
 
 	String cleanServerPath(final String path) {
-		return path.replace("{$PROJECT_DIR}", getBaseDirectory().getAbsolutePath())
+		return path.replace("{$PROJECT_DIR}", getBaseDirectory().getPath())
 				   .replace("{$INSTALL_DIR}", System.getProperty("user.dir"))
 				   .replace("%20", " ")
 				   .replace("%5C", "\\")
