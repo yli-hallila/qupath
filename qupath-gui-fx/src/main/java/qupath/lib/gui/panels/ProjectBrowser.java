@@ -145,6 +145,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 
 		tree.setOnKeyPressed(e -> {
 			if (e.getCode() == KeyCode.ENTER) {
+				qupath.getTabbedPanel().getSelectionModel().select(1);
 				qupath.openImageEntry(getSelectedEntry());
 				e.consume();
 			}
@@ -152,6 +153,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 
 		tree.setOnMouseClicked(e -> {
 			if (e.getClickCount() > 1) {
+				qupath.getTabbedPanel().getSelectionModel().select(1);
 				qupath.openImageEntry(getSelectedEntry());
 				e.consume();
 			}

@@ -330,7 +330,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	private DragDropFileImportListener dragAndDrop = new DragDropFileImportListener(this);
 	
 	private UndoRedoManager undoRedoManager;
-	
+	private TabPane tabbedPanel;
+
 	public QuPathGUI(final Stage stage) {
 		this(stage, null, true);
 	}
@@ -1430,8 +1431,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		byte[] bytes = stream.toByteArray();
 		PathPrefs.getUserPreferences().putByteArray("defaultPathClasses", bytes);
 	}
-	
-	
+
 	
 	private BorderPane initializeMainComponent() {
 		
@@ -1457,7 +1457,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		
 		Node paneViewer = CommandFinderTools.createCommandFinderPane(this, viewerManager.getNode(), PathPrefs.commandBarDisplayProperty());
 
-		TabPane tabbedPanel = new TabPane();
+		tabbedPanel = new TabPane();
 		tabbedPanel.setTabClosingPolicy(TabClosingPolicy.UNAVAILABLE);
 
 		browser = new Browser();
@@ -4409,7 +4409,9 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		return (val - min) / (max - min);
 	}
 	
-	
+	public TabPane getTabbedPanel() {
+		return tabbedPanel;
+	}
 	
 	
 	
