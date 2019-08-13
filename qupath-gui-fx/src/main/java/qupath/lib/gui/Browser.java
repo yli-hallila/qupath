@@ -103,7 +103,9 @@ public class Browser extends Region {
                     double height = new Double(result.toString());
                     webView.setPrefHeight(height);
                 }
-            } catch (JSException ignored) {}
+            } catch (JSException ignored) {
+                webView.setPrefHeight(0);
+            }
         });
     }
 

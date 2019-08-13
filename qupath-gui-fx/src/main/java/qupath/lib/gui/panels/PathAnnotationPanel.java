@@ -32,8 +32,18 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.collections.FXCollections;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.CheckBoxTableCell;
+import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.layout.*;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
@@ -804,13 +814,59 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		panel.add(labDescription, 0, 2);
 		panel.add(textAreaDescription, 1, 2);
 
+		TableView table = new TableView();
+		table.setEditable(true);
+
+		TableColumn<Option, String> questions = new TableColumn<>("Question");
+		TableColumn<Option, Boolean> choices = new TableColumn<>("Choice");
+		TableColumn<Option, Boolean> answers = new TableColumn<>("Answer");
+
+		questions.prefWidthProperty().bind(table.widthProperty().multiply(0.6));
+		choices.prefWidthProperty().bind(table.widthProperty().multiply(0.2));
+		answers.prefWidthProperty().bind(table.widthProperty().multiply(0.2));
+
+		questions.setCellValueFactory(new PropertyValueFactory<>("question"));
+		choices.setCellValueFactory(new PropertyValueFactory<>("isChoice"));
+		answers.setCellValueFactory(new PropertyValueFactory<>("isAnswer"));
+
+		questions.setCellFactory(tc -> new TextFieldTableCell<>());
+		choices.setCellFactory(tc -> new CheckBoxTableCell<>());
+		answers.setCellFactory(tc -> new CheckBoxTableCell<>());
+
+		table.getColumns().addAll(questions, choices, answers);
+
+		if (annotation.getAnswer() == null) {
+			table.setItems(FXCollections.observableArrayList(
+				new Option("Epiteeli 1"),
+				new Option("Epiteeli 2"),
+				new Option("Epiteeli 3"),
+				new Option("Epiteeli 4"),
+				new Option("Epiteeli 5")
+			));
+		} else {
+			ObservableList<Option> list = FXCollections.observableArrayList();
+
+			JsonArray arr = new Gson().fromJson(annotation.getAnswer(), JsonArray.class);
+			for (JsonElement element : arr) {
+				JsonObject obj = (JsonObject) element;
+				list.add(new Option(
+					obj.get("question").getAsString(),
+					obj.get("isChoice").getAsBoolean(),
+					obj.get("isAnswer").getAsBoolean()
+				));
+			}
+
+			table.setItems(list);
+		}
+
 		Label labAnswer = new Label("Answer");
 		TextArea textAreaAnswer = new TextArea(annotation.getAnswer());
 		textAreaAnswer.setPrefRowCount(2);
 		textAreaAnswer.setPrefColumnCount(25);
-		labAnswer.setLabelFor(textAreaAnswer);
+		labAnswer.setLabelFor(table);
+
 		panel.add(labAnswer, 0, 3);
-		panel.add(textAreaAnswer, 1, 3);
+		panel.add(table, 1, 3);
 
 		if (!DisplayHelpers.showConfirmDialog("Set annotation properties", panel))
 			return false;
@@ -831,13 +887,43 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			annotation.setDescription(description);
 
 		// Set the answer only if we have to
-		String answer = textAreaAnswer.getText();
-		if (answer == null || answer.isEmpty())
+		ObservableList<Option> answer = table.getItems();
+		if (answer == null || answer.isEmpty()) {
 			annotation.setAnswer(null);
-		else
-			annotation.setAnswer(answer);
+		} else {
+			JsonArray jsonArray = new JsonArray();
+
+			for (Option option : answer) {
+				JsonObject obj = new JsonObject();
+				obj.addProperty("question", option.question.getValue());
+				obj.addProperty("isChoice", option.isChoice.getValue());
+				obj.addProperty("isAnswer", option.isAnswer.getValue());
+
+				jsonArray.add(obj);
+			}
+
+			annotation.setAnswer(new Gson().toJson(jsonArray));
+		}
 
 		return true;
+	}
+
+	public static class Option {
+
+		private final SimpleStringProperty question;
+
+		private final SimpleBooleanProperty isChoice;
+		private final SimpleBooleanProperty isAnswer;
+
+		public Option(String question) {
+			this(question, false, false);
+		}
+
+		public Option(String question, boolean isChoice, boolean isAnswer) {
+			this.question = new SimpleStringProperty(question);
+			this.isChoice = new SimpleBooleanProperty(isChoice);
+			this.isAnswer = new SimpleBooleanProperty(isAnswer);
+		}
 	}
 
 	
@@ -1044,7 +1130,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 				if (data.getProperty("Information") != null) {
 					browser.setContent((String) data.getProperty("Information"));
 				} else {
-					browser.setContent("");
+					browser.setContent("", false);
 				}
 			});
 		});
