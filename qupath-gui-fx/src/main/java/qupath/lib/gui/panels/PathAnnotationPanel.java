@@ -32,26 +32,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
-import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.*;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextFlow;
-import javafx.scene.web.WebEngine;
-import javafx.scene.web.WebView;
-import javafx.stage.Modality;
-import javafx.stage.Popup;
-import javafx.stage.Stage;
+import javafx.util.converter.DefaultStringConverter;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
 import org.slf4j.Logger;
@@ -570,7 +561,37 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 				PathObject pathObject = hierarchy.getSelectionModel().getSelectedObject();
 
 				if (pathObject.getAnswer() != null) {
-					DisplayHelpers.showMessageDialog("Answer", pathObject.getAnswer());
+					try {
+						List<Option> questions = new ArrayList<>();
+						List<String> rightAnswers = new ArrayList<>();
+
+						JsonArray arr = new Gson().fromJson(pathObject.getAnswer(), JsonArray.class);
+						for (JsonElement element : arr) {
+							JsonObject obj = (JsonObject) element;
+
+							Option option = new Option(
+								obj.get("question").getAsString(),
+								obj.get("answer").getAsBoolean()
+							);
+							questions.add(option);
+
+							if (option.isAnswer()) {
+								rightAnswers.add(option.getQuestion());
+							}
+						}
+
+						Option result = (Option) DisplayHelpers.showChoiceDialog("Select correct choice", pathObject.getName(), questions.toArray(), questions.get(0));
+
+						if (result != null) {
+							String message = result.isAnswer() ? "Right answer!" : "Wrong answer!";
+							message += "\n\n";
+							message += "All the right answers are: " + rightAnswers.toString();
+
+							DisplayHelpers.showMessageDialog("Answer", message);
+						}
+					} catch (JsonSyntaxException ex) {
+						DisplayHelpers.showMessageDialog("Answer", pathObject.getAnswer());
+					}
 				}
 			});
 
@@ -814,36 +835,50 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		panel.add(labDescription, 0, 2);
 		panel.add(textAreaDescription, 1, 2);
 
-		TableView table = new TableView();
+		TableView<Option> table = new TableView<>();
 		table.setEditable(true);
 
 		TableColumn<Option, String> questions = new TableColumn<>("Question");
-		TableColumn<Option, Boolean> choices = new TableColumn<>("Choice");
-		TableColumn<Option, Boolean> answers = new TableColumn<>("Answer");
+		TableColumn<Option, Boolean> answers = new TableColumn<>("Answer(s)");
 
-		questions.prefWidthProperty().bind(table.widthProperty().multiply(0.6));
-		choices.prefWidthProperty().bind(table.widthProperty().multiply(0.2));
-		answers.prefWidthProperty().bind(table.widthProperty().multiply(0.2));
+		questions.setEditable(true);
+
+		questions.prefWidthProperty().bind(table.widthProperty().multiply(0.75));
+		answers.prefWidthProperty().bind(table.widthProperty().multiply(0.25));
 
 		questions.setCellValueFactory(new PropertyValueFactory<>("question"));
-		choices.setCellValueFactory(new PropertyValueFactory<>("isChoice"));
-		answers.setCellValueFactory(new PropertyValueFactory<>("isAnswer"));
+		answers.setCellValueFactory(new PropertyValueFactory<>("answer"));
 
-		questions.setCellFactory(tc -> new TextFieldTableCell<>());
-		choices.setCellFactory(tc -> new CheckBoxTableCell<>());
+		questions.setCellFactory(tc -> new TextFieldTableCell<>(new DefaultStringConverter()));
 		answers.setCellFactory(tc -> new CheckBoxTableCell<>());
 
-		table.getColumns().addAll(questions, choices, answers);
+		table.getColumns().addAll(questions, answers);
 
-		if (annotation.getAnswer() == null) {
-			table.setItems(FXCollections.observableArrayList(
-				new Option("Epiteeli 1"),
-				new Option("Epiteeli 2"),
-				new Option("Epiteeli 3"),
-				new Option("Epiteeli 4"),
-				new Option("Epiteeli 5")
-			));
-		} else {
+		ContextMenu contextMenu = new ContextMenu();
+		MenuItem menuItem = new MenuItem("Delete");
+		menuItem.setOnAction(e -> table.getItems().remove(table.getSelectionModel().getFocusedIndex()));
+		contextMenu.getItems().add(menuItem);
+
+		table.setRowFactory(tv -> {
+			TableRow<Option> row = new TableRow<>();
+
+			row.setOnMouseClicked(event -> {
+				if (event.getClickCount() > 1 && row.isEmpty()) {
+					table.getItems().add(new Option());
+					table.layout();
+					table.getSelectionModel().selectLast();
+					table.edit(table.getItems().size() - 1, questions);
+				}
+
+				if (event.getButton() == MouseButton.SECONDARY && !row.isEmpty()) {
+					contextMenu.show(table, event.getScreenX(), event.getScreenY());
+				}
+			});
+
+			return row ;
+		});
+
+		if (annotation.getAnswer() != null) { // todo: make method for this
 			ObservableList<Option> list = FXCollections.observableArrayList();
 
 			JsonArray arr = new Gson().fromJson(annotation.getAnswer(), JsonArray.class);
@@ -851,8 +886,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 				JsonObject obj = (JsonObject) element;
 				list.add(new Option(
 					obj.get("question").getAsString(),
-					obj.get("isChoice").getAsBoolean(),
-					obj.get("isAnswer").getAsBoolean()
+					obj.get("answer").getAsBoolean()
 				));
 			}
 
@@ -896,8 +930,9 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			for (Option option : answer) {
 				JsonObject obj = new JsonObject();
 				obj.addProperty("question", option.question.getValue());
-				obj.addProperty("isChoice", option.isChoice.getValue());
-				obj.addProperty("isAnswer", option.isAnswer.getValue());
+				obj.addProperty("answer", option.answer.getValue());
+
+				logger.info("question: ", option.question.getValue(), " - ", option.answer.getValue());
 
 				jsonArray.add(obj);
 			}
@@ -911,18 +946,48 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 	public static class Option {
 
 		private final SimpleStringProperty question;
+		private final SimpleBooleanProperty answer;
 
-		private final SimpleBooleanProperty isChoice;
-		private final SimpleBooleanProperty isAnswer;
-
-		public Option(String question) {
-			this(question, false, false);
+		public Option() {
+			this("", false);
 		}
 
-		public Option(String question, boolean isChoice, boolean isAnswer) {
+		public Option(String question) {
+			this(question, false);
+		}
+
+		public Option(String question, boolean answer) {
 			this.question = new SimpleStringProperty(question);
-			this.isChoice = new SimpleBooleanProperty(isChoice);
-			this.isAnswer = new SimpleBooleanProperty(isAnswer);
+			this.answer = new SimpleBooleanProperty(answer);
+		}
+
+		public String getQuestion() {
+			return question.get();
+		}
+
+		public SimpleStringProperty questionProperty() {
+			return question;
+		}
+
+		public void setQuestion(String question) {
+			this.question.set(question);
+		}
+
+		public boolean isAnswer() {
+			return answer.get();
+		}
+
+		public SimpleBooleanProperty answerProperty() {
+			return answer;
+		}
+
+		public void setAnswer(boolean answer) {
+			this.answer.set(answer);
+		}
+
+		@Override
+		public String toString() {
+			return questionProperty().get();
 		}
 	}
 
