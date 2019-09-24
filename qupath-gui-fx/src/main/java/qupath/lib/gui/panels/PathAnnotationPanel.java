@@ -941,7 +941,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		MenuItem itemHemaTissues = new MenuItem("Hematopoieettiset");
 		itemHemaTissues.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.HEMATOPOIETIC_TISSUE));
 
-		MenuButton menuButton = new MenuButton("Lis‰‰ automaattisesti vaihtoehdot ...");
+		MenuButton menuButton = new MenuButton("Lis‰‰ automaattisesti ...");
 		menuButton.getItems().addAll(
 				itemEpithelium,
 				itemConnTissues,
@@ -1320,10 +1320,17 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 				if (data == null)
 					return;
 
-				if (data.getProperty("Information") != null) {
-					browser.setContent((String) data.getProperty("Information"));
+				String information = (String) data.getProperty("Information");
+				if (information != null && !information.isEmpty()) {
+					browser.setContent(information);
 				} else {
-					browser.setContent("", false);
+					String description = qupath.getProject().getImageEntry(qupath.getImageData().getServerPath()).getDescription();
+
+					if (description != null) {
+						browser.setContent(description);
+					} else {
+						browser.setContent("");
+					}
 				}
 			});
 		});

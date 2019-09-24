@@ -1384,8 +1384,12 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				if (project == null) {
 					DisplayHelpers.showErrorMessage("Load project", "Error when trying to load project. See log for additional information.");
 				} else {
-					setProject(project);
 					parent.close();
+					browser.setContent("");
+					tabbedPanel.getSelectionModel().select(0);
+					((TabPane) analysisPanel).getSelectionModel().select(0);
+					this.browser.setContent("Loading project ...");
+					setProject(project);
 				}
 			}
 		});
