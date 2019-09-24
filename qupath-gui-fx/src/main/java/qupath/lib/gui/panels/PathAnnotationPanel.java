@@ -561,36 +561,10 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 				PathObject pathObject = hierarchy.getSelectionModel().getSelectedObject();
 
 				if (pathObject.getAnswer() != null) {
-					try {
-						List<Option> questions = new ArrayList<>();
-						List<String> rightAnswers = new ArrayList<>();
-
-						JsonArray arr = new Gson().fromJson(pathObject.getAnswer(), JsonArray.class);
-						for (JsonElement element : arr) {
-							JsonObject obj = (JsonObject) element;
-
-							Option option = new Option(
-								obj.get("question").getAsString(),
-								obj.get("answer").getAsBoolean()
-							);
-							questions.add(option);
-
-							if (option.isAnswer()) {
-								rightAnswers.add(option.getQuestion());
-							}
-						}
-
-						Option result = (Option) DisplayHelpers.showChoiceDialog("Select correct choice", pathObject.getName(), questions.toArray(), questions.get(0));
-
-						if (result != null) {
-							String message = result.isAnswer() ? "Right answer!" : "Wrong answer!";
-							message += "\n\n";
-							message += "All the right answers are: " + rightAnswers.toString();
-
-							DisplayHelpers.showMessageDialog("Answer", message);
-						}
-					} catch (JsonSyntaxException ex) {
-						DisplayHelpers.showMessageDialog("Answer", pathObject.getAnswer());
+					if (isJSON(pathObject.getAnswer())) {
+						showQuizDialog(pathObject);
+					} else{
+						showAnswerDialog(pathObject);
 					}
 				}
 			});
@@ -611,10 +585,46 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		qupath.addImageDataChangeListener(this);
 	}
 
+	private void showAnswerDialog(PathObject pathObject) {
+		DisplayHelpers.showMessageDialog(pathObject.getName(), pathObject.getAnswer());
+	}
+
+	private void showQuizDialog(PathObject pathObject) {
+		try {
+			List<Option> questions = new ArrayList<>();
+			List<String> rightAnswers = new ArrayList<>();
+
+			JsonArray arr = new Gson().fromJson(pathObject.getAnswer(), JsonArray.class);
+			for (JsonElement element : arr) {
+				JsonObject obj = (JsonObject) element;
+
+				Option option = new Option(
+					obj.get("question").getAsString(),
+					obj.get("answer").getAsBoolean()
+				);
+				questions.add(option);
+
+				if (option.isAnswer()) {
+					rightAnswers.add(option.getQuestion());
+				}
+			}
+
+			Option result = (Option) DisplayHelpers.showChoiceDialog("Select correct choice", pathObject.getName(), questions.toArray(), questions.get(0));
+
+			if (result != null) {
+				String message  = result.isAnswer() ? "Right answer!" : "Wrong answer!";
+				       message += "\n\n";
+				       message += "All the right answers are: " + rightAnswers.toString();
+
+				DisplayHelpers.showMessageDialog("Answer", message);
+			}
+		} catch (JsonSyntaxException ex) {
+			logger.error("Error while parsing answer JSON", ex);
+			showAnswerDialog(pathObject);
+		}
+	}
 
 
-	
-	
 	/**
 	 * Create an action to remove the selected ROI, and optionally its descendants.
 	 * 
@@ -800,6 +810,9 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		}
 	}
 
+	enum TISSUE_TYPES {
+		EPITHELIA, CONNECTIVE_TISSUE, MUSCLE_TISSUE, HEMATOPOIETIC_TISSUE, NERVE_TISSUE
+	}
 
 
 	static boolean promptToSetAnnotationProperties(final PathAnnotationObject annotation) {
@@ -852,6 +865,17 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		questions.setCellFactory(tc -> new TextFieldTableCell<>(new DefaultStringConverter()));
 		answers.setCellFactory(tc -> new CheckBoxTableCell<>());
 
+		questions.setOnEditCommit(event -> {
+			event.getRowValue().questionProperty().set(event.getNewValue());
+			Platform.runLater(() -> addRowToTable(table, questions));
+		});
+
+		questions.setOnEditCancel(event -> {
+			if (event.getNewValue() == null || event.getNewValue().isEmpty()) {
+				table.getItems().remove(table.getItems().size() - 1);
+			}
+		});
+
 		table.getColumns().addAll(questions, answers);
 
 		ContextMenu contextMenu = new ContextMenu();
@@ -859,15 +883,18 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		menuItem.setOnAction(e -> table.getItems().remove(table.getSelectionModel().getFocusedIndex()));
 		contextMenu.getItems().add(menuItem);
 
+		table.setOnMouseClicked(event -> { // Row onClick() doesn't trigger on empty tables
+			if (event.getClickCount() == 2 && table.getItems().isEmpty()) {
+				addRowToTable(table, questions);
+			}
+		});
+
 		table.setRowFactory(tv -> {
 			TableRow<Option> row = new TableRow<>();
 
 			row.setOnMouseClicked(event -> {
-				if (event.getClickCount() > 1 && row.isEmpty()) {
-					table.getItems().add(new Option());
-					table.layout();
-					table.getSelectionModel().selectLast();
-					table.edit(table.getItems().size() - 1, questions);
+				if (event.getClickCount() == 2 && row.isEmpty()) {
+					addRowToTable(table, questions);
 				}
 
 				if (event.getButton() == MouseButton.SECONDARY && !row.isEmpty()) {
@@ -878,11 +905,11 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			return row ;
 		});
 
-		if (annotation.getAnswer() != null) { // todo: make method for this
+		if (annotation.getAnswer() != null && isJSON(annotation.getAnswer())) {
 			ObservableList<Option> list = FXCollections.observableArrayList();
 
-			JsonArray arr = new Gson().fromJson(annotation.getAnswer(), JsonArray.class);
-			for (JsonElement element : arr) {
+			JsonArray jsonArray = new Gson().fromJson(annotation.getAnswer(), JsonArray.class);
+			for (JsonElement element : jsonArray) {
 				JsonObject obj = (JsonObject) element;
 				list.add(new Option(
 					obj.get("question").getAsString(),
@@ -899,8 +926,34 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		textAreaAnswer.setPrefColumnCount(25);
 		labAnswer.setLabelFor(table);
 
-		panel.add(labAnswer, 0, 3);
-		panel.add(table, 1, 3);
+		MenuItem itemEpithelium = new MenuItem("Epiteelit");
+		itemEpithelium.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.EPITHELIA));
+
+		MenuItem itemConnTissues = new MenuItem("Tukikudokset");
+		itemConnTissues.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.CONNECTIVE_TISSUE));
+
+		MenuItem itemMuscleTissues = new MenuItem("Lihaskudokset");
+		itemMuscleTissues.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.MUSCLE_TISSUE));
+
+		MenuItem itemNerveTissues = new MenuItem("Hermokudokset");
+		itemNerveTissues.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.NERVE_TISSUE));
+
+		MenuItem itemHemaTissues = new MenuItem("Hematopoieettiset");
+		itemHemaTissues.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.HEMATOPOIETIC_TISSUE));
+
+		MenuButton menuButton = new MenuButton("Lisää automaattisesti vaihtoehdot ...");
+		menuButton.getItems().addAll(
+				itemEpithelium,
+				itemConnTissues,
+				itemMuscleTissues,
+				itemNerveTissues,
+				itemHemaTissues
+		);
+
+		panel.add(menuButton, 1, 3);
+		panel.add(labAnswer, 0, 4);
+		panel.add(table, 1, 4);
+		panel.add(textAreaAnswer, 1, 5);
 
 		if (!DisplayHelpers.showConfirmDialog("Set annotation properties", panel))
 			return false;
@@ -921,18 +974,21 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			annotation.setDescription(description);
 
 		// Set the answer only if we have to
-		ObservableList<Option> answer = table.getItems();
-		if (answer == null || answer.isEmpty()) {
-			annotation.setAnswer(null);
+		ObservableList<Option> quizItems = table.getItems();
+		if (quizItems == null || quizItems.isEmpty()) {
+			// We don't have a quiz, but do we have a string answer?
+			if (textAreaAnswer.getText() != null && !textAreaAnswer.getText().isEmpty()) {
+				annotation.setAnswer(textAreaAnswer.getText());
+			} else {
+				annotation.setAnswer(null);
+			}
 		} else {
 			JsonArray jsonArray = new JsonArray();
 
-			for (Option option : answer) {
+			for (Option option : quizItems) {
 				JsonObject obj = new JsonObject();
 				obj.addProperty("question", option.question.getValue());
 				obj.addProperty("answer", option.answer.getValue());
-
-				logger.info("question: ", option.question.getValue(), " - ", option.answer.getValue());
 
 				jsonArray.add(obj);
 			}
@@ -941,6 +997,14 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		}
 
 		return true;
+	}
+
+	private static void addRowToTable(TableView<Option> table, TableColumn<Option, String> column) {
+		table.getItems().add(new Option());
+		table.layout();
+		table.getSelectionModel().selectLast();
+		//table.getFocusModel().focus(table.getItems().size() - 1);
+		table.edit(table.getItems().size() - 1, column);
 	}
 
 	public static class Option {
@@ -991,7 +1055,71 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		}
 	}
 
-	
+	/**
+	 *   Our quiz JSON strings starts always with [{
+	 */
+	private static boolean isJSON(String string) {
+		return string.startsWith("[{");
+	}
+
+	private static void addItemsToTable(TableView table, TISSUE_TYPES type) {
+		switch (type) {
+			case EPITHELIA:
+				table.getItems().addAll(
+					new Option("Yksinkertainen levyepiteeli"),
+					new Option("Yksinkertainen kuutioepiteeli"),
+					new Option("Yksinkertainen lieriöepiteeli"),
+					new Option("Kerrostunut levyepiteeli"),
+					new Option("Kerrostunut kuutioepiteeli"),
+					new Option("Kerrostunut lieriöepiteeli"),
+					new Option("Valekerrostunut lieriöepiteeli"),
+					new Option("Välimuotoinen epiteeli")
+				);
+				break;
+			case CONNECTIVE_TISSUE:
+				table.getItems().addAll(
+					new Option("Löyhä sidekudos"),
+					new Option("Tiivis sidekudos"),
+					new Option("Tiivis sidekudos (järjestäytynyt)"),
+					new Option("Tiivis sidekudos (järjestäytymätön)"),
+					new Option("Valkoinen rasva"),
+					new Option("Ruskea rasva"),
+					new Option("Lasirusto (hyaliinirusto)"),
+					new Option("Kimmorusto (elastinen)"),
+					new Option("Syyrusto"),
+					new Option("Tiivisluu"),
+					new Option("Hohkaluu")
+				);
+				break;
+			case MUSCLE_TISSUE:
+				table.getItems().addAll(
+					new Option("Sydänlihas"),
+					new Option("Sileälihas"),
+					new Option("Poikkijuovainen lihas")
+				);
+				break;
+			case HEMATOPOIETIC_TISSUE:
+				table.getItems().addAll(
+					new Option("Punasolu"),
+					new Option("Basofiili"),
+					new Option("Neutrofiili"),
+					new Option("Eosinofiili"),
+					new Option("Monosyytti"),
+					new Option("Lymfosyytti"),
+					new Option("Trombosyytti"),
+					new Option("Granulosyytti"),
+					new Option("Megakaryosyytti")
+				);
+				break;
+			case NERVE_TISSUE:
+				table.getItems().addAll(
+					new Option("Valkea aine"),
+					new Option("Harmaa aine")
+				);
+				break;
+
+		}
+	}
 
 	@Override
 	public void selectedPathObjectChanged(final PathObject pathObjectSelected, final PathObject previousObject) {
