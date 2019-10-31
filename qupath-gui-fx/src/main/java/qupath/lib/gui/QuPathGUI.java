@@ -1385,10 +1385,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 					DisplayHelpers.showErrorMessage("Load project", "Error when trying to load project. See log for additional information.");
 				} else {
 					parent.close();
-					browser.setContent("");
 					tabbedPanel.getSelectionModel().select(0);
 					((TabPane) analysisPanel).getSelectionModel().select(0);
-					this.browser.setContent("Loading project ...");
 					setProject(project);
 				}
 			}
@@ -2320,6 +2318,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 //				logger.error("Unable to build whole slide server for path '{}'", pathNew);
 			}
 		}
+
 		return false;
 	}
 	
@@ -4259,7 +4258,6 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	public void setProject(final Project<BufferedImage> project) {
 		if (this.project.get() == project)
 			return;
-		
 		// Store in recent list, if needed
 		File file = project == null ? null : project.getFile();
 		if (file != null) {
@@ -4300,7 +4298,6 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		// Ensure we have the required directories
 //		getProjectClassifierDirectory(true);
 //		getProjectScriptsDirectory(true);
-		
 		logger.info("Project set to {}", project);
 	}
 	

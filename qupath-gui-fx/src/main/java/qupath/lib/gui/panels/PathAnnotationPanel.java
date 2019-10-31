@@ -614,7 +614,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			if (result != null) {
 				String message  = result.isAnswer() ? "Right answer!" : "Wrong answer!";
 				       message += "\n\n";
-				       message += "All the right answers are: " + rightAnswers.toString();
+				       message += "All the right answers are: " + rightAnswers.toString().replaceAll("\\[|\\]", "");
 
 				DisplayHelpers.showMessageDialog("Answer", message);
 			}
@@ -867,14 +867,8 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 
 		questions.setOnEditCommit(event -> {
 			event.getRowValue().questionProperty().set(event.getNewValue());
-			Platform.runLater(() -> addRowToTable(table, questions));
 		});
 
-		questions.setOnEditCancel(event -> {
-			if (event.getNewValue() == null || event.getNewValue().isEmpty()) {
-				table.getItems().remove(table.getItems().size() - 1);
-			}
-		});
 
 		table.getColumns().addAll(questions, answers);
 
@@ -883,20 +877,10 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		menuItem.setOnAction(e -> table.getItems().remove(table.getSelectionModel().getFocusedIndex()));
 		contextMenu.getItems().add(menuItem);
 
-		table.setOnMouseClicked(event -> { // Row onClick() doesn't trigger on empty tables
-			if (event.getClickCount() == 2 && table.getItems().isEmpty()) {
-				addRowToTable(table, questions);
-			}
-		});
-
 		table.setRowFactory(tv -> {
 			TableRow<Option> row = new TableRow<>();
 
 			row.setOnMouseClicked(event -> {
-				if (event.getClickCount() == 2 && row.isEmpty()) {
-					addRowToTable(table, questions);
-				}
-
 				if (event.getButton() == MouseButton.SECONDARY && !row.isEmpty()) {
 					contextMenu.show(table, event.getScreenX(), event.getScreenY());
 				}
@@ -926,31 +910,21 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		textAreaAnswer.setPrefColumnCount(25);
 		labAnswer.setLabelFor(table);
 
-		MenuItem itemEpithelium = new MenuItem("Epiteelit");
-		itemEpithelium.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.EPITHELIA));
+		HBox controlButtons = new HBox();
 
-		MenuItem itemConnTissues = new MenuItem("Tukikudokset");
-		itemConnTissues.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.CONNECTIVE_TISSUE));
+		Button newEntryButton = new Button("Lisää uusi");
+		newEntryButton.setOnMouseClicked(e -> {
+			addRowToTable(table, questions);
+		});
 
-		MenuItem itemMuscleTissues = new MenuItem("Lihaskudokset");
-		itemMuscleTissues.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.MUSCLE_TISSUE));
+		Button deleteEntryButton = new Button("Poista valittu");
+		deleteEntryButton.setOnMouseClicked(e -> {
+			table.getItems().remove(table.getSelectionModel().getFocusedIndex());
+		});
 
-		MenuItem itemNerveTissues = new MenuItem("Hermokudokset");
-		itemNerveTissues.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.NERVE_TISSUE));
+		controlButtons.getChildren().addAll(newEntryButton, deleteEntryButton);
 
-		MenuItem itemHemaTissues = new MenuItem("Hematopoieettiset");
-		itemHemaTissues.setOnAction(e -> addItemsToTable(table, TISSUE_TYPES.HEMATOPOIETIC_TISSUE));
-
-		MenuButton menuButton = new MenuButton("Lisää automaattisesti ...");
-		menuButton.getItems().addAll(
-				itemEpithelium,
-				itemConnTissues,
-				itemMuscleTissues,
-				itemNerveTissues,
-				itemHemaTissues
-		);
-
-		panel.add(menuButton, 1, 3);
+		panel.add(controlButtons, 1, 3);
 		panel.add(labAnswer, 0, 4);
 		panel.add(table, 1, 4);
 		panel.add(textAreaAnswer, 1, 5);
@@ -1003,7 +977,6 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		table.getItems().add(new Option());
 		table.layout();
 		table.getSelectionModel().selectLast();
-		//table.getFocusModel().focus(table.getItems().size() - 1);
 		table.edit(table.getItems().size() - 1, column);
 	}
 
@@ -1060,65 +1033,6 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 	 */
 	private static boolean isJSON(String string) {
 		return string.startsWith("[{");
-	}
-
-	private static void addItemsToTable(TableView table, TISSUE_TYPES type) {
-		switch (type) {
-			case EPITHELIA:
-				table.getItems().addAll(
-					new Option("Yksinkertainen levyepiteeli"),
-					new Option("Yksinkertainen kuutioepiteeli"),
-					new Option("Yksinkertainen lieriöepiteeli"),
-					new Option("Kerrostunut levyepiteeli"),
-					new Option("Kerrostunut kuutioepiteeli"),
-					new Option("Kerrostunut lieriöepiteeli"),
-					new Option("Valekerrostunut lieriöepiteeli"),
-					new Option("Välimuotoinen epiteeli")
-				);
-				break;
-			case CONNECTIVE_TISSUE:
-				table.getItems().addAll(
-					new Option("Löyhä sidekudos"),
-					new Option("Tiivis sidekudos"),
-					new Option("Tiivis sidekudos (järjestäytynyt)"),
-					new Option("Tiivis sidekudos (järjestäytymätön)"),
-					new Option("Valkoinen rasva"),
-					new Option("Ruskea rasva"),
-					new Option("Lasirusto (hyaliinirusto)"),
-					new Option("Kimmorusto (elastinen)"),
-					new Option("Syyrusto"),
-					new Option("Tiivisluu"),
-					new Option("Hohkaluu")
-				);
-				break;
-			case MUSCLE_TISSUE:
-				table.getItems().addAll(
-					new Option("Sydänlihas"),
-					new Option("Sileälihas"),
-					new Option("Poikkijuovainen lihas")
-				);
-				break;
-			case HEMATOPOIETIC_TISSUE:
-				table.getItems().addAll(
-					new Option("Punasolu"),
-					new Option("Basofiili"),
-					new Option("Neutrofiili"),
-					new Option("Eosinofiili"),
-					new Option("Monosyytti"),
-					new Option("Lymfosyytti"),
-					new Option("Trombosyytti"),
-					new Option("Granulosyytti"),
-					new Option("Megakaryosyytti")
-				);
-				break;
-			case NERVE_TISSUE:
-				table.getItems().addAll(
-					new Option("Valkea aine"),
-					new Option("Harmaa aine")
-				);
-				break;
-
-		}
 	}
 
 	@Override
