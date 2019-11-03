@@ -23,9 +23,12 @@
 
 package qupath.lib.gui.viewer.tools;
 
+import javafx.scene.input.MouseEvent;
 import qupath.lib.gui.viewer.ModeWrapper;
+import qupath.lib.regions.ImagePlane;
 import qupath.lib.roi.ArrowROI;
 import qupath.lib.roi.LineROI;
+import qupath.lib.roi.ROIs;
 import qupath.lib.roi.interfaces.ROI;
 
 /**
@@ -40,8 +43,16 @@ public class ArrowTool extends AbstractPathDraggingROITool {
         super(modes);
     }
 
+    /**
+     * Returns false (no pixel snapping for the line tool).
+     */
     @Override
-    protected ROI createNewROI(double x, double y, int z, int t) {
-        return new ArrowROI(x, y, x, y, -1, z, t);
+    protected boolean requestPixelSnapping() {
+        return false;
+    }
+
+    @Override
+    protected ROI createNewROI(MouseEvent e, double x, double y, ImagePlane plane) {
+        return ROIs.createArrowROI(x, y, x, y, plane);
     }
 }

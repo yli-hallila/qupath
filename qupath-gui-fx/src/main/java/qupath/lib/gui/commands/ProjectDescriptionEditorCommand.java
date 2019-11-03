@@ -7,6 +7,7 @@ import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectIO;
 
+import java.io.IOException;
 import java.util.Optional;
 
 public class ProjectDescriptionEditorCommand implements PathCommand {
@@ -27,7 +28,11 @@ public class ProjectDescriptionEditorCommand implements PathCommand {
             Project project = qupath.getProject();
             project.setDescription(result.get());
 
-            ProjectIO.writeProject(project);
+            try {
+                project.syncChanges();
+            } catch (IOException e) {
+                // todo: logger
+            }
         }
     }
 }

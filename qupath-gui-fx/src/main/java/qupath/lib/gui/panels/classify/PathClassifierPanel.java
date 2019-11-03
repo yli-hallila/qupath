@@ -40,7 +40,7 @@ import qupath.lib.classifiers.PathClassifierTools;
 import qupath.lib.classifiers.PathObjectClassifier;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.ViewerManager;
-import qupath.lib.gui.helpers.PanelToolsFX;
+import qupath.lib.gui.helpers.PaneToolsFX;
 import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.images.ImageData;
@@ -73,7 +73,7 @@ public class PathClassifierPanel {
 		this.manager = manager;
 
 		btnLoad.setOnAction(e -> {
-			File file = QuPathGUI.getDialogHelper(btnLoad.getScene().getWindow()).promptForFile("Load classifier", QuPathGUI.getInstance() == null ? null : QuPathGUI.getInstance().getProjectClassifierDirectory(true), "Classifiers", new String[]{PathPrefs.getClassifierExtension()});
+			File file = QuPathGUI.getDialogHelper(btnLoad.getScene().getWindow()).promptForFile("Load classifier", null, "Classifiers", new String[]{PathPrefs.getClassifierExtension()});
 			if (file == null)
 				return;
 
@@ -98,7 +98,7 @@ public class PathClassifierPanel {
 		});
 
 
-		GridPane paneButtons = PanelToolsFX.createColumnGridControls(
+		GridPane paneButtons = PaneToolsFX.createColumnGridControls(
 				btnLoad,
 				btnRun
 				);

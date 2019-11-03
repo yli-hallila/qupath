@@ -23,29 +23,29 @@
 
 package qupath.lib.roi;
 
+import java.awt.Shape;
+import java.awt.geom.Path2D;
 import java.io.InvalidObjectException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import qupath.lib.common.GeneralTools;
 import qupath.lib.geom.Point2;
-import qupath.lib.roi.experimental.WindingTest;
-import qupath.lib.roi.interfaces.PathArea;
-import qupath.lib.roi.interfaces.ROIWithHull;
+import qupath.lib.regions.ImagePlane;
 import qupath.lib.roi.interfaces.ROI;
-import qupath.lib.roi.interfaces.TranslatableROI;
-import qupath.lib.rois.measure.ConvexHull;
-import qupath.lib.rois.vertices.Vertices;
 
 
 /**
  * ROI representing an arbitrary closed polygon.
  * 
+ * @see PolylineROI
+ * 
  * @author Pete Bankhead
  *
  */
-public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, TranslatableROI, Serializable {
+public class PolygonROI extends AbstractPathROI implements Serializable {
 	
 	private static final long serialVersionUID = 1L;
 	
@@ -53,9 +53,9 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 	
 	private Vertices vertices;
 	
-	transient protected PathArea convexHull = null;
+	transient private ROI convexHull = null;
 
-	transient ClosedShapeStatistics stats = null;
+	transient private ClosedShapeStatistics stats = null;
 	
 
 	PolygonROI() {
@@ -68,25 +68,25 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 	 * @param x
 	 * @param y
 	 */
-	public PolygonROI(double x, double y) {
-		this(x, y, -1, 0, 0);
+	PolygonROI(double x, double y) {
+		this(x, y, null);
 	}
 	
-	public PolygonROI(List<Point2> points) {
-		this(points, -1, 0, 0);
+	PolygonROI(List<Point2> points) {
+		this(points, null);
 	}
 	
 	
-	public PolygonROI(double x, double y, int c, int z, int t) {
-		super(c, z, t);
+	PolygonROI(double x, double y, ImagePlane plane) {
+		super(plane);
 		vertices = VerticesFactory.createVertices(new float[]{(float)x, (float)x}, new float[]{(float)y, (float)y}, false);
 //		vertices = VerticesFactory.createMutableVertices();
 //		vertices.add(x, y);
 //		vertices.close();
 	}
 	
-	public PolygonROI(List<Point2> points, int c, int z, int t) {
-		super(c, z, t);
+	PolygonROI(List<Point2> points, ImagePlane plane) {
+		super(plane);
 //		vertices = VerticesFactory.createMutableVertices(points.size()+1);
 //		setPoints(points);
 //		vertices.close();
@@ -101,8 +101,8 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 	}
 	
 	
-	public PolygonROI(float[] x, float[] y, int c, int z, int t) {
-		this(x, y, c, z, t, true);
+	PolygonROI(float[] x, float[] y, ImagePlane plane) {
+		this(x, y, plane, true);
 //		List<Point2> points = new ArrayList<>();
 //		for (int i = 0; i < x.length; i++) {
 //			points.add(new Point2(x[i], y[i]));
@@ -113,8 +113,8 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 	}
 	
 	
-	PolygonROI(float[] x, float[] y, int c, int z, int t, boolean copyVertices) {
-		super(c, z, t);
+	PolygonROI(float[] x, float[] y, ImagePlane plane, boolean copyVertices) {
+		super(plane);
 		vertices = VerticesFactory.createVertices(x, y, copyVertices);
 	}
 	
@@ -126,7 +126,10 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 //		isAdjusting = false;
 //	}
 	
-	
+	/**
+	 * Get the total number of vertices in the polygon.
+	 * @return
+	 */
 	public int nVertices() {
 		if (stats == null)
 			calculateShapeMeasurements();
@@ -138,8 +141,9 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 	 * @see qupath.lib.rois.PolygonROI#duplicate()
 	 */
 	@Override
+	@Deprecated
 	public ROI duplicate() {
-		return new PolygonROI(vertices.getPoints(), getC(), getZ(), getT());
+		return new PolygonROI(vertices.getPoints(), getImagePlane());
 	}
 	
 
@@ -175,7 +179,7 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 	 * @see qupath.lib.rois.PolygonROI#translate(double, double)
 	 */
 	@Override
-	public TranslatableROI translate(double dx, double dy) {
+	public ROI translate(double dx, double dy) {
 		// Shift the bounds
 		if (dx == 0 && dy == 0)
 			return this;
@@ -186,7 +190,14 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 			x[i] = (float)(x[i] + dx);
 			y[i] = (float)(y[i] + dy);
 		}
-		return new PolygonROI(x, y, getC(), getZ(), getT());
+		return new PolygonROI(x, y, getImagePlane());
+	}
+	
+	@Override
+	public ROI scale(double scaleX, double scaleY, double originX, double originY) {
+		return new PolygonROI(
+				getAllPoints().stream().map(p -> RoiTools.scalePoint(p, scaleX, scaleY, originX, originY)).collect(Collectors.toList()),
+				getImagePlane());
 	}
 	
 	
@@ -194,7 +205,7 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 	 * @see qupath.lib.rois.PolygonROI#getROIType()
 	 */
 	@Override
-	public String getROIType() {
+	public String getRoiName() {
 		return "Polygon";
 	}
 
@@ -213,128 +224,55 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 	 * @see qupath.lib.rois.PolygonROI#getPerimeter()
 	 */
 	@Override
-	public double getPerimeter() {
+	public double getLength() {
 		if (stats == null)
 			calculateShapeMeasurements();
 		return stats.getPerimeter();
 	}
-	
-	
-	/* (non-Javadoc)
-	 * @see qupath.lib.rois.PolygonROI#getConvexArea()
-	 */
-	@Override
-	public double getConvexArea() {
-		PathArea hull = getConvexHull();
-		if (hull != null)
-			return hull.getArea();
-		return Double.NaN;
-	}
 
-	public double getSolidity() {
-		return getArea() / getConvexArea();
-	}
-	
-	public double getSolidity(double pixelWidth, double pixelHeight) {
-		return getScaledArea(pixelWidth, pixelHeight) / getScaledConvexArea(pixelWidth, pixelHeight);
-	}
-
-	
-//	protected void resetCachedMeasurements() {
-//		stats = null;
-//		// Reset convex hull
-//		convexHull = null;
-//	}
-	
-	
-//	protected boolean hasMeasurements() {
-//		return stats == null;
-//	}
-	
-
-//	// TODO: Consider that this isn't very efficient code at all
-//	// pointAdditional is an optional extra point that hasn't been used to add the path yet -
-//	// so this may be used to make the decision as to whether to add the point or not
-//	protected boolean calculateIsSelfIntersecting(Point2D pointAdditional) {
-//		List<Point2D> points = getLinearPathPoints(path);
-//		// Add point during creation if necessary
-//		if (pointAdditional != null)
-//			points.add(pointAdditional);
-//		int n = points.size();
-//		Line2D line1 = new Line2D.Float();
-//		Line2D line2 = new Line2D.Float();
-//		for (int i = 0; i < n; i++) {
-//			// Get the first line segment
-//			line1.setLine(points.get(i), points.get((i+1) % n));
-//			for (int j = 0; j < n; j++) {
-//				// Don't compare point with itself... or its immediate neighbors
-//				if (Math.abs(i - j) <= 1)
-//					continue;
-//				line2.setLine(points.get(i), points.get((i+1) % n));
-//				if (line1.getP1().equals(line2.getP2()) || line1.getP2().equals(line2.getP1()))
-//					continue;
-//				if (line1.intersectsLine(line2)) {
-//					// TODO: Check the self-intersection code for polygons - could be improved, may fail for some shared points
-//					// (simplifying polygons would help)
-//					// Check for shared end points - we won't count these as intersections
-//					if (line1.getP1().equals(line2.getP1()) || line1.getP1().equals(line2.getP2()) || line1.getP2().equals(line2.getP1()) || line1.getP2().equals(line2.getP2()))
-//						continue;
-////					logger.info(String.format("plot([%.0f, %.0f], [%.0f, %.0f]); line([%.0f, %.0f], [%.0f, %.0f], 'color', 'r')", line1.getX1(), line1.getY1(), line1.getX2(), line1.getY2(),
-////							line2.getX1(), line2.getY1(), line2.getX2(), line2.getY2()));
-////					logger.info(String.format("Line 1: %s, %s", line1.getP1().toString(), line1.getP2().toString()));
-////					logger.info(String.format("Line 2: %s, %s", line2.getP1().toString(), line2.getP2().toString()));
-////					for (Point2D p : points)
-////						logger.info(String.format("%.2f, %.2f;", p.getX(), p.getY()));
-//					return true;
-//				}
-//			}
-//		}
-//		return false;
-//	}
-	
-	
 //	/**
-//	 * Check if the polygon is self-intersecting.
-//	 * If so, the measurements are not going to be very reliable - and should not be shown.
-//	 * 
+//	 * Get the solidity of the polygon assuming 'square' pixels, defined as {@code getArea()/getConvexArea()}.
 //	 * @return
 //	 */
-//	public boolean isSelfIntersecting() {
-//		if (!hasMeasurements())
-//			calculateShapeMeasurements();
-//		return isSelfIntersecting;
+//	public double getSolidity() {
+//		return getArea() / getConvexArea();
+//	}
+//	
+//	/**
+//	 * Get the solidity of the polygon, defined as {@code getScaledArea(pixelWidth, pixelHeight)/getScaledConvexArea(pixelWidth, pixelHeight)}.
+//	 * @return
+//	 */
+//	public double getSolidity(double pixelWidth, double pixelHeight) {
+//		return getScaledArea(pixelWidth, pixelHeight) / getScaledConvexArea(pixelWidth, pixelHeight);
 //	}
 
 	
-	/* (non-Javadoc)
-	 * @see qupath.lib.rois.PolygonROI#getConvexHull()
-	 */
 	@Override
-	public PathArea getConvexHull() {
-		if (convexHull == null) {
-			List<Point2> points = getPolygonPoints();
-			List<Point2> convexPoints = ConvexHull.getConvexHull(points);
-			// The 'containsAll' test probably doesn't need to be there...
-			if (points.size() >= convexPoints.size()-1 && convexPoints.containsAll(points))
-				convexHull = this;
+	public Shape getShape() {
+		Path2D path = new Path2D.Float();
+		Vertices vertices = getVertices();
+		for (int i = 0; i <  vertices.size(); i++) {
+			if (i == 0)
+				path.moveTo(vertices.getX(i), vertices.getY(i));
 			else
-				convexHull = new PolygonROI(convexPoints);
-//			convexHull.setStrokeColor(null);
+				path.lineTo(vertices.getX(i), vertices.getY(i));
 		}
-		return convexHull;
+		path.closePath();
+		return path;
 	}
+	
 	
 	
 	/* (non-Javadoc)
 	 * @see qupath.lib.rois.PolygonROI#getPolygonPoints()
 	 */
 	@Override
-	public List<Point2> getPolygonPoints() {
+	public List<Point2> getAllPoints() {
 		return vertices.getPoints();
 	}
 	
 	
-	public Vertices getVertices() {
+	Vertices getVertices() {
 		return vertices;
 	}
 	
@@ -374,23 +312,11 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 	 * @see qupath.lib.rois.PolygonROI#getScaledPerimeter(double, double)
 	 */
 	@Override
-	public double getScaledPerimeter(double pixelWidth, double pixelHeight) {
+	public double getScaledLength(double pixelWidth, double pixelHeight) {
 		if (GeneralTools.almostTheSame(pixelWidth, pixelHeight, 0.0001))
-			return getPerimeter() * (pixelWidth + pixelHeight) * .5;
+			return getLength() * (pixelWidth + pixelHeight) * .5;
 		// TODO: Need to confirm this is not a performance bottleneck in practice (speed vs. memory issue)
 		return new ClosedShapeStatistics(vertices, pixelWidth, pixelHeight).getPerimeter();
-	}
-
-
-	/* (non-Javadoc)
-	 * @see qupath.lib.rois.PolygonROI#getScaledConvexArea(double, double)
-	 */
-	@Override
-	public double getScaledConvexArea(double pixelWidth, double pixelHeight) {
-		PathArea hull = getConvexHull();
-		if (hull == null)
-			return Double.NaN;
-		return hull.getScaledArea(pixelWidth, pixelHeight);
 	}
 
 
@@ -490,7 +416,7 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 		}
 		
 		private Object readResolve() {
-			PolygonROI roi = new PolygonROI(x, y, c, z, t, false);
+			PolygonROI roi = new PolygonROI(x, y, ImagePlane.getPlaneWithChannel(c, z, t), false);
 			roi.stats = this.stats; // Doesn't matter if this is null...
 //			if (roi.stats == null) {
 //				System.err.println("Null count: " + (++nullCounter));
@@ -498,6 +424,12 @@ public class PolygonROI extends AbstractPathAreaROI implements ROIWithHull, Tran
 			return roi;
 		}
 		
+	}
+
+
+	@Override
+	public RoiType getRoiType() {
+		return RoiType.AREA;
 	}
 	
 	

@@ -23,8 +23,14 @@
 
 package qupath.lib.scripting;
 
+import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Member;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -38,39 +44,58 @@ import java.util.WeakHashMap;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import qupath.imagej.tools.IJTools;
+import qupath.lib.analysis.DistanceTools;
+import qupath.lib.awt.common.BufferedImageTools;
 import qupath.lib.classifiers.PathClassifierTools;
 import qupath.lib.classifiers.PathObjectClassifier;
 import qupath.lib.color.ColorDeconvolutionStains;
 import qupath.lib.common.ColorTools;
+import qupath.lib.common.GeneralTools;
 import qupath.lib.images.ImageData;
+import qupath.lib.images.ImageData.ImageType;
+import qupath.lib.images.servers.ImageChannel;
 import qupath.lib.images.servers.ImageServer;
+import qupath.lib.images.servers.ImageServerMetadata;
+import qupath.lib.images.writers.ImageWriterTools;
+import qupath.lib.io.GsonTools;
+import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectTools;
+import qupath.lib.objects.PathObjects;
 import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.PathCellObject;
 import qupath.lib.objects.PathDetectionObject;
-import qupath.lib.objects.PathObject;
 import qupath.lib.objects.TMACoreObject;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.classes.PathClassFactory;
-import qupath.lib.objects.helpers.PathObjectTools;
+import qupath.lib.objects.classes.PathClassTools;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.objects.hierarchy.TMAGrid;
 import qupath.lib.plugins.CommandLinePluginRunner;
 import qupath.lib.plugins.PathPlugin;
 import qupath.lib.plugins.workflow.RunSavedClassifierWorkflowStep;
-import qupath.lib.roi.RectangleROI;
+import qupath.lib.projects.Projects;
+import qupath.lib.regions.ImagePlane;
+import qupath.lib.regions.ImageRegion;
+import qupath.lib.regions.RegionRequest;
+import qupath.lib.roi.GeometryTools;
+import qupath.lib.roi.ROIs;
+import qupath.lib.roi.RoiTools;
 import qupath.lib.roi.interfaces.ROI;
+import qupath.opencv.tools.OpenCVTools;
 
 /**
  * Collection of static methods that are useful for scripting.
- * 
- * Prior to running a script, the ImageData should be set so that the script can make sue of it.
- * 
- * A different ImageData may be stored for different threads.
- * x
+ * <p>
+ * Prior to running a script, the {@code ImageData} should be set so that the script can make use of it.
+ * <p>
+ * A different {@code ImageData} may be stored for different threads.
+ * <p>
  * Note: This design may change in the future, to enable a non-static class to encapsulate 
  * the context for a running script.  The limited ability to subclass a class containing static methods 
  * makes this design a bit problematic, while its package location means it cannot have access to GUI features 
@@ -84,13 +109,171 @@ public class QP {
 	
 	final private static Logger logger = LoggerFactory.getLogger(QP.class);
 	
+	/**
+	 * Brightfield image type with hematoxylin and DAB staining
+	 */
 	final public static ImageData.ImageType BRIGHTFIELD_H_DAB = ImageData.ImageType.BRIGHTFIELD_H_DAB;
+	
+	/**
+	 * Brightfield image type with hematoxylin and eosin staining
+	 */
 	final public static ImageData.ImageType BRIGHTFIELD_H_E = ImageData.ImageType.BRIGHTFIELD_H_E;
+	
+	/**
+	 * Brightfield image type
+	 */
 	final public static ImageData.ImageType BRIGHTFIELD_OTHER = ImageData.ImageType.BRIGHTFIELD_OTHER;
+	
+	/**
+	 * Fluorescence image type
+	 */
 	final public static ImageData.ImageType FLUORESCENCE = ImageData.ImageType.FLUORESCENCE;
+	
+	/**
+	 * Any other image type (neither brightfield nor fluorescence)
+	 */
 	final public static ImageData.ImageType OTHER = ImageData.ImageType.OTHER;
 	
-	private static WeakHashMap<Thread, ImageData<?>> batchImageData = new WeakHashMap<>();
+	/**
+	 * Store ImageData accessible to the script thread
+	 */
+	private static Map<Thread, ImageData<?>> batchImageData = new WeakHashMap<>();
+	
+	
+	private final static List<Class<?>> CORE_CLASSES = Collections.unmodifiableList(Arrays.asList(
+			// Core datastructures
+			//ImageData.class,
+			//ImageServer.class,
+			//PathObject.class,
+			//PathObjectHierarchy.class,
+			//PathClass.class,
+			ImageRegion.class,
+			RegionRequest.class,
+			ImagePlane.class,
+			
+			// Static constructors
+			PathObjects.class,
+			ROIs.class,
+			PathClassFactory.class,
+			Projects.class,
+			
+			// Tools and static classes
+			PathObjectTools.class,
+			RoiTools.class,
+			GsonTools.class,
+			BufferedImageTools.class,
+			PathClassifierTools.class,
+			ColorTools.class,
+			GeneralTools.class,
+//			ImageWriter.class,
+			ImageWriterTools.class,
+			PathClassTools.class,
+			GeometryTools.class,
+			IJTools.class,
+			OpenCVTools.class,
+			GeometryTools.class,
+			
+			// External classes
+			BufferedImage.class
+			));
+	
+	/**
+	 * List the fields and methods of a specified object.
+	 * @param o
+	 * @return
+	 */
+	public static String describe(Object o) {
+		return describe(o instanceof Class ? (Class<?>)o : o.getClass());
+	}
+	
+	/**
+	 * List the fields and methods of a specified class.
+	 * @param cls
+	 * @return
+	 */
+	public static String describe(Class<?> cls) {
+		var sb = new StringBuilder(cls.getName());
+		var fields = getPublicFields(cls);
+		if (!fields.isEmpty()) {
+			sb.append("\n").append("  Fields:");
+			for (var f : fields)
+				sb.append("\n").append("    ").append(getString(f));
+		}
+		
+		var methods = getPublicMethods(cls);
+		if (!methods.isEmpty()) {
+			sb.append("\n").append("  Methods:");
+			for (var m : methods)
+				sb.append("\n").append("    ").append(getString(m));
+		}
+		return sb.toString();
+	}
+	
+	
+	private static List<Method> getPublicMethods(Object o) {
+		Class<?> cls = o instanceof Class ? (Class<?>)o : o.getClass();
+		return Arrays.stream(cls.getMethods())
+				.filter(m -> {
+					return !Object.class.equals(m.getDeclaringClass()) && isPublic(m) && m.getAnnotation(Deprecated.class) == null;
+					})
+				.sorted((m1, m2) -> m1.getName().compareTo(m2.getName()))
+				.collect(Collectors.toList());
+	}
+	
+	private static List<Field> getPublicFields(Object o) {
+		Class<?> cls = o instanceof Class ? (Class<?>)o : o.getClass();
+		return Arrays.stream(cls.getFields())
+				.filter(f -> {
+					return !Object.class.equals(f.getDeclaringClass()) && isPublic(f) && f.getAnnotation(Deprecated.class) == null;
+					})
+				.sorted((m1, m2) -> m1.getName().compareTo(m2.getName()))
+				.collect(Collectors.toList());
+	}
+	
+	private static boolean isPublic(Member m) {
+		return Modifier.isPublic(m.getModifiers());
+	}
+	
+	private static String getString(Method m) {
+		var sb = new StringBuilder();
+		sb.append(m.getReturnType().getSimpleName());
+		sb.append(" ");
+		sb.append(m.getName());
+		sb.append('(');
+		sb.append(Stream.of(m.getParameterTypes()).map(t -> t.getSimpleName()).
+				collect(Collectors.joining(", ")));
+		sb.append(')');
+		var exceptions = m.getExceptionTypes();
+		if (exceptions.length > 0) {
+			sb.append(Stream.of(exceptions).map(t -> t.getSimpleName()).
+					collect(Collectors.joining(", ", " throws ", "")));
+		}
+		return sb.toString();
+
+		//		return m.toString();
+		//			sb.append("\n").append("  ")
+		//				.append(m.getReturnType().getSimpleName())
+		//				.append(" ")
+		//				.append(m.getName())
+		//				.append("(")
+		//				.append(m.toString())
+		//				.append(")");
+	}
+	
+	private static String getString(Field f) {
+		return f.toString();
+	}
+	
+	
+	/**
+	 * Get a list of core classes that are likely to be useful for scripting.
+	 * The purpose of this is to allow users to find classes they are likely to need, 
+	 * or to import these automatically at the beginning of scripts.
+	 * @return
+	 */
+	public static List<Class<?>> getCoreClasses() {
+		return CORE_CLASSES;
+	}
 	
 	
 	/**
@@ -107,7 +290,7 @@ public class QP {
 	
 	/**
 	 * Set the ImageData to use for batch processing.  This will be local for the current thread.
-	 * @param imageData
+	 * <p>
 	 * @return The ImageData set with setBatchImageData, or null if no ImageData has been set for the current thread.
 	 */
 	public static ImageData<?> getBatchImageData() {
@@ -128,9 +311,12 @@ public class QP {
 	
 	/**
 	 * Trigger an update for the current hierarchy.
-	 * 
+	 * <p>
 	 * This should be called after any (non-standard) modifications are made to the hierarchy 
 	 * to ensure that all listeners are notified (including for any GUI).
+	 * <p>
+	 * It is common to call it at the end of any script that does any direct modification of objects 
+	 * (e.g. adding/removing measurements, setting classifications).
 	 */
 	public static void fireHierarchyUpdate() {
 		fireHierarchyUpdate(getCurrentHierarchy());
@@ -138,9 +324,12 @@ public class QP {
 
 	/**
 	 * Trigger an update for the specified hierarchy.
-	 * 
+	 * <p>
 	 * This should be called after any (non-standard) modifications are made to the hierarchy 
 	 * to ensure that all listeners are notified (including for any GUI).
+	 * <p>
+	 * It is common to call it at the end of any script that does any direct modification of objects 
+	 * (e.g. adding/removing measurements, setting classifications).
 	 * 
 	 * @param hierarchy
 	 */
@@ -152,10 +341,10 @@ public class QP {
 	
 	/**
 	 * Create a new packed-int representation of an RGB color.
-	 * 
+	 * <p>
 	 * @param v A value between 0 and 255.  If a single value is give, the result will be
 	 * a shade of gray (RGB all with that value).  Otherwise, 3 or 4 values may be given to generate 
-	 * either an RGB or RGBA color.
+	 * either an RGB or RGBA color.  Note: values are expected in order RGBA, but Java's packed ints are really ARGB.
 	 * @return
 	 */
 	public static Integer getColorRGB(final int... v) {
@@ -168,6 +357,12 @@ public class QP {
 		throw new IllegalArgumentException("Input to getColorRGB must be either 1, 3 or 4 integer values, between 0 and 255!");
 	}
 	
+	/**
+	 * Get the path to the {@code ImageServer} of the current {@code ImageData}.
+	 * @return
+	 * 
+	 * @see #getCurrentImageData()
+	 */
 	public static String getCurrentServerPath() {
 		ImageData<?> imageData = getCurrentImageData();
 		if (imageData == null)
@@ -175,10 +370,26 @@ public class QP {
 		return imageData.getServerPath();
 	}
 	
+	/**
+	 * Get the path to the current {@code ImageData}.
+	 * <p>
+	 * In this implementation, it is the same as calling {@code getBatchImageData()}.
+	 * 
+	 * @return
+	 * 
+	 * @see #getBatchImageData()
+	 */
 	public static ImageData<?> getCurrentImageData() {
 		return getBatchImageData();
 	}
 	
+	/**
+	 * Get the {@code PathObjectHierarchy} of the current {@code ImageData}.
+	 * 
+	 * @return
+	 * 
+	 * @see #getCurrentImageData()
+	 */
 	public static PathObjectHierarchy getCurrentHierarchy() {
 		ImageData<?> imageData = getCurrentImageData();
 		if (imageData == null)
@@ -186,6 +397,30 @@ public class QP {
 		return imageData.getHierarchy();
 	}
 	
+	/**
+	 * Get the {@code ImageServer} of the current {@code ImageData}.
+	 * 
+	 * @return
+	 * 
+	 * @see #getCurrentImageData()
+	 */
+	public static ImageServer<?> getCurrentServer() {
+		ImageData<?> imageData = getCurrentImageData();
+		if (imageData == null)
+			return null;
+		return imageData.getServer();
+	}
+	
+	/**
+	 * Get the selected objects within the current {@code PathObjectHierarchy}.
+	 * <p>
+	 * Note: this implementation returns the selected objects directly.  The returned collection 
+	 * may not be modifiable.
+	 * 
+	 * @return
+	 * 
+	 * @see #getCurrentHierarchy()
+	 */
 	public static Collection<PathObject> getSelectedObjects() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
@@ -193,6 +428,14 @@ public class QP {
 		return hierarchy.getSelectionModel().getSelectedObjects();
 	}
 	
+	/**
+	 * Get the primary selected object within the current {@code PathObjectHierarchy}.
+	 * 
+	 * @return
+	 * 
+	 * @see #getCurrentHierarchy()
+	 * @see #getSelectedObjects()
+	 */
 	public static PathObject getSelectedObject() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
@@ -200,6 +443,16 @@ public class QP {
 		return hierarchy.getSelectionModel().getSelectedObject();
 	}
 	
+	/**
+	 * Get the {@code ROI} for the primary selected object within the current {@code PathObjectHierarchy}.
+	 * <p>
+	 * This is really a convenience method where the selection indicates (for example) a region that should be extracted.
+	 * 
+	 * @return
+	 * 
+	 * @see #getCurrentHierarchy()
+	 * @see #getSelectedObject()
+	 */
 	public static ROI getSelectedROI() {
 		PathObject pathObject = getSelectedObject();
 		if (pathObject != null)
@@ -207,7 +460,9 @@ public class QP {
 		return null;
 	}
 	
-	
+	/**
+	 * Clear the selected objects for the current {@code PathObjectHierarchy}.
+	 */
 	public static void resetSelection() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
@@ -215,7 +470,14 @@ public class QP {
 		hierarchy.getSelectionModel().clearSelection();
 	}
 	
-
+	/**
+	 * Set the selected object for the current {@code PathObjectHierarchy}.
+	 * 
+	 * @param pathObject the object to select.
+	 * @return
+	 * 
+	 * @see qupath.lib.objects.hierarchy.events.PathObjectSelectionModel#setSelectedObject
+	 */
 	public static boolean setSelectedObject(PathObject pathObject) {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
@@ -224,26 +486,53 @@ public class QP {
 		return true;
 	}
 	
+	/**
+	 * Add the specified object to the current {@code PathObjectHierarchy}.
+	 * <p>
+	 * This will trigger a hierarchy changed event.
+	 * 
+	 * @param pathObject
+	 */
 	public static void addObject(PathObject pathObject) {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
 			return;
-		hierarchy.addPathObject(pathObject, true);
+		hierarchy.addPathObject(pathObject);
 	}
 	
+	/**
+	 * Add the specified array of objects to the current {@code PathObjectHierarchy}.
+	 * <p>
+	 * This will trigger a hierarchy changed event.
+	 * 
+	 * @param pathObjects
+	 */
 	public static void addObjects(PathObject[] pathObjects) {
 		addObjects(Arrays.asList(pathObjects));
 	}
 	
 	
+	/**
+	 * Add the specified collection of objects to the current {@code PathObjectHierarchy}.
+	 * <p>
+	 * This will trigger a hierarchy changed event.
+	 * 
+	 * @param pathObjects
+	 */
 	public static void addObjects(Collection<PathObject> pathObjects) {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
 			return;
-		hierarchy.addPathObjects(pathObjects, true);
+		hierarchy.addPathObjects(pathObjects);
 	}
 	
-	
+	/**
+	 * Remove the specified object from the current {@code PathObjectHierarchy}, 
+	 * optionally keeping or removing descendant objects.
+	 * 
+	 * @param pathObject
+	 * @param keepChildren
+	 */
 	public static void removeObject(PathObject pathObject, boolean keepChildren) {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
@@ -251,6 +540,13 @@ public class QP {
 		hierarchy.removeObject(pathObject, keepChildren);
 	}
 	
+	/**
+	 * Remove the specified array of objects from the current {@code PathObjectHierarchy}, 
+	 * optionally keeping or removing descendant objects.
+	 * 
+	 * @param pathObjects
+	 * @param keepChildren
+	 */
 	public static void removeObjects(PathObject[] pathObjects, boolean keepChildren) {
 		removeObjects(Arrays.asList(pathObjects), keepChildren);
 	}
@@ -259,6 +555,8 @@ public class QP {
 	 * Get a count of the total number of objects in the current hierarchy.
 	 * 
 	 * @return
+	 * 
+	 * @see qupath.lib.objects.hierarchy.PathObjectHierarchy#nObjects
 	 */
 	public static int nObjects() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
@@ -267,6 +565,13 @@ public class QP {
 		return hierarchy.nObjects();
 	}
 	
+	/**
+	 * Remove the specified collection of objects from the current {@code PathObjectHierarchy}, 
+	 * optionally keeping or removing descendant objects.
+	 * 
+	 * @param pathObjects
+	 * @param keepChildren
+	 */
 	public static void removeObjects(Collection<PathObject> pathObjects, boolean keepChildren) {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
@@ -275,11 +580,9 @@ public class QP {
 	}
 	
 	
-	
-	
-	
 	/**
-	 * Returns true if TMA cores are available.
+	 * Returns {@code true} if TMA cores are available.
+	 * 
 	 * @return
 	 */
 	public static boolean isTMADearrayed() {
@@ -290,7 +593,11 @@ public class QP {
 	}
 	
 	
-	
+	/**
+	 * Remove all the objects in the current {@code PathObjectHierarchy}, and clear the selection.
+	 * 
+	 * @see #getCurrentHierarchy
+	 */
 	public static void clearAllObjects() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
@@ -299,7 +606,15 @@ public class QP {
 		hierarchy.getSelectionModel().clearSelection();
 	}
 	
-	
+	/**
+	 * Remove all the objects of a specified Java class.
+	 * 
+	 * @param cls the class, e.g. {@code PathAnnotationObject.class}, {@code PathDetectionObject.class}, or
+	 * 			  {@code null} if all objects should be removed.
+	 * 
+	 * @see #getCurrentHierarchy
+	 * @see qupath.lib.objects.hierarchy.PathObjectHierarchy#getObjects
+	 */
 	public static void clearAllObjects(final Class<? extends PathObject> cls) {
 		if (cls == null) {
 			clearAllObjects();
@@ -308,7 +623,7 @@ public class QP {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
 			return;
-		List<PathObject> pathObjects = hierarchy.getObjects(null, cls);
+		Collection<PathObject> pathObjects = hierarchy.getObjects(null, cls);
 		hierarchy.removeObjects(pathObjects, true);
 		
 		PathObject selected = hierarchy.getSelectionModel().getSelectedObject();
@@ -316,15 +631,31 @@ public class QP {
 			hierarchy.getSelectionModel().setSelectedObject(null);
 	}
 	
+	/**
+	 * Remove all the annotation objects from the current {@code PathObjectHierarchy}.
+	 * 
+	 * @see #getCurrentHierarchy
+	 * @see #clearAllObjects
+	 */
 	public static void clearAnnotations() {
 		clearAllObjects(PathAnnotationObject.class);
 	}
 	
+	/**
+	 * Remove all the detection objects from the current {@code PathObjectHierarchy}.
+	 * 
+	 * @see #getCurrentHierarchy
+	 * @see #clearAllObjects
+	 */
 	public static void clearDetections() {
 		clearAllObjects(PathDetectionObject.class);
 	}
 	
-	
+	/**
+	 * Remove the TMA grid from the current {@code PathObjectHierarchy}.
+	 * 
+	 * @see #getCurrentHierarchy
+	 */
 	public static void clearTMAGrid() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
@@ -335,7 +666,131 @@ public class QP {
 			hierarchy.getSelectionModel().setSelectedObject(null);
 	}
 	
+	/**
+	 * Set the channel names for the current ImageData.
+	 * 
+	 * @param names
+	 * @see #setChannelNames(ImageData, String...)
+	 */
+	public static void setChannelNames(String... names) {
+		setChannelNames(getCurrentImageData(), names);
+	}
 	
+	/**
+	 * Set the channel names for the specified ImageData.
+	 * It is not essential to pass names for all channels: 
+	 * by passing n values, the first n channel names will be set.
+	 * Any name that is null will be left unchanged.
+	 * 
+	 * @param imageData
+	 * @param names
+	 */
+	public static void setChannelNames(ImageData<?> imageData, String... names) {
+		List<ImageChannel> oldChannels = imageData.getServer().getMetadata().getChannels();
+		List<ImageChannel> newChannels = new ArrayList<>(oldChannels);
+		for (int i = 0; i < names.length; i++) {
+			String name = names[i];
+			if (name == null)
+				continue;
+			newChannels.set(i, ImageChannel.getInstance(name, newChannels.get(i).getColor()));
+			if (i >= newChannels.size()) {
+				logger.warn("Too many channel names specified, only {} of {} will be used", newChannels.size(), names.length);
+				break;
+			}
+		}
+		setChannels(imageData, newChannels.toArray(ImageChannel[]::new));
+	}
+	
+	/**
+	 * Set the channel colors for the current ImageData.
+	 * 
+	 * @param colors
+	 * @see #setChannelColors(ImageData, Integer...)
+	 * @see #setChannelNames(ImageData, String...)
+	 */
+	public static void setChannelColors(Integer... colors) {
+		setChannelColors(getCurrentImageData(), colors);
+	}
+	
+	/**
+	 * Set the channel colors for the specified ImageData.
+	 * It is not essential to pass names for all channels: 
+	 * by passing n values, the first n channel names will be set.
+	 * Any name that is null will be left unchanged.
+	 * 
+	 * @param colors
+	 * @see #setChannelNames(ImageData, String...)
+	 */
+	public static void setChannelColors(ImageData<?> imageData, Integer... colors) {
+		List<ImageChannel> oldChannels = imageData.getServer().getMetadata().getChannels();
+		List<ImageChannel> newChannels = new ArrayList<>(oldChannels);
+		for (int i = 0; i < colors.length; i++) {
+			Integer color = colors[i];
+			if (color == null)
+				continue;
+			newChannels.set(i, ImageChannel.getInstance(newChannels.get(i).getName(), color));
+			if (i >= newChannels.size()) {
+				logger.warn("Too many channel colors specified, only {} of {} will be used", newChannels.size(), colors.length);
+				break;
+			}
+		}
+		setChannels(imageData, newChannels.toArray(ImageChannel[]::new));
+	}
+	
+	/**
+	 * Set the channels for the current ImageData.
+	 * 
+	 * @param channels
+	 * @see #setChannels(ImageData, ImageChannel...)
+	 */
+	public static void setChannels(ImageChannel... channels) {
+		setChannels(getCurrentImageData(), channels);
+	}
+	
+	/**
+	 * Set the channels for the specified ImageData.
+	 * Note that number of channels provided must match the number of channels of the current image.
+	 * <p>
+	 * Also, currently it is not possible to set channels for RGB images - attempting to do so 
+	 * will throw an IllegalArgumentException.
+	 * 
+	 * @param channels
+	 * @see #setChannelNames(ImageData, String...)
+	 * @see #setChannelColors(ImageData, Integer...)
+	 */
+	public static void setChannels(ImageData<?> imageData, ImageChannel... channels) {
+		ImageServer<?> server = imageData.getServer();
+		if (server.isRGB()) {
+			throw new IllegalArgumentException("Cannot set channels for RGB images");
+		}
+		List<ImageChannel> oldChannels = server.getMetadata().getChannels();
+		List<ImageChannel> newChannels = Arrays.asList(channels);
+		if (oldChannels.equals(newChannels)) {
+			logger.trace("Setting channels to the same values (no changes)");
+			return;
+		}
+		if (oldChannels.size() != newChannels.size())
+			throw new IllegalArgumentException("Cannot set channels - require " + oldChannels.size() + " channels but you provided " + channels.length);
+		
+		// Set the metadata
+		var metadata = server.getMetadata();
+		var metadata2 = new ImageServerMetadata.Builder(metadata)
+				.channels(newChannels)
+				.build();
+		imageData.updateServerMetadata(metadata2);
+	}
+	
+	
+	/**
+	 * Run the specified plugin on the current {@code ImageData}.
+	 * 
+	 * @param className
+	 * @param args
+	 * @return
+	 * @throws InterruptedException
+	 * 
+	 * @see #getCurrentImageData
+	 */
 	public static boolean runPlugin(String className, String args)  throws InterruptedException {
 		ImageData<?> imageData = getCurrentImageData();
 		if (imageData == null)
@@ -344,6 +799,14 @@ public class QP {
 	}
 	
 	
+	/**
+	 * Run the specified plugin on the specified {@code ImageData}.
+	 * 
+	 * @param className
+	 * @param args
+	 * @return
+	 * @throws InterruptedException
+	 */
 	@SuppressWarnings("unchecked")
 	public static boolean runPlugin(final String className, final ImageData<?> imageData, final String args) throws InterruptedException {
 		if (imageData == null)
@@ -353,16 +816,21 @@ public class QP {
 			Class<?> cPlugin = QP.class.getClassLoader().loadClass(className);
 			Constructor<?> cons = cPlugin.getConstructor();
 			final PathPlugin plugin = (PathPlugin)cons.newInstance();
-			return plugin.runPlugin(new CommandLinePluginRunner<>(imageData, true), args);
+			return plugin.runPlugin(new CommandLinePluginRunner<>(imageData), args);
 		} catch (Exception e) {
-			logger.error("Unable to run plugin {}", className);
-			e.printStackTrace();
+			logger.error("Unable to run plugin " + className, e);
 			return false;
 		}
 	}
 	
 	
-	
+	/**
+	 * Get the list of TMA core objects for the current hierarchy.
+	 * 
+	 * @return the list of {@code TMACoreObject}s, or an empty list if there is no TMA grid present.
+	 * 
+	 * @see #getCurrentHierarchy
+	 */
 	public static List<TMACoreObject> getTMACoreList() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null || hierarchy.getTMAGrid() == null)
@@ -370,36 +838,81 @@ public class QP {
 		return hierarchy.getTMAGrid().getTMACoreList();
 	}
 
+	/**
+	 * Get a array of the current annotation objects.
+	 * <p>
+	 * This has been deprecated, because Groovy gives ways to quickly switch between arrays and lists 
+	 * using {@code as}, so in most scripts it should not really be needed as a separate method.
+	 * 
+	 * @return
+	 */
+	@Deprecated
 	public static PathObject[] getAnnotationObjectsAsArray() {
 		return getAnnotationObjects().toArray(new PathObject[0]);
 	}
 	
-	public static List<PathObject> getAnnotationObjects() {
+	/**
+	 * Get a list of the current annotation objects.
+	 * 
+	 * @return
+	 * 
+	 * @see #getCurrentHierarchy
+	 */
+	public static Collection<PathObject> getAnnotationObjects() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
 			return Collections.emptyList();
 		return hierarchy.getObjects(null, PathAnnotationObject.class);
 	}
 
+	/**
+	 * Get a array of the current detection objects.
+	 * <p>
+	 * This has been deprecated, because Groovy gives ways to quickly switch between arrays and lists 
+	 * using {@code as}, so in most scripts it should not really be needed as a separate method.
+	 * 
+	 * @return
+	 */
 	@Deprecated
 	public static PathObject[] getDetectionObjectsAsArray() {
 		return getDetectionObjects().toArray(new PathObject[0]);
 	}
 	
-	public static List<PathObject> getDetectionObjects() {
+	/**
+	 * Get a list of the current detection objects.
+	 * 
+	 * @return
+	 * 
+	 * @see #getCurrentHierarchy
+	 */
+	public static Collection<PathObject> getDetectionObjects() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
 			return Collections.emptyList();
 		return hierarchy.getObjects(null, PathDetectionObject.class);
 	}
 	
-	public static List<PathObject> getCellObjects() {
+	/**
+	 * Get a list of the current cell objects.
+	 * 
+	 * @return
+	 * 
+	 * @see #getCurrentHierarchy
+	 */
+	public static Collection<PathObject> getCellObjects() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
 			return Collections.emptyList();
 		return hierarchy.getObjects(null, PathCellObject.class);
 	}
 
+	/**
+	 * Get an array of all objects in the current hierarchy.
+	 * 
+	 * @return
+	 * 
+	 * @see #getCurrentHierarchy
+	 */
 	public static PathObject[] getAllObjects() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy == null)
@@ -407,6 +920,11 @@ public class QP {
 		return hierarchy.getFlattenedObjectList(null).toArray(new PathObject[0]);
 	}
 	
+	/**
+	 * Set the image type for the current image data, using a String to represent the enum {@link ImageType}
+	 * @param typeName
+	 * @return
+	 */
 	public static boolean setImageType(final String typeName) {
 		if (typeName == null)
 			return setImageType(ImageData.ImageType.UNSET);
@@ -418,6 +936,11 @@ public class QP {
 		return false;
 	}
 
+	/**
+	 * Set the image type for the current image data
+	 * @param type
+	 * @return
+	 */
 	public static boolean setImageType(final ImageData.ImageType type) {
 		ImageData<?> imageData = getCurrentImageData();
 		if (imageData == null)
@@ -430,6 +953,12 @@ public class QP {
 	}
 	
 	
+	/**
+	 * Set the color deconvolution stains for hte current image data using a (JSON) String representation
+	 * 
+	 * @param arg
+	 * @return
+	 */
 	public static boolean setColorDeconvolutionStains(final String arg) {
 		ImageData<?> imageData = getCurrentImageData();
 		if (imageData == null)
@@ -440,17 +969,29 @@ public class QP {
 	}
 	
 	
-	
+	/**
+	 * Run an detection object classifier for the specified image data
+	 * @param imageData
+	 * @param classifier
+	 */
 	public static void runClassifier(final ImageData<?> imageData, final PathObjectClassifier classifier) {
 		if (imageData != null)
 			runClassifier(imageData.getHierarchy(), classifier);
 	}
 	
+	/**
+	 * Run a detection object classifier for the specified image hierarchy
+	 * @param hierarchy
+	 * @param classifier
+	 */
 	public static void runClassifier(final PathObjectHierarchy hierarchy, final PathObjectClassifier classifier) {
 		PathClassifierTools.runClassifier(hierarchy, classifier);
 	}
 	
-	
+	/**
+	 * Run a detection object classifier for the current image data, reading the classifier from a specified path
+	 * @param path
+	 */
 	public static void runClassifier(final String path) {
 		ImageData<?> imageData = getCurrentImageData();
 		if (imageData == null)
@@ -467,40 +1008,54 @@ public class QP {
 	}
 	
 	
-	public static void classifyDetection(final Predicate<PathObject> p, final String className) {
-		PathObjectHierarchy hierarchy = getCurrentHierarchy();
-		if (hierarchy == null)
-			return;
-		List<PathObject> reclassified = new ArrayList<>();
-		PathClass pathClass = PathClassFactory.getPathClass(className);
-		for (PathObject pathObject : hierarchy.getObjects(null, PathDetectionObject.class)) {
-			if (p.test(pathObject) && pathObject.getPathClass() != pathClass) {
-				pathObject.setPathClass(pathClass);
-				reclassified.add(pathObject);
-			}
-		}
-		if (!reclassified.isEmpty())
-			hierarchy.fireObjectClassificationsChangedEvent(QP.class, reclassified);
-	}
+//	public static void classifyDetection(final Predicate<PathObject> p, final String className) {
+//		PathObjectHierarchy hierarchy = getCurrentHierarchy();
+//		if (hierarchy == null)
+//			return;
+//		List<PathObject> reclassified = new ArrayList<>();
+//		PathClass pathClass = PathClassFactory.getPathClass(className);
+//		for (PathObject pathObject : hierarchy.getObjects(null, PathDetectionObject.class)) {
+//			if (p.test(pathObject) && pathObject.getPathClass() != pathClass) {
+//				pathObject.setPathClass(pathClass);
+//				reclassified.add(pathObject);
+//			}
+//		}
+//		if (!reclassified.isEmpty())
+//			hierarchy.fireObjectClassificationsChangedEvent(QP.class, reclassified);
+//	}
 	
-	
-	
+	/**
+	 * Create an annotation for the entire width and height of the current image data, on the default plane (z-slice, time point).
+	 * 
+	 * @param setSelected if true, select the object that was created after it is added to the hierarchy
+	 */
 	public static void createSelectAllObject(final boolean setSelected) {
 		ImageData<?> imageData = getCurrentImageData();
 		if (imageData == null)
 			return;
 		ImageServer<?> server = imageData.getServer();
-		PathObject pathObject = new PathAnnotationObject(new RectangleROI(0, 0, server.getWidth(), server.getHeight(), 0, 0, 0));
-		imageData.getHierarchy().addPathObject(pathObject, false);
+		PathObject pathObject = PathObjects.createAnnotationObject(
+				ROIs.createRectangleROI(0, 0, server.getWidth(), server.getHeight(), ImagePlane.getDefaultPlane())
+				);
+		imageData.getHierarchy().addPathObject(pathObject);
 		if (setSelected)
 			imageData.getHierarchy().getSelectionModel().setSelectedObject(pathObject);
 	}
 
+	/**
+	 * Remove all TMA metadata from the current TMA grid.
+	 * @param includeMeasurements remove measurements in addition to textual metadata
+	 */
 	public static void resetTMAMetadata(final boolean includeMeasurements) {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		resetTMAMetadata(hierarchy, includeMeasurements);
 	}
 
+	/**
+	 * Remove all TMA metadata from the TMA grid of the specified hierarchy.
+	 * @param hierarchy
+	 * @param includeMeasurements remove measurements in addition to textual metadata
+	 */
 	public static void resetTMAMetadata(final PathObjectHierarchy hierarchy, final boolean includeMeasurements) {
 		if (hierarchy == null || hierarchy.getTMAGrid() == null)
 			return;
@@ -516,10 +1071,10 @@ public class QP {
 	
 	/**
 	 * Relabel a TMA grid.  This will only be effective if enough labels are supplied for the full grid - otherwise no changes will be made.
-	 * 
+	 * <p>
 	 * For a TMA core at column c and row r, the label format will be 'Hc-Vr' or 'Hc-Vr', where H is the horizontal label and V the vertical label, 
 	 * depending upon the status of the 'rowFirst' flag.
-	 * 
+	 * <p>
 	 * An examples of label would be 'A-1', 'A-2', 'B-1', 'B-2' etc.
 	 * 
 	 * @param hierarchy The hierarchy containing the TMA grid to be relabelled.
@@ -560,7 +1115,13 @@ public class QP {
 		return true;
 	}
 	
-	
+	/**
+	 * Relabel the current TMA grid. See {@link #relabelTMAGrid(PathObjectHierarchy, String, String, boolean)}
+	 * @param labelsHorizontal
+	 * @param labelsVertical
+	 * @param rowFirst
+	 * @return
+	 */
 	public static boolean relabelTMAGrid(final String labelsHorizontal, final String labelsVertical, final boolean rowFirst) {
 		return relabelTMAGrid(getCurrentHierarchy(), labelsHorizontal, labelsVertical, rowFirst);
 	}
@@ -569,7 +1130,6 @@ public class QP {
 	/**
 	 * Reset the PathClass for all objects of the specified type in the current hierarchy.
 	 * 
-	 * @param hierarchy
 	 * @param cls
 	 */
 	public static void resetClassifications(final Class<? extends PathObject> cls) {
@@ -586,7 +1146,7 @@ public class QP {
 	public static void resetClassifications(final PathObjectHierarchy hierarchy, final Class<? extends PathObject> cls) {
 		if (hierarchy == null)
 			return;
-		List<PathObject> objects = hierarchy.getObjects(null, cls);
+		Collection<PathObject> objects = hierarchy.getObjects(null, cls);
 		if (objects.isEmpty()) {
 			logger.warn("No objects to reset classifications!");
 			return;
@@ -610,7 +1170,7 @@ public class QP {
 	 * Test whether a PathObject has a specified measurement in its measurement list.
 	 * 
 	 * @param pathObject
-	 * @param name
+	 * @param measurementName
 	 * @return
 	 */
 	public static boolean hasMeasurement(final PathObject pathObject, final String measurementName) {
@@ -621,18 +1181,13 @@ public class QP {
 	 * Extract the specified measurement from a PathObject.
 	 * 
 	 * @param pathObject
-	 * @param name
+	 * @param measurementName
 	 * @return
 	 */
 	public static double measurement(final PathObject pathObject, final String measurementName) {
 		return pathObject == null ? Double.NaN : pathObject.getMeasurementList().getMeasurementValue(measurementName);
 	}
 
-	
-	public static void pathPrint(String message) {
-		logger.info(message);
-	}
-	
 	
 	/**
 	 * Clear selected objects, but keep child (descendant) objects.
@@ -674,12 +1229,30 @@ public class QP {
 	 * Set selected objects to contain (only) all objects in the current hierarchy according to a specified predicate.
 	 * 
 	 * @param predicate
-	 * @return
 	 */
 	public static void selectObjects(final Predicate<PathObject> predicate) {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy != null)
 			hierarchy.getSelectionModel().setSelectedObjects(getObjects(hierarchy, predicate), null);
+	}
+	
+	/**
+	 * Set all objects in a collection to be selected, without any being chosen as the main object.
+	 * @param pathObjects
+	 */
+	public static void selectObjects(final Collection<PathObject> pathObjects) {
+		selectObjects(pathObjects, null);
+	}
+	
+	/**
+	 * Set all objects in a collection to be selected, including a specified main selected object.
+	 * @param pathObjects
+	 * @param mainSelection
+	 */
+	public static void selectObjects(final Collection<PathObject> pathObjects, PathObject mainSelection) {
+		PathObjectHierarchy hierarchy = getCurrentHierarchy();
+		if (hierarchy != null)
+			hierarchy.getSelectionModel().setSelectedObjects(pathObjects, mainSelection);
 	}
 
 	/**
@@ -696,7 +1269,6 @@ public class QP {
 	 * Set selected objects to contain (only) all objects in the specified hierarchy according to a specified predicate.
 	 * 
 	 * @param predicate
-	 * @return
 	 */
 	public static void selectObjects(final PathObjectHierarchy hierarchy, final Predicate<PathObject> predicate) {
 		hierarchy.getSelectionModel().setSelectedObjects(getObjects(hierarchy, predicate), null);
@@ -807,7 +1379,7 @@ public class QP {
 	
 	// TODO: Update parsePredicate to something more modern... a proper DSL
 	@Deprecated
-	public static Predicate<PathObject> parsePredicate(final String command) throws NoSuchElementException {
+	private static Predicate<PathObject> parsePredicate(final String command) throws NoSuchElementException {
 		String s = command.trim();
 		if (s.length() == 0)
 			throw new NoSuchElementException("No command provided!");
@@ -883,10 +1455,10 @@ public class QP {
 
 
 	/**
-	 * Select objects that are instances of a specified class.
+	 * Select objects based on a specified measurement.
 	 * 
 	 * @param imageData
-	 * @param cls
+	 * @param command
 	 */
 	@Deprecated
 	public static void selectObjectsByMeasurement(final ImageData<?> imageData, final String command) {
@@ -894,7 +1466,7 @@ public class QP {
 	}
 	
 	@Deprecated
-	public static void selectObjectsByMeasurement(final String command) {
+	private static void selectObjectsByMeasurement(final String command) {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
 		if (hierarchy != null)
 			selectObjects(hierarchy, parsePredicate(command));
@@ -903,7 +1475,6 @@ public class QP {
 	/**
 	 * Set the classification of the selected objects in the current hierarchy.
 	 * 
-	 * @param hierarchy
 	 * @param pathClassName
 	 */
 	public static void classifySelected(final String pathClassName) {
@@ -919,10 +1490,6 @@ public class QP {
 	 * @param pathClassName
 	 */
 	public static void classifySelected(final PathObjectHierarchy hierarchy, final String pathClassName) {
-		if (!PathClassFactory.pathClassExists(pathClassName)) {
-			logger.error("No class exists called {}", pathClassName);
-			return;
-		}
 		PathClass pathClass = PathClassFactory.getPathClass(pathClassName);
 		Collection<PathObject> selected = hierarchy.getSelectionModel().getSelectedObjects();
 		if (selected.isEmpty()) {
@@ -943,7 +1510,6 @@ public class QP {
 	/**
 	 * Clear the selection for the current hierarchy, so that no objects of any kind are selected.
 	 * 
-	 * @param hierarchy
 	 */
 	public static void deselectAll() {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
@@ -983,7 +1549,7 @@ public class QP {
 	 * @param rgb
 	 * @return
 	 * 
-	 * @see makeColorRGB
+	 * @see ColorTools#makeRGB
 	 */
 	public static PathClass getPathClass(final String name, final Integer rgb) {
 		return PathClassFactory.getPathClass(name, rgb);
@@ -1023,29 +1589,93 @@ public class QP {
 		return PathClassFactory.getDerivedPathClass(baseClass, name, rgb);
 	}
 
-	
+	/**
+	 * Remove measurements from objects of a specific class for the current image data.
+	 * @param cls
+	 * @param measurementNames
+	 */
 	public static void removeMeasurements(final Class<? extends PathObject> cls, final String... measurementNames) {
 		removeMeasurements(getCurrentHierarchy(), cls, measurementNames);
 	}
 
+	/**
+	 * Remove measurements from objects of a specific class for the specified hierarchy.
+	 * @param hierarchy
+	 * @param cls
+	 * @param measurementNames
+	 */
 	public static void removeMeasurements(final PathObjectHierarchy hierarchy, final Class<? extends PathObject> cls, final String... measurementNames) {
 		if (hierarchy == null)
 			return;
-		List<PathObject> pathObjects = hierarchy.getObjects(null, cls);
+		Collection<PathObject> pathObjects = hierarchy.getObjects(null, cls);
 		for (PathObject pathObject : pathObjects) {
 			// A little check, to handle possible subclasses being returned
 			if (pathObject.getClass() != cls)
 				continue;
 			// Remove the measurements
 			pathObject.getMeasurementList().removeMeasurements(measurementNames);
-			pathObject.getMeasurementList().closeList();
+			pathObject.getMeasurementList().close();
 		}
 		hierarchy.fireObjectMeasurementsChangedEvent(null, pathObjects);
 	}
 	
 	
 	
+	/**
+	 * Clear the measurement lists for specified objects within a hierarchy.
+	 * @param hierarchy used to fire a hierarchy update, if specified (may be null if no update should be fired)
+	 * @param pathObjects collection of objects that should have their measurement lists cleared
+	 */
+	public static void clearMeasurements(final PathObjectHierarchy hierarchy, final PathObject... pathObjects) {
+		clearMeasurements(hierarchy, Arrays.asList(pathObjects));
+	}
 	
+	/**
+	 * Clear the measurement lists for specified objects within a hierarchy.
+	 * @param hierarchy used to fire a hierarchy update, if specified (may be null if no update should be fired)
+	 * @param pathObjects collection of objects that should have their measurement lists cleared
+	 */
+	public static void clearMeasurements(final PathObjectHierarchy hierarchy, final Collection<PathObject> pathObjects) {
+		for (PathObject pathObject : pathObjects) {
+			// Remove all measurements
+			pathObject.getMeasurementList().clear();
+			pathObject.getMeasurementList().close();
+		}
+		if (hierarchy != null)
+			hierarchy.fireObjectMeasurementsChangedEvent(null, pathObjects);
+	}
+	
+	/**
+	 * Clear the measurement lists for all annotations in a hierarchy.
+	 * @param hierarchy
+	 */
+	public static void clearAnnotationMeasurements(PathObjectHierarchy hierarchy) {
+		if (hierarchy != null)
+			clearMeasurements(hierarchy, hierarchy.getAnnotationObjects());
+	}
+	
+	/**
+	 * Clear the measurement lists for all annotations in the current hierarchy.
+	 */
+	public static void clearAnnotationMeasurements() {
+		clearAnnotationMeasurements(getCurrentHierarchy());
+	}
+	
+	/**
+	 * Clear the measurement lists for all detections in a hierarchy.
+	 * @param hierarchy
+	 */
+	public static void clearDetectionMeasurements(PathObjectHierarchy hierarchy) {
+		if (hierarchy != null)
+			clearMeasurements(hierarchy, hierarchy.getDetectionObjects());
+	}
+	
+	/**
+	 * Clear the measurement lists for all detections in the current hierarchy.
+	 */
+	public static void clearDetectionMeasurements() {
+		clearDetectionMeasurements(getCurrentHierarchy());
+	}
 	
 	
 	
@@ -1054,9 +1684,9 @@ public class QP {
 	/**
 	 * Get a base class - which is either a valid PathClass which is *not* an intensity class, or else null.
 	 * 
-	 * This will be null if pathObject.getPathClass() == null.
+	 * This will be null if {@code pathObject.getPathClass() == null}.
 	 * 
-	 * Otherwise, it will be pathObject.getPathClass().getBaseClass() assuming the result isn't an intensity class - or null otherwise.
+	 * Otherwise, it will be {@code pathObject.getPathClass().getBaseClass()} assuming the result isn't an intensity class - or null otherwise.
 	 * 
 	 * @param pathObject
 	 * @return
@@ -1066,7 +1696,7 @@ public class QP {
 		if (baseClass != null) {
 			baseClass = baseClass.getBaseClass();
 			// Check our base isn't an intensity class
-			if (PathClassFactory.isPositiveOrPositiveIntensityClass(baseClass) || PathClassFactory.isNegativeClass(baseClass))
+			if (PathClassTools.isPositiveOrGradedIntensityClass(baseClass) || PathClassTools.isNegativeClass(baseClass))
 				baseClass = null;
 		}
 		return baseClass;
@@ -1082,58 +1712,27 @@ public class QP {
 	 * @return
 	 */
 	public static PathClass getNonIntensityAncestorPathClass(final PathObject pathObject) {
-		return PathClassFactory.getNonIntensityAncestorClass(pathObject.getPathClass());
+		return PathClassTools.getNonIntensityAncestorClass(pathObject.getPathClass());
 	}
 	
 	
 	/**
-	 * Assign cell classifications as positive or negative based upon a specified measurement, using up to 3 intensity bins.
+	 * Set the intensity classifications for the specified objects.
 	 * 
-	 * An IllegalArgumentException is thrown if < 1 or > 3 intensity thresholds are provided.
-	 * 
-	 * @param pathObject The object to classify.
-	 * @param measurementName The name of the measurement to use for thresholding.
-	 * @param threshold1Plus The first (lowest) threshold.  An object with >= threshold1Plus will be classified as positive.
-	 * @param threshold2Plus The second (intermediate) threshold.  An object with >= threshold1Plus will be classified as moderately positive.
-	 * @param threshold3Plus The third (high) threshold.  An object with >= threshold1Plus will be classified as strongly positive.
-	 * @param singleThreshold If true, only threshold1Plus will be used.
-	 * @return the PathClass of the object after running this method.
+	 * @param pathObjects
+	 * @param measurementName measurement to threshold
+	 * @param thresholds either 1 or 3 thresholds, depending upon whether objects should be classified as Positive/Negative or Negative/1+/2+/3+
 	 */
-	public static PathClass setIntensityClassification(final PathObject pathObject, final String measurementName, final double... thresholds) {
-		if (thresholds.length == 0 || thresholds.length > 3)
-			throw new IllegalArgumentException("Between 1 and 3 intensity thresholds required!");
-		
-		PathClass baseClass = getNonIntensityAncestorPathClass(pathObject);
-		double estimatedSpots = pathObject.getMeasurementList().getMeasurementValue(measurementName);
-		
-		boolean singleThreshold = thresholds.length == 1;
-		
-		if (estimatedSpots < thresholds[0]) {
-			pathObject.setPathClass(PathClassFactory.getNegative(baseClass, null));
-		} else {
-			if (singleThreshold)
-				pathObject.setPathClass(PathClassFactory.getPositive(baseClass, null));
-			else if (thresholds.length >= 3 && estimatedSpots >= thresholds[2])
-				pathObject.setPathClass(PathClassFactory.getThreePlus(baseClass, null));				
-			else if (thresholds.length >= 2 && estimatedSpots >= thresholds[1])
-				pathObject.setPathClass(PathClassFactory.getTwoPlus(baseClass, null));				
-			else if (estimatedSpots >= thresholds[0])
-				pathObject.setPathClass(PathClassFactory.getOnePlus(baseClass, null));				
-		}
-		return pathObject.getPathClass();
-	}
-	
 	public static void setIntensityClassifications(final Collection<PathObject> pathObjects, final String measurementName, final double... thresholds) {
-		for (PathObject pathObject : pathObjects)
-			setIntensityClassification(pathObject, measurementName, thresholds);
+		PathClassifierTools.setIntensityClassifications(pathObjects, measurementName, thresholds);
 	}
 	
 	/**
-	 * Set intensity classifications for all selected (detection) objects.
+	 * Set intensity classifications for all selected (detection) objects in the specified hierarchy.
 	 * 
 	 * @param hierarchy
-	 * @param measurementName
-	 * @param thresholds
+	 * @param measurementName measurement to threshold
+	 * @param thresholds either 1 or 3 thresholds, depending upon whether objects should be classified as Positive/Negative or Negative/1+/2+/3+
 	 */
 	public static void setIntensityClassificationsForSelected(final PathObjectHierarchy hierarchy, final String measurementName, final double... thresholds) {
 		// Get all selected detections
@@ -1143,20 +1742,47 @@ public class QP {
 		hierarchy.fireObjectClassificationsChangedEvent(QP.class, pathObjects);
 	}
 	
+	/**
+	 * Set the intensity classifications for objects of the specified class in the specified hierarchy.
+	 * 
+	 * @param hierarchy
+	 * @param cls
+	 * @param measurementName measurement to threshold
+	 * @param thresholds either 1 or 3 thresholds, depending upon whether objects should be classified as Positive/Negative or Negative/1+/2+/3+
+	 */
 	public static void setIntensityClassifications(final PathObjectHierarchy hierarchy, final Class<? extends PathObject> cls, final String measurementName, final double... thresholds) {
-		List<PathObject> pathObjects = hierarchy.getObjects(null, cls);
+		Collection<PathObject> pathObjects = hierarchy.getObjects(null, cls);
 		setIntensityClassifications(pathObjects, measurementName, thresholds);
 		hierarchy.fireObjectClassificationsChangedEvent(QP.class, pathObjects);
 	}
 	
+	/**
+	 * Set the intensity classifications for objects of the specified class in the current hierarchy.
+	 * 
+	 * @param cls
+	 * @param measurementName measurement to threshold
+	 * @param thresholds either 1 or 3 thresholds, depending upon whether objects should be classified as Positive/Negative or Negative/1+/2+/3+
+	 */
 	public static void setIntensityClassifications(final Class<? extends PathObject> cls, final String measurementName, final double... thresholds) {
 		setIntensityClassifications(getCurrentHierarchy(), cls, measurementName, thresholds);
 	}
 	
+	/**
+	 * Set the intensity classifications for cells in the current hierarchy.
+	 * 
+	 * @param measurementName measurement to threshold
+	 * @param thresholds either 1 or 3 thresholds, depending upon whether objects should be classified as Positive/Negative or Negative/1+/2+/3+
+	 */
 	public static void setCellIntensityClassifications(final String measurementName, final double... thresholds) {
 		setCellIntensityClassifications(getCurrentHierarchy(), measurementName, thresholds);
 	}
 	
+	/**
+	 * 
+	 * @param hierarchy
+	 * @param measurementName measurement to threshold
+	 * @param thresholds either 1 or 3 thresholds, depending upon whether objects should be classified as Positive/Negative or Negative/1+/2+/3+
+	 */
 	public static void setCellIntensityClassifications(final PathObjectHierarchy hierarchy, final String measurementName, final double... thresholds) {
 		setIntensityClassifications(hierarchy, PathCellObject.class, measurementName, thresholds);
 	}	
@@ -1167,12 +1793,12 @@ public class QP {
 	 * 
 	 * This means setting the classification to the result of <code>getNonIntensityAncestorPathClass(pathObject)</code>
 	 * 
-	 * @param hierarchy
+	 * @param pathObjects
 	 */
 	public static void resetIntensityClassifications(final Collection<PathObject> pathObjects) {
 		for (PathObject pathObject : pathObjects) {
 			PathClass currentClass = pathObject.getPathClass();
-			if (PathClassFactory.isPositiveOrPositiveIntensityClass(currentClass) || PathClassFactory.isNegativeClass(currentClass))
+			if (PathClassTools.isPositiveOrGradedIntensityClass(currentClass) || PathClassTools.isNegativeClass(currentClass))
 				pathObject.setPathClass(getNonIntensityAncestorPathClass(pathObject));
 		}
 	}
@@ -1185,7 +1811,7 @@ public class QP {
 	 * @param hierarchy
 	 */
 	public static void resetIntensityClassifications(final PathObjectHierarchy hierarchy) {
-		List<PathObject> pathObjects = hierarchy.getObjects(null, PathDetectionObject.class);
+		Collection<PathObject> pathObjects = hierarchy.getObjects(null, PathDetectionObject.class);
 		resetIntensityClassifications(pathObjects);
 		hierarchy.fireObjectClassificationsChangedEvent(QP.class, pathObjects);
 	}
@@ -1199,6 +1825,172 @@ public class QP {
 	public static void resetIntensityClassifications() {
 		resetIntensityClassifications(getCurrentHierarchy());
 	}
+	
+	
+	/**
+	 * Write an image region image to the specified path. The writer will be determined based on the file extension.
+	 * @param server
+	 * @param request
+	 * @param path
+	 * @throws IOException
+	 */
+	public static void writeImageRegion(ImageServer<BufferedImage> server, RegionRequest request, String path) throws IOException {
+		ImageWriterTools.writeImageRegion(server, request, path);
+	}
+	
+	/**
+	 * Write a full image to the specified path. The writer will be determined based on the file extension.
+	 * @param server
+	 * @param path
+	 * @throws IOException
+	 */
+	public static void writeImage(ImageServer<BufferedImage> server, String path) throws IOException {
+		ImageWriterTools.writeImage(server, path);
+	}
+	
+	/**
+	 * Write an image to the specified path. The writer will be determined based on the file extension.
+	 * @param img
+	 * @param path
+	 * @throws IOException
+	 */
+	public static void writeImage(BufferedImage img, String path) throws IOException {
+		ImageWriterTools.writeImage(img, path);
+	}
+	
+	
+	/**
+	 * Compute the distance for all detection object centroids to the closest annotation with each valid, not-ignored classification and add 
+	 * the result to the detection measurement list.
+	 * @param imageData
+	 */
+	public static void detectionToAnnotationDistances(ImageData<?> imageData) {
+		DistanceTools.detectionToAnnotationDistances(imageData);
+	}
+	
+	/**
+	 * Compute the distance for all detection object centroids to the closest annotation with each valid, not-ignored classification and add 
+	 * the result to the detection measurement list for the current ImageData.
+	 */
+	public static void detectionToAnnotationDistances() {
+		DistanceTools.detectionToAnnotationDistances(getCurrentImageData());
+	}
 
+	/**
+	 * Set the metadata for an ImageServer to have the required pixel sizes and z-spacing.
+	 * <p>
+	 * Returns true if changes were made, false otherwise.
+	 * 
+	 * @param imageData
+	 * @param pixelWidthMicrons
+	 * @param pixelHeightMicrons
+	 * @param zSpacingMicrons
+	 * @return true if the size was set, false otherwise
+	 */
+	public static boolean setPixelSizeMicrons(ImageData<?> imageData, Number pixelWidthMicrons, Number pixelHeightMicrons, Number zSpacingMicrons) {
+		var server = imageData.getServer();
+		if (isFinite(pixelWidthMicrons) && !isFinite(pixelHeightMicrons))
+			pixelHeightMicrons = pixelWidthMicrons;
+		else if (isFinite(pixelHeightMicrons) && !isFinite(pixelWidthMicrons))
+			pixelWidthMicrons = pixelHeightMicrons;
+		
+		var metadataNew = new ImageServerMetadata.Builder(server.getMetadata())
+			.pixelSizeMicrons(pixelWidthMicrons, pixelHeightMicrons)
+			.zSpacingMicrons(zSpacingMicrons)
+			.build();
+		if (server.getMetadata().equals(metadataNew))
+			return false;
+		imageData.updateServerMetadata(metadataNew);
+		return true;
+	}
+	
+	/**
+	 * Set the metadata for the current ImageData to have the required pixel sizes and z-spacing.
+	 * <p>
+	 * Returns true if changes were made, false otherwise.
+	 * 
+	 * @param pixelWidthMicrons
+	 * @param pixelHeightMicrons
+	 * @param zSpacingMicrons
+	 * @return true if the size was set, false otherwise
+	 */
+	public static boolean setPixelSizeMicrons(Number pixelWidthMicrons, Number pixelHeightMicrons, Number zSpacingMicrons) {
+		return setPixelSizeMicrons(getCurrentImageData(), pixelWidthMicrons, pixelHeightMicrons, zSpacingMicrons);
+	}
 
+	/**
+	 * Set the metadata for the current ImageData to have the required pixel sizes.
+	 * <p>
+	 * Returns true if changes were made, false otherwise.
+	 * 
+	 * @param pixelWidthMicrons
+	 * @param pixelHeightMicrons
+	 * @return true if the size was set, false otherwise
+	 */
+	public static boolean setPixelSizeMicrons(Number pixelWidthMicrons, Number pixelHeightMicrons) {
+		return setPixelSizeMicrons(pixelWidthMicrons, pixelHeightMicrons, null);
+	}
+	
+
+	/**
+	 * Apply a new classification to all objects in the current hierarchy with a specified classification.
+	 * @param originalClassName name of the original classification
+	 * @param newClassName name of the new classification
+	 */
+	public static void replaceClassification(String originalClassName, String newClassName) {
+		replaceClassification(getCurrentHierarchy(), getPathClass(originalClassName), getPathClass(newClassName));
+	}
+	
+	/**
+	 * Apply a new classification to all objects in the current hierarchy with a specified original classification.
+	 * @param originalClass the original classification
+	 * @param newClass the new classification
+	 */
+	public static void replaceClassification(PathClass originalClass, PathClass newClass) {
+		replaceClassification(getCurrentHierarchy(), originalClass, newClass);
+	}
+
+	/**
+	 * Apply a new classification to all objects with a specified original classification in the provided hierarchy.
+	 * @param hierarchy the hierarchy containing the objects
+	 * @param originalClass the original classification
+	 * @param newClass the new classification
+	 */
+	public static void replaceClassification(PathObjectHierarchy hierarchy, PathClass originalClass, PathClass newClass) {
+		if (hierarchy == null)
+			return;
+		var pathObjects = hierarchy.getObjects(null, null);
+		if (pathObjects.isEmpty())
+			return;
+		replaceClassification(pathObjects, originalClass, newClass);
+		hierarchy.fireObjectClassificationsChangedEvent(QP.class, pathObjects);
+	}
+	
+	/**
+	 * Apply a new classification to all objects with a specified original classification in an object collection.
+	 * @param pathObjects
+	 * @param originalClass
+	 * @param newClass
+	 */
+	public static void replaceClassification(Collection<PathObject> pathObjects, PathClass originalClass, PathClass newClass) {
+		if (PathClassFactory.getPathClassUnclassified() == originalClass)
+			originalClass = null;
+		if (PathClassFactory.getPathClassUnclassified() == newClass)
+			newClass = null;
+		for (var pathObject : pathObjects) {
+			if (pathObject.getPathClass() == originalClass)
+				pathObject.setPathClass(newClass);
+		}
+	}
+	
+	
+	
+	
+	
+	
+	
+	private static boolean isFinite(Number val) {
+		return val != null && Double.isFinite(val.doubleValue());
+	}
+	
 }

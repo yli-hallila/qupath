@@ -64,10 +64,11 @@ import qupath.lib.geom.Point2;
 import qupath.lib.gui.ImageDataChangeListener;
 import qupath.lib.gui.ImageDataWrapper;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.QuPathGUI.Modes;
+import qupath.lib.gui.QuPathGUI.DefaultMode;
 import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.helpers.ColorToolsFX;
-import qupath.lib.gui.helpers.PanelToolsFX;
+import qupath.lib.gui.helpers.DisplayHelpers;
+import qupath.lib.gui.helpers.PaneToolsFX;
 import qupath.lib.gui.helpers.dialogs.ParameterPanelFX;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.gui.viewer.QuPathViewerListener;
@@ -76,29 +77,33 @@ import qupath.lib.measurements.MeasurementList;
 import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.PathDetectionObject;
 import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectTools;
+import qupath.lib.objects.PathObjects;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.objects.hierarchy.TMAGrid;
 import qupath.lib.objects.hierarchy.events.PathObjectHierarchyEvent;
 import qupath.lib.objects.hierarchy.events.PathObjectHierarchyListener;
 import qupath.lib.plugins.parameters.ParameterList;
+import qupath.lib.regions.ImagePlane;
 import qupath.lib.roi.PointsROI;
+import qupath.lib.roi.ROIs;
 import qupath.lib.roi.interfaces.ROI;
 
 
 /**
  * Class for randomly selecting points, prompting the user to assign these a classification which can later be used for training.
- * 
+ * <p>
  * If detection objects are available, then the points will be selected from their centroids.
  * Furthermore, in this case objects can optionally be clustered.
  * If this is applied, random selection is made from an object belonging to each cluster in turn -
  * to help ensure that all get covered.
  * Clusters are determined based on object measurements; if any measurements have 'mean' in the name
  * then only these will be used, otherwise all measurements will be used.
- * 
+ * <p>
  * (The purpose of preferring means is that the many dimensions of the other measurements get in the way... 
  * also, no measurement scaling is performed.)
- * 
+ * <p>
  * TODO: Perform clustering using thumbnail image, not individual object measurements.
  * 
  * @author Pete Bankhead
@@ -127,12 +132,16 @@ public class RandomTrainingRegionSelector implements PathCommand {
 	
 	@Override
 	public void run() {
+		if (qupath.getImageData() == null) {
+			DisplayHelpers.showNoImageError("Training region selector");
+			return;
+		}
 		if (dialog == null)
 			createDialog();
 		dialog.show();
 		// Don't allow changing modes
 		qupath.setModeSwitchingEnabled(true);
-		qupath.setMode(Modes.MOVE);
+		qupath.setMode(DefaultMode.MOVE);
 		qupath.setModeSwitchingEnabled(false);
 	}
 	
@@ -248,7 +257,7 @@ public class RandomTrainingRegionSelector implements PathCommand {
 		});
 		
 		
-		GridPane panelButtons = PanelToolsFX.createColumnGridControls(
+		GridPane panelButtons = PaneToolsFX.createColumnGridControls(
 				ActionUtils.createButton(actionAdd),
 				ActionUtils.createButton(actionSkip)
 				);
@@ -404,7 +413,7 @@ public class RandomTrainingRegionSelector implements PathCommand {
 		public PathAnnotationObject getPointObject(final PathClass pathClass) {
 			ensureCacheBuilt();
 			for (PathObject pathObject : annotations) {
-				if (pathObject.isPoint() && pathObject.getPathClass() != null && pathObject.getPathClass().equals(pathClass))
+				if (PathObjectTools.hasPointROI(pathObject) && pathObject.getPathClass() != null && pathObject.getPathClass().equals(pathClass))
 					return (PathAnnotationObject)pathObject;
 			}
 			return null;
@@ -415,7 +424,7 @@ public class RandomTrainingRegionSelector implements PathCommand {
 			if (pathObject == null)
 				return 0;
 			PointsROI points = (PointsROI)pathObject.getROI();
-			return points.getNPoints();
+			return points.getNumPoints();
 		}
 
 		@Override
@@ -434,7 +443,7 @@ public class RandomTrainingRegionSelector implements PathCommand {
 		private QuPathViewer viewer;
 		
 		private ObjectCache objectCache = new ObjectCache();
-		private PointsROI currentPoint;
+		private ROI currentPoint;
 		
 		private int nextCluster = 0;
 		
@@ -466,21 +475,21 @@ public class RandomTrainingRegionSelector implements PathCommand {
 					logger.error("Cannot classify - no point available!");
 					return;
 				}
-				PathAnnotationObject pathObject = objectCache.getPointObject(pathClass);
+				PathObject pathObject = objectCache.getPointObject(pathClass);
 				boolean newPoint = pathObject == null;
 				if (newPoint)
-					pathObject = new PathAnnotationObject(new PointsROI(), pathClass);
+					pathObject = PathObjects.createAnnotationObject(ROIs.createPointsROI(ImagePlane.getDefaultPlane()), pathClass);
 				double x = currentPoint.getCentroidX();
 				double y = currentPoint.getCentroidY();
 				PathObjectHierarchy hierarchy = viewer.getHierarchy();
 				if (newPoint) {
-					pathObject.setROI(new PointsROI(x, y));
-					hierarchy.addPathObject(pathObject, true);
+					((PathAnnotationObject)pathObject).setROI(ROIs.createPointsROI(x, y, ImagePlane.getDefaultPlane()));
+					hierarchy.addPathObject(pathObject);
 				} else {
 					PointsROI pointsROI = ((PointsROI)pathObject.getROI());
-					List<Point2> points = new ArrayList<Point2>(pointsROI.getPointList());
+					List<Point2> points = new ArrayList<Point2>(pointsROI.getAllPoints());
 					points.add(new Point2(x, y));
-					pathObject.setROI(new PointsROI(points));
+					((PathAnnotationObject)pathObject).setROI(ROIs.createPointsROI(points, ImagePlane.getDefaultPlane()));
 					hierarchy.fireObjectsChangedEvent(this, Collections.singleton(pathObject));
 				}
 				// Unfortunately, this horrible hack that prevents this being a static class...
@@ -514,7 +523,7 @@ public class RandomTrainingRegionSelector implements PathCommand {
 				// If we have a TMA image, try to force the points to fall within a core
 				TMAGrid tmaGrid = viewer.getHierarchy().getTMAGrid();
 				int counter = 0;
-				while (tmaGrid != null && tmaGrid.nCores() > 0 && counter < 1000 && tmaGrid.getTMACoreForPixel(x, y) == null) {
+				while (tmaGrid != null && tmaGrid.nCores() > 0 && counter < 1000 && PathObjectTools.getTMACoreForPixel(tmaGrid, x, y) == null) {
 					x = (int)(Math.random() * viewer.getServerWidth());
 					y = (int)(Math.random() * viewer.getServerHeight());
 					counter++;
@@ -527,9 +536,9 @@ public class RandomTrainingRegionSelector implements PathCommand {
 				x = temp.getROI().getCentroidX();
 				y = temp.getROI().getCentroidY();
 			}
-			currentPoint = new PointsROI(x, y);
+			currentPoint = ROIs.createPointsROI(x, y, ImagePlane.getDefaultPlane());
 			viewer.setCenterPixelLocation(x, y);
-			viewer.setSelectedObject(new PathAnnotationObject(currentPoint));
+			viewer.setSelectedObject(PathObjects.createAnnotationObject(currentPoint));
 		}
 		
 		

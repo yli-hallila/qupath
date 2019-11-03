@@ -24,7 +24,6 @@
 package qupath.lib.geom;
 
 /**
- * 
  * An immutable alternative to Java's AWT Dimension.
  * 
  * @author Pete Bankhead
@@ -32,18 +31,48 @@ package qupath.lib.geom;
  */
 public class ImmutableDimension {
 	
+	/**
+	 * Width of the ImmutableDimension.
+	 */
 	final public int width;
+	
+	/**
+	 * Height of the ImmutableDimension.
+	 */
 	final public int height;
 	
-	public ImmutableDimension(final int width, final int height) {
+	/**
+	 * Constructor for a new ImmutableDimension.
+	 * @param width
+	 * @param height
+	 */
+	private ImmutableDimension(final int width, final int height) {
 		this.width = width;
 		this.height = height;
 	}
 	
+	/**
+	 * Get an ImmutableDimension representing the specified width and height.
+	 * @param width
+	 * @param height
+	 * @return
+	 */
+	public static ImmutableDimension getInstance(final int width, final int height) {
+		return new ImmutableDimension(width, height);
+	}
+	
+	/**
+	 * Get the ImmutableDimension width.
+	 * @return
+	 */
 	public int getWidth() {
 		return width;
 	}
 	
+	/**
+	 * Get the ImmutableDimension height.
+	 * @return
+	 */
 	public int getHeight() {
 		return height;
 	}

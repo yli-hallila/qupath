@@ -1,34 +1,35 @@
 package qupath.lib.roi;
 
+import qupath.lib.regions.ImagePlane;
 import qupath.lib.roi.interfaces.ROI;
-import qupath.lib.roi.interfaces.TranslatableROI;
 
+import java.awt.*;
 import java.io.InvalidObjectException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 
 public class ArrowROI extends LineROI implements Serializable {
 
-    public ArrowROI(double x, double y, double x2, double y2, int c, int z, int t) {
-        super(x, y, x2, y2, c, z, t);
+    public ArrowROI(double x, double y, double x2, double y2, ImagePlane plane) {
+        super(x, y, x2, y2, plane);
     }
 
     @Override
-    public String getROIType() {
+    public String getRoiName() {
         return "Arrow";
     }
 
     @Override
     public ROI duplicate() {
-        return new ArrowROI(x, y, x2, y2, getC(), getZ(), getT());
+        return new ArrowROI(x, y, x2, y2, getImagePlane());
     }
 
     @Override
-    public TranslatableROI translate(double dx, double dy) {
+    public ROI translate(double dx, double dy) {
         if (dx == 0 && dy == 0)
             return this;
         // Shift the bounds
-        return new ArrowROI(x+dx, y+dy, x2+dx, y2+dy, getC(), getZ(), getT());
+        return new ArrowROI(x+dx, y+dy, x2+dx, y2+dy, getImagePlane());
     }
 
     private Object writeReplace() {
@@ -59,7 +60,7 @@ public class ArrowROI extends LineROI implements Serializable {
         }
 
         private Object readResolve() {
-            return new ArrowROI(x, y, x2, y2, c, z, t);
+            return new ArrowROI(x, y, x2, y2, ImagePlane.getPlaneWithChannel(c, z, t));
         }
     }
 }

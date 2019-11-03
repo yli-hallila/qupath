@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
+import qupath.lib.images.servers.PixelCalibration;
 import qupath.lib.measurements.MeasurementList;
 import qupath.lib.objects.PathCellObject;
 import qupath.lib.objects.PathDetectionObject;
@@ -41,7 +42,7 @@ import qupath.lib.objects.TMACoreObject;
 import qupath.lib.plugins.AbstractInteractivePlugin;
 import qupath.lib.plugins.PluginRunner;
 import qupath.lib.plugins.parameters.ParameterList;
-import qupath.lib.roi.interfaces.PathArea;
+import qupath.lib.roi.RoiTools;
 import qupath.lib.roi.interfaces.ROI;
 
 /**
@@ -57,6 +58,9 @@ public class ShapeFeaturesPlugin<T> extends AbstractInteractivePlugin<T> {
 	
 	final private static Logger logger = LoggerFactory.getLogger(ShapeFeaturesPlugin.class);
 	
+	/**
+	 * Constructor.
+	 */
 	public ShapeFeaturesPlugin() {
 		
 		params = new ParameterList()
@@ -95,18 +99,19 @@ public class ShapeFeaturesPlugin<T> extends AbstractInteractivePlugin<T> {
 	@Override
 	protected void addRunnableTasks(final ImageData<T> imageData, final PathObject parentObject, List<Runnable> tasks) {
 
-		boolean useMicrons = params.getBooleanParameterValue("useMicrons") && imageData != null && imageData.getServer().hasPixelSizeMicrons();
+		PixelCalibration cal = imageData == null ? null : imageData.getServer().getPixelCalibration();
+		boolean useMicrons = params.getBooleanParameterValue("useMicrons") && cal != null && cal.hasPixelSizeMicrons();
 		
-		double pixelWidth = useMicrons ? imageData.getServer().getPixelWidthMicrons() : 1;
-		double pixelHeight = useMicrons ? imageData.getServer().getPixelHeightMicrons() : 1;
+		double pixelWidth = useMicrons ? cal.getPixelWidthMicrons() : 1;
+		double pixelHeight = useMicrons ? cal.getPixelHeightMicrons() : 1;
 		String unit = useMicrons ? GeneralTools.micrometerSymbol() : "px";
 		
 		boolean doArea = params.getBooleanParameterValue("area");
 		boolean doPerimeter = params.getBooleanParameterValue("perimeter");
 		boolean doCircularity = params.getBooleanParameterValue("circularity");
 		
-		PathArea roi = (parentObject.getROI() instanceof PathArea) ? (PathArea)parentObject.getROI() : null;
-		if (roi instanceof PathArea) {
+		ROI roi = (parentObject.hasROI() && parentObject.getROI().isArea()) ? parentObject.getROI() : null;
+		if (roi != null) {
 			tasks.add(new Runnable() {
 	
 				@Override
@@ -118,20 +123,20 @@ public class ShapeFeaturesPlugin<T> extends AbstractInteractivePlugin<T> {
 						if (parentObject instanceof PathCellObject) {
 							
 							roi = ((PathCellObject)parentObject).getNucleusROI();
-							if (roi instanceof PathArea)
-								addMeasurements(measurementList, (PathArea)roi, "Nucleus Shape: ", pixelWidth, pixelHeight, unit, doArea, doPerimeter, doCircularity);
+							if (roi != null && roi.isArea())
+								addMeasurements(measurementList, roi, "Nucleus Shape: ", pixelWidth, pixelHeight, unit, doArea, doPerimeter, doCircularity);
 							
 							roi = parentObject.getROI();
-							if (roi instanceof PathArea)
-								addMeasurements(measurementList, (PathArea)roi, "Cell Shape: ", pixelWidth, pixelHeight, unit, doArea, doPerimeter, doCircularity);
+							if (roi != null && roi.isArea())
+								addMeasurements(measurementList, roi, "Cell Shape: ", pixelWidth, pixelHeight, unit, doArea, doPerimeter, doCircularity);
 							
 						} else {
 							roi = parentObject.getROI();
-							if (roi instanceof PathArea)
-								addMeasurements(measurementList, (PathArea)roi, "ROI Shape: ", pixelWidth, pixelHeight, unit, doArea, doPerimeter, doCircularity);
+							if (roi != null && roi.isArea())
+								addMeasurements(measurementList, roi, "ROI Shape: ", pixelWidth, pixelHeight, unit, doArea, doPerimeter, doCircularity);
 						}
 						
-						measurementList.closeList();
+						measurementList.close();
 					} catch (Exception e) {
 						e.printStackTrace();
 						throw(e);
@@ -142,14 +147,14 @@ public class ShapeFeaturesPlugin<T> extends AbstractInteractivePlugin<T> {
 	}
 	
 
-	private static void addMeasurements(final MeasurementList measurementList, final PathArea roi, final String prefix, final double pixelWidth, final double pixelHeight, final String unit,
+	private static void addMeasurements(final MeasurementList measurementList, final ROI roi, final String prefix, final double pixelWidth, final double pixelHeight, final String unit,
 			final boolean doArea, final boolean doPerimeter, final boolean doCircularity) {
 		if (doArea)
 			measurementList.putMeasurement(prefix + "Area " + unit + "^2", roi.getScaledArea(pixelWidth, pixelHeight));
 		if (doPerimeter)
-			measurementList.putMeasurement(prefix + "Perimeter " + unit, roi.getScaledPerimeter(pixelWidth, pixelHeight));
+			measurementList.putMeasurement(prefix + "Perimeter " + unit, roi.getScaledLength(pixelWidth, pixelHeight));
 		if (doCircularity)
-			measurementList.putMeasurement(prefix + "Circularity", roi.getCircularity());		
+			measurementList.putMeasurement(prefix + "Circularity", RoiTools.getCircularity(roi));		
 	}
 	
 	
@@ -158,7 +163,7 @@ public class ShapeFeaturesPlugin<T> extends AbstractInteractivePlugin<T> {
 	@Override
 	public ParameterList getDefaultParameterList(final ImageData<T> imageData) {
 		ImageServer<? extends T> server = imageData.getServer();
-		boolean pixelSizeMicrons = server != null && server.hasPixelSizeMicrons();
+		boolean pixelSizeMicrons = server != null && server.getPixelCalibration().hasPixelSizeMicrons();
 		params.getParameters().get("useMicrons").setHidden(!pixelSizeMicrons);
 		return params;
 	}

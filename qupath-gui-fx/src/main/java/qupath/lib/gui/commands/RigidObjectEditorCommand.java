@@ -31,18 +31,22 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Area;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
+import java.awt.geom.PathIterator;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.ImageObserver;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
 import javafx.event.EventHandler;
 import javafx.scene.input.MouseEvent;
-import qupath.lib.awt.color.ColorToolsAwt;
+import qupath.lib.color.ColorToolsAwt;
 import qupath.lib.common.GeneralTools;
+import qupath.lib.geom.Point2;
 import qupath.lib.gui.ImageDataChangeListener;
 import qupath.lib.gui.ImageDataWrapper;
 import qupath.lib.gui.QuPathGUI;
@@ -57,15 +61,16 @@ import qupath.lib.gui.viewer.QuPathViewerListener;
 import qupath.lib.gui.viewer.overlays.AbstractOverlay;
 import qupath.lib.gui.viewer.overlays.PathOverlay;
 import qupath.lib.images.ImageData;
-import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjects;
+import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.PathROIObject;
-import qupath.lib.objects.TMACoreObject;
+import qupath.lib.regions.ImagePlane;
 import qupath.lib.regions.ImageRegion;
-import qupath.lib.roi.EllipseROI;
-import qupath.lib.roi.PathROIToolsAwt;
-import qupath.lib.roi.interfaces.PathArea;
-import qupath.lib.roi.interfaces.PathShape;
+import qupath.lib.roi.RoiTools;
+import qupath.lib.roi.PolylineROI;
+import qupath.lib.roi.ROIs;
+import qupath.lib.roi.RoiTools.CombineOp;
 import qupath.lib.roi.interfaces.ROI;
 
 /**
@@ -100,17 +105,14 @@ public class RigidObjectEditorCommand implements PathCommand, ImageDataChangeLis
 	 * @return
 	 */
 	PathObject getSelectedObject(final QuPathViewer viewer) {
-		PathObject pathObject = viewer == null ? null : viewer.getSelectedObject();
-		if (isSuitableAnnotation(pathObject))
-			return pathObject;
-		if (pathObject instanceof TMACoreObject)
-			return pathObject;
-		return null;
+		return viewer.getSelectedObject();
 	}
 	
 	
 	private boolean isSuitableAnnotation(PathObject pathObject) {
-		return pathObject instanceof PathAnnotationObject && pathObject.isEditable() && pathObject.getROI() instanceof PathArea;
+		return pathObject  instanceof PathAnnotationObject
+//				&& pathObject.isEditable()
+				&& (pathObject.hasROI() && pathObject.getROI().isArea() || pathObject.getROI() instanceof PolylineROI);
 	}
 	
 
@@ -129,11 +131,22 @@ public class RigidObjectEditorCommand implements PathCommand, ImageDataChangeLis
 		// Get the selected object
 		viewer = qupath.getViewer();
 		PathObject pathObject = getSelectedObject(viewer);
-		if (pathObject == null)
+		if (pathObject == null || !(pathObject.isAnnotation() || pathObject.isTMACore())) {
+			DisplayHelpers.showErrorNotification("Rotate annotation", "No annotation selected!");
 			return;
+		}
+		if (pathObject.isLocked()) {
+			DisplayHelpers.showErrorNotification("Rotate annotation", "Selected annotation is locked!");
+			return;
+		}
+		if (pathObject.getROI().isPoint()) {
+			DisplayHelpers.showErrorNotification("Rotate annotation", "Point annotations cannot be rotated, sorry!");
+			return;
+		}
+		ImageRegion bounds = viewer.getServerBounds();
 		
-		if (pathObject instanceof TMACoreObject) {
-			for (PathObject child : pathObject.getChildObjects()) {
+		if (pathObject.isTMACore()) {
+			for (PathObject child : pathObject.getChildObjectsAsArray()) {
 				if (isSuitableAnnotation(child)) {
 					originalObjectROIs.put(child, child.getROI());
 				}
@@ -149,18 +162,19 @@ public class RigidObjectEditorCommand implements PathCommand, ImageDataChangeLis
 		
 		
 		viewer.setMode(null);
+		qupath.setModeSwitchingEnabled(false);
 		viewer.addViewerListener(this);
 		viewer.getView().addEventHandler(MouseEvent.ANY, mouseListener);
 		
 //		// Remove selected object & create an overlay showing the currently-being-edited version
 //		viewer.getHierarchy().removeObject(originalObject, true, true);
 		
-		transformer = new RoiAffineTransformer((PathArea)originalObject.getROI());
+		transformer = new RoiAffineTransformer(bounds, originalObject.getROI());
 //		editingROI = new RotatedROI((PathArea)originalObject.getROI());
 //		editingROI.setAngle(Math.PI/3);
 		
 		overlay = new AffineEditOverlay(viewer.getOverlayOptions());
-		viewer.addOverlay(overlay);
+		viewer.getCustomOverlayLayers().add(overlay);
 		
 		PathPrefs.setPaintSelectedBounds(false);
 		// Create & show temporary object
@@ -200,11 +214,12 @@ public class RigidObjectEditorCommand implements PathCommand, ImageDataChangeLis
 		}
 
 		// Update the mode if the viewer is still active
+		qupath.setModeSwitchingEnabled(true);
 		if (viewer == qupath.getViewer())
 			viewer.setMode(qupath.getMode());
 		
 		viewer.getView().removeEventHandler(MouseEvent.ANY, mouseListener);
-		viewer.removeOverlay(overlay);
+		viewer.getCustomOverlayLayers().remove(overlay);
 		viewer.removeViewerListener(this);
 		
 //		if (pathObject != null)
@@ -223,8 +238,8 @@ public class RigidObjectEditorCommand implements PathCommand, ImageDataChangeLis
 	
 	PathObject createTransformedObject() {
 		ROI roi = originalObject.getROI();
-		PathShape shape = PathROIToolsAwt.getShapeROI(new Area(transformer.getTransformedShape()), roi.getC(), roi.getZ(), roi.getT());
-		return new PathAnnotationObject(shape, originalObject.getPathClass());
+		ROI shape = RoiTools.getShapeROI(new Area(transformer.getTransformedShape()), roi.getImagePlane());
+		return PathObjects.createAnnotationObject(shape, originalObject.getPathClass());
 	}
 	
 
@@ -304,12 +319,14 @@ public class RigidObjectEditorCommand implements PathCommand, ImageDataChangeLis
 				isTranslating = true;
 				lastPoint = p;				
 			}
+			e.consume();
 		}
 
 		public void mouseReleased(MouseEvent e) {
 			isRotating = false;
 			isTranslating = false;
 			lastPoint = null;
+			e.consume();
 		}
 
 		public void mouseDragged(MouseEvent e) {
@@ -326,9 +343,12 @@ public class RigidObjectEditorCommand implements PathCommand, ImageDataChangeLis
 			}
 			lastPoint = p;
 			
-			for (Entry<PathObject, ROI> entry : originalObjectROIs.entrySet())
-				((PathROIObject)entry.getKey()).setROI(transformer.getTransformedROI(entry.getValue()));
+			for (Entry<PathObject, ROI> entry : originalObjectROIs.entrySet()) {
+				ROI roiTransformed = transformer.getTransformedROI(entry.getValue());
+				((PathROIObject)entry.getKey()).setROI(roiTransformed);
+			}
 			viewer.repaint();
+			e.consume();
 		}
 		
 		
@@ -355,6 +375,7 @@ public class RigidObjectEditorCommand implements PathCommand, ImageDataChangeLis
 		
 //		private PathArea roi;
 		// Starting anchors
+		private ROI roiBounds;
 		private double anchorX;
 		private double anchorY;
 		
@@ -368,9 +389,11 @@ public class RigidObjectEditorCommand implements PathCommand, ImageDataChangeLis
 		private double theta = 0;
 		private AffineTransform transform;
 		
-		RoiAffineTransformer(final PathArea roi) {
+		RoiAffineTransformer(final ImageRegion bounds, final ROI roi) {
+			if (bounds != null)
+				roiBounds = ROIs.createRectangleROI(bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight(), ImagePlane.getPlane(bounds));
 //			this.roi = roi;
-			this.shapeOrig = PathROIToolsAwt.getShape(roi);
+			this.shapeOrig = RoiTools.getShape(roi);
 			this.boundsOrig = shapeOrig.getBounds2D();
 			this.transform = new AffineTransform();
 			
@@ -383,25 +406,58 @@ public class RigidObjectEditorCommand implements PathCommand, ImageDataChangeLis
 			this.boundsTransformed = null;
 		}
 		
-		
 		public ROI getTransformedROI(final ROI roi) {
-			Shape shape = PathROIToolsAwt.getShape(roi);
+			ROI transformedROI = getUnclippedTransformedROI(roi);
+			if (roiBounds == null) // Should this work for points? || !(transformedROI instanceof PathShape))
+				return transformedROI;
+			return RoiTools.combineROIs(transformedROI, roiBounds, CombineOp.INTERSECT);
+		}
+		
+		public ROI getUnclippedTransformedROI(final ROI roi) {
+			Shape shape = RoiTools.getShape(roi);
 			
 			double flatness = 0.5;
 			// Try to return an ellipse, if appropriate
 			if (shape instanceof Ellipse2D) {
 				Rectangle2D bounds = shape.getBounds2D();
 				if (theta == 0 || GeneralTools.almostTheSame(bounds.getWidth(), bounds.getHeight(), 0.01)) {
-					return new EllipseROI(bounds.getX()+dx, bounds.getY()+dy, bounds.getWidth(), bounds.getHeight(), roi.getC(), roi.getZ(), roi.getT());
+					return ROIs.createEllipseROI(bounds.getX()+dx, bounds.getY()+dy, bounds.getWidth(), bounds.getHeight(), ImagePlane.getPlaneWithChannel(roi));
 				}
-				// Don't flatten an ellipse
-				flatness = -1;
+//				// Don't flatten an ellipse
+//				flatness = 0.5;
 			}
 			
 			updateTransform();
 			shape = transform.createTransformedShape(shape);
 			// TODO: Improve the choice of shape this returns
-			return PathROIToolsAwt.getShapeROI(shape, roi.getC(), roi.getZ(), roi.getT(), flatness);
+			if (roi != null && roi.isArea())
+				return RoiTools.getShapeROI(shape, roi.getImagePlane(), flatness);
+			else {
+				// Check if we have a line
+				if (shape instanceof Line2D) {
+					Line2D line = (Line2D)shape;
+					return ROIs.createLineROI(line.getX1(), line.getY1(), line.getX2(), line.getY2(), ImagePlane.getPlaneWithChannel(roi));
+				}
+				// Polyline is the only other option (currently?)
+				PathIterator iter = shape.getPathIterator(null);
+				List<Point2> points = new ArrayList<>();
+				double[] seg = new double[6];
+				while (!iter.isDone()) {
+					switch(iter.currentSegment(seg)) {
+					case PathIterator.SEG_MOVETO:
+						// Fall through
+					case PathIterator.SEG_LINETO:
+						points.add(new Point2(seg[0], seg[1]));
+						break;
+					case PathIterator.SEG_CLOSE:
+						throw new IllegalArgumentException("Found a closed segment in a non-area ROI!");
+					default:
+						throw new RuntimeException("Invalid connection - only straight lines are allowed");
+					};
+					iter.next();
+				}
+				return ROIs.createPolylineROI(points, ImagePlane.getPlaneWithChannel(roi));
+			}
 		}
 		
 		

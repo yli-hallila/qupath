@@ -23,7 +23,7 @@
 
 package qupath.lib.roi;
 
-import qupath.lib.roi.interfaces.TranslatableROI;
+import qupath.lib.regions.ImagePlane;
 
 /**
  * Abstract implementation of any ROI that can be defined based on a bounding box, 
@@ -32,7 +32,7 @@ import qupath.lib.roi.interfaces.TranslatableROI;
  * @author Pete Bankhead
  *
  */
-public abstract class AbstractPathBoundedROI extends AbstractPathAreaROI implements TranslatableROI {
+abstract class AbstractPathBoundedROI extends AbstractPathROI {
 	
 	protected double x, y, x2, y2;
 	
@@ -41,20 +41,20 @@ public abstract class AbstractPathBoundedROI extends AbstractPathAreaROI impleme
 	 * @param x
 	 * @param y
 	 */
-	public AbstractPathBoundedROI(double x, double y, int c, int z, int t) {
-		this(x, y, 0, 0, c, z, t);
+	AbstractPathBoundedROI(double x, double y, ImagePlane plane) {
+		this(x, y, 0, 0, plane);
 	}
 	
-	public AbstractPathBoundedROI(double x, double y) {
-		this(x, y, 0, 0, -1, 0, 0);
+	AbstractPathBoundedROI(double x, double y) {
+		this(x, y, 0, 0, null);
 	}
 	
 	AbstractPathBoundedROI() {
 		super();
 	}
 	
-	public AbstractPathBoundedROI(double x, double y, double width, double height, int c, int z, int t) {
-		super(c, z, t);
+	AbstractPathBoundedROI(double x, double y, double width, double height, ImagePlane plane) {
+		super(plane);
 		this.x = x;
 		this.y = y;
 		this.x2 = x + width;
@@ -128,7 +128,7 @@ public abstract class AbstractPathBoundedROI extends AbstractPathAreaROI impleme
 	
 	@Override
 	public boolean isEmpty() {
-		return x == x2 && y == y2;
+		return x == x2 || y == y2;
 	}
 	
 	@Override

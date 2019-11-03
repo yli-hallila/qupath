@@ -23,67 +23,62 @@
 
 package qupath.lib.roi;
 
+import java.awt.Shape;
 import java.io.InvalidObjectException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import qupath.lib.geom.Point2;
-import qupath.lib.roi.interfaces.PathArea;
-import qupath.lib.roi.interfaces.PathPoints;
-import qupath.lib.roi.interfaces.ROIWithHull;
+import qupath.lib.regions.ImagePlane;
 import qupath.lib.roi.interfaces.ROI;
-import qupath.lib.rois.measure.ConvexHull;
 
 /**
- * ROI representing a collection of 2D points, i.e. distinct x,y coordinates.
+ * ROI representing a collection of 2D points (distinct x,y coordinates).
  * 
  * @author Pete Bankhead
  *
  */
-public class PointsROI extends AbstractPathROI implements ROIWithHull, PathPoints, Serializable {
+public class PointsROI extends AbstractPathROI implements Serializable {
 	
 	private static final long serialVersionUID = 1L;
 	
-	protected List<Point2> points = new ArrayList<>();
+	private List<Point2> points = new ArrayList<>();
 	
 //	// Point radius no longer sorted internally (it's really a display thing)
 //	@Deprecated
 //	protected double pointRadius = -1;
 	
-	transient protected double xMin = Double.NaN, yMin = Double.NaN, xMax = Double.NaN, yMax = Double.NaN;
-	transient protected PathArea convexHull = null;
+	transient private double xMin = Double.NaN, yMin = Double.NaN, xMax = Double.NaN, yMax = Double.NaN;
+	transient private ROI convexHull = null;
 //	transient protected Point2 pointAdjusting = null;
 	
-	public PointsROI() {
+	PointsROI() {
 		this(Double.NaN, Double.NaN);
 	}
 	
-	public PointsROI(double x, double y) {
-		this(x, y, -1, 0, 0);
+	private PointsROI(double x, double y) {
+		this(x, y, null);
 	}
 	
-	public PointsROI(double x, double y, int c, int z, int t) {
-		super(c, z, t);
+	PointsROI(double x, double y, ImagePlane plane) {
+		super(plane);
 		addPoint(x, y);
 		recomputeBounds();
 	}
 	
-	public PointsROI(List<Point2> points) {
-		this(points, -1, 0, 0);
-	}
-	
-	public PointsROI(List<Point2> points, int c, int z, int t) {
-		super(c, z, t);
+	PointsROI(List<? extends Point2> points, ImagePlane plane) {
+		super(plane);
 		for (Point2 p : points)
 			addPoint(p.getX(), p.getY());
 		recomputeBounds();
 	}
 	
-	public PointsROI(float[] x, float[] y, int c, int z, int t) {
-		super(c, z, t);
+	private PointsROI(float[] x, float[] y, ImagePlane plane) {
+		super(plane);
 		if (x.length != y.length)
 			throw new IllegalArgumentException("Lengths of x and y arrays are not the same! " + x.length + " and " + y.length);
 		for (int i = 0; i < x.length; i++)
@@ -153,13 +148,6 @@ public class PointsROI extends AbstractPathROI implements ROIWithHull, PathPoint
 		return pClosest;
 	}
 
-	public boolean containsPoint(double x, double y) {
-		for (Point2 p : points) {
-			if (x == p.getX() && y == p.getY())
-				return true;
-		}
-		return false;
-	}
 
 //	@Deprecated
 //	public boolean startAdjusting(double x, double y, int modifiers) {
@@ -259,7 +247,7 @@ public class PointsROI extends AbstractPathROI implements ROIWithHull, PathPoint
 	
 	
 	@Override
-	public String getROIType() {
+	public String getRoiName() {
 		return "Points";
 	}
 	
@@ -267,30 +255,36 @@ public class PointsROI extends AbstractPathROI implements ROIWithHull, PathPoint
 	public String toString() {
 //		if (getName() != null)
 //			return String.format("%s (%d points)", getName(), points.size());			
-		return String.format("%s (%d points)", getROIType(), points.size());
+		return String.format("%s (%d points)", getRoiName(), points.size());
 	}
 	
 	@Override
-	public int getNPoints() {
+	public int getNumPoints() {
 		return points.size();
 	}
 	
 	@Override
-	public List<Point2> getPointList() {
+	public List<Point2> getAllPoints() {
 		return Collections.unmodifiableList(points);
 	}
 	
-
 	@Override
+	public ROI scale(double scaleX, double scaleY, double originX, double originY) {
+		return new PointsROI(
+				getAllPoints().stream().map(p -> RoiTools.scalePoint(p, scaleX, scaleY, originX, originY)).collect(Collectors.toList()),
+				getImagePlane());
+	}
+	
+	@Override
+	@Deprecated
 	public ROI duplicate() {
-		PointsROI roi = new PointsROI(points, getC(), getZ(), getT());
+		PointsROI roi = new PointsROI(points, getImagePlane());
 //		roi.setPointRadius(pointRadius);
 		return roi;
 	}
 
 	@Override
-	
-	public PathArea getConvexHull() {
+	public ROI getConvexHull() {
 		if (convexHull == null) {
 			if (points.isEmpty())
 				return null;
@@ -300,21 +294,21 @@ public class PointsROI extends AbstractPathROI implements ROIWithHull, PathPoint
 		return convexHull;
 	}
 
-	@Override
-	public double getConvexArea() {
-		PathArea hull = getConvexHull();
-		if (hull != null)
-			return hull.getArea();
-		return Double.NaN;
-	}
-	
-	@Override
-	public double getScaledConvexArea(double pixelWidth, double pixelHeight) {
-		PathArea hull = getConvexHull();
-		if (hull != null)
-			return hull.getScaledArea(pixelWidth, pixelHeight);
-		return Double.NaN;
-	}
+//	@Override
+//	public double getConvexArea() {
+//		PathArea hull = getConvexHull();
+//		if (hull != null)
+//			return hull.getArea();
+//		return Double.NaN;
+//	}
+//	
+//	@Override
+//	public double getScaledConvexArea(double pixelWidth, double pixelHeight) {
+//		PathArea hull = getConvexHull();
+//		if (hull != null)
+//			return hull.getScaledArea(pixelWidth, pixelHeight);
+//		return Double.NaN;
+//	}
 
 	
 	private void resetBounds() {
@@ -375,11 +369,29 @@ public class PointsROI extends AbstractPathROI implements ROIWithHull, PathPoint
 //	}
 	
 	
+	/**
+	 * It is not possible to convert a PointROI to a java.awt.Shape.
+	 * throws UnsupportedOperationException
+	 */
 	@Override
-	public List<Point2> getPolygonPoints() {
-		return getPointList();
+	public Shape getShape() throws UnsupportedOperationException {
+		throw new UnsupportedOperationException("PointROI does not support getShape()!");
 	}
 	
+	
+//	/**
+//	 * throws UnsupportedOperationException
+//	 */
+//	@Override
+//	public Geometry getGeometry() throws UnsupportedOperationException {
+//		throw new UnsupportedOperationException("PointROI does not support getGeometry()!");
+//	}
+	
+	
+	@Override
+	public RoiType getRoiType() {
+		return RoiType.POINT;
+	}
 	
 	
 	private Object writeReplace() {
@@ -401,7 +413,7 @@ public class PointsROI extends AbstractPathROI implements ROIWithHull, PathPoint
 		private final int c, z, t;
 		
 		SerializationProxy(final PointsROI roi) {
-			int n = roi.getNPoints();
+			int n = roi.getNumPoints();
 			this.x =  new float[n];
 			this.y =  new float[n];
 			int ind = 0;
@@ -417,11 +429,43 @@ public class PointsROI extends AbstractPathROI implements ROIWithHull, PathPoint
 		}
 		
 		private Object readResolve() {
-			PointsROI roi = new PointsROI(x, y, c, z, t);
+			PointsROI roi = new PointsROI(x, y, ImagePlane.getPlaneWithChannel(c, z, t));
 			return roi;
 		}
 		
 	}
+
+
+	@Override
+	public ROI translate(double dx, double dy) {
+		return new PointsROI(
+				points.stream().map(p -> new Point2(p.getX()+dx, p.getY()+dy)).collect(Collectors.toList()),
+				getImagePlane());
+	}
 	
+	@Override
+	public double getArea() {
+		return 0;
+	}
+	
+	@Override
+	public double getScaledArea(double pixelWidth, double pixelHeight) {
+		return 0;
+	}
+	
+	@Override
+	public boolean contains(double x, double y) {
+		return false;
+	}
+
+	@Override
+	public double getLength() {
+		return 0;
+	}
+
+	@Override
+	public double getScaledLength(double pixelWidth, double pixelHeight) {
+		return 0;
+	}
 
 }

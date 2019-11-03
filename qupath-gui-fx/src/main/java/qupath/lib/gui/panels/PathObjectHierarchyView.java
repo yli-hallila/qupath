@@ -25,6 +25,7 @@ package qupath.lib.gui.panels;
 
 import java.awt.image.BufferedImage;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import javafx.scene.control.*;
 import org.controlsfx.control.BreadCrumbBar;
@@ -44,9 +45,10 @@ import qupath.lib.gui.helpers.ColorToolsFX;
 import qupath.lib.gui.icons.PathIconFactory;
 import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.images.ImageData;
+import qupath.lib.objects.DefaultPathObjectComparator;
 import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.PathRootObject;
-import qupath.lib.objects.helpers.PathObjectTools;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.objects.hierarchy.events.PathObjectHierarchyEvent;
 import qupath.lib.objects.hierarchy.events.PathObjectHierarchyListener;
@@ -63,6 +65,13 @@ import qupath.lib.objects.hierarchy.events.PathObjectSelectionModel;
 public class PathObjectHierarchyView implements ImageDataChangeListener<BufferedImage>, PathObjectSelectionListener, PathObjectHierarchyListener {
 	
 	/**
+	 * Request that we only synchronize to the primary selection; otherwise synchronizing to 
+	 * multiple selections from long lists can be a performance bottleneck
+	 */
+	private static boolean synchronizePrimarySelectionOnly = true;
+
+	
+	/**
 	 * Control how detections are displayed in this tree view.
 	 * 
 	 * Showing all detections can be a bad idea, since there may be serious performance issues 
@@ -70,6 +79,7 @@ public class PathObjectHierarchyView implements ImageDataChangeListener<Buffered
 	 */
 	public static enum TreeDetectionDisplay {
 		NONE, WITHOUT_ICONS, WITH_ICONS;
+			@Override
 			public String toString() {
 				switch(this) {
 				case NONE:
@@ -108,12 +118,10 @@ public class PathObjectHierarchyView implements ImageDataChangeListener<Buffered
 		});
 		
 		treeView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-		treeView.getSelectionModel().getSelectedItems().addListener(new ListChangeListener<TreeItem<PathObject>>() {
-			@Override
-			public void onChanged(ListChangeListener.Change<? extends TreeItem<PathObject>> c) {
-				synchronizeSelectionModelToTree(c);
-			}
-		});
+		treeView.getSelectionModel().getSelectedItems().addListener(
+				(ListChangeListener.Change<? extends TreeItem<PathObject>> c) -> synchronizeSelectionModelToTree(c)
+		);
+		treeView.getSelectionModel().selectedItemProperty().addListener((v, o, n) -> synchronizeSelectionModelToTree(null));
 		// When nodes are expanded, we need to ensure selections are handled
 		treeView.expandedItemCountProperty().addListener((v, o, n) -> synchronizeTreeToSelectionModel());
 		
@@ -182,60 +190,53 @@ public class PathObjectHierarchyView implements ImageDataChangeListener<Buffered
 	private boolean synchronizingModelToTree = false;
 	private boolean synchronizingTreeToModel = false;
 	
+	/**
+	 * Ensure that the hierarchy selection model matches the selection within the TreeView.
+	 * @param change
+	 */
 	private void synchronizeSelectionModelToTree(final ListChangeListener.Change<? extends TreeItem<PathObject>> change) {
 		if (synchronizingTreeToModel)
 			return;
-		boolean ownsChanges = !synchronizingModelToTree;
+		
+		PathObjectSelectionModel model = getHierarchySelectionModel();
+		if (model == null) {
+			return;
+		}
+		
+		boolean wasSynchronizingToTree = synchronizingModelToTree;
 		try {
 			synchronizingModelToTree = true;
-			PathObjectSelectionModel model = getHierarchySelectionModel();
-			if (model == null) {
-				return;
-			}
 			
 			// Check - was anything removed?
 			boolean removed = false;
-			while (change.next())
-				removed = removed | change.wasRemoved();
+			if (change != null) {
+				while (change.next())
+					removed = removed | change.wasRemoved();
+			}
 			
 			MultipleSelectionModel<TreeItem<PathObject>> treeModel = treeView.getSelectionModel();
 			List<TreeItem<PathObject>> selectedItems = treeModel.getSelectedItems();
+			
 			// If we just have no selected items, and something was removed, then clear the selection
 			if (selectedItems.isEmpty() && removed) {
 				model.clearSelection();
 				return;				
 			}
+			
 			// If we just have one selected item, and also items were removed from the selection, then only select the one item we have
-			if (selectedItems.size() == 1 && removed) {
+//			if (selectedItems.size() == 1 && removed) {
+			if (selectedItems.size() == 1) {
 				model.setSelectedObject(selectedItems.get(0).getValue(), false);
 				return;
 			}
+			
 			// If we have multiple selected items, we need to ensure that everything in the tree matches with everything in the selection model
-			Set<PathObject> currentSelections = model.getSelectedObjects();
-			Set<PathObject> toDeselect = new HashSet<>();
-			Set<PathObject> toSelect = new HashSet<>();
-			int n = treeView.getExpandedItemCount();
-			for (int i = 0; i < n; i++) {
-				PathObject temp = treeView.getTreeItem(i).getValue();
-				if (treeModel.isSelected(i)) {
-					if (!currentSelections.contains(temp))
-						toSelect.add(temp);
-				} else {
-					if (currentSelections.contains(temp))
-						toDeselect.add(temp);
-				}
-			}
-			model.deselectObjects(toDeselect);
-			model.selectObjects(toSelect);
-			
-			// Ensure that we have the main selected object
-			TreeItem<PathObject> mainSelection = treeView.getFocusModel().getFocusedItem();
-			if (mainSelection != null && model.isSelected(mainSelection.getValue()))
-				model.setSelectedObject(mainSelection.getValue(), true);
-			
+			Set<PathObject> toSelect = treeView.getSelectionModel().getSelectedItems().stream().map(t -> t.getValue()).collect(Collectors.toSet());
+			TreeItem<PathObject> mainSelection = treeView.getSelectionModel().getSelectedItem();
+			PathObject primary = mainSelection == null ? null : mainSelection.getValue();
+			model.setSelectedObjects(toSelect, primary);
 		} finally {
-			if (ownsChanges)
-				synchronizingModelToTree = false;
+			synchronizingModelToTree = wasSynchronizingToTree;
 		}
 	}
 	
@@ -243,30 +244,64 @@ public class PathObjectHierarchyView implements ImageDataChangeListener<Buffered
 	private PathObjectSelectionModel getHierarchySelectionModel() {
 		return imageData == null ? null : imageData.getHierarchy().getSelectionModel();
 	}
-	
-	
+
+	/**
+	 * Ensure that the selection in the TreeView matches the hierarchy selection model.
+	 */
 	private void synchronizeTreeToSelectionModel() {
+		var model = getHierarchySelectionModel();
+		if (model == null)
+			synchronizeTreeToSelectionModel(null, Collections.emptySet());
+		else
+			synchronizeTreeToSelectionModel(model.getSelectedObject(), model.getSelectedObjects());
+	}
+	
+	/**
+	 * Ensure that the selection in the TreeView matches the selection being passed here.
+	 * @param primarySelected
+	 * @param allSelected
+	 */
+	private void synchronizeTreeToSelectionModel(PathObject primarySelected, Collection<PathObject> allSelected) {
 		if (synchronizingModelToTree)
 			return;
+		
+		if (synchronizePrimarySelectionOnly) {
+			boolean currentlySynchronizing = synchronizingTreeToModel;
+			try {
+				synchronizingTreeToModel = true;
+				MultipleSelectionModel<TreeItem<PathObject>> treeModel = treeView.getSelectionModel();
+				if (primarySelected == null)
+					treeModel.clearSelection();
+				else
+					selectSingleObject(primarySelected);
+				return;
+			} finally {
+				synchronizingTreeToModel = currentlySynchronizing;
+			}
+		}
+		
+		
 		boolean ownsChanges = !synchronizingTreeToModel;
 		try {
 			synchronizingTreeToModel = true;
-			
-			PathObjectSelectionModel model = getHierarchySelectionModel();
+						
 			MultipleSelectionModel<TreeItem<PathObject>> treeModel = treeView.getSelectionModel();
-			if (model == null || model.noSelection()) {
+			if (primarySelected == null && allSelected.isEmpty()) {
 				treeModel.clearSelection();
 				return;
 			}
 			
-			if (model.singleSelection()) {
-				selectSingleObject(model.getSelectedObject());
+			if (allSelected.size() == 1) {
+				selectSingleObject(primarySelected);
 				return;
 			}
 			
+			// Need a Set for reasonable performance
+			if (!(allSelected instanceof Set))
+				allSelected = new HashSet<>(allSelected);
+			
 			// Loop through all possible selections, and select them if they should be selected (and not if they shouldn't)
 			int n = treeView.getExpandedItemCount();
-			PathObject mainSelectedObject = model.getSelectedObject();
 			int mainObjectInd = -1;
 			
 			for (int i = 0; i < n; i++) {
@@ -276,9 +311,9 @@ public class PathObjectHierarchyView implements ImageDataChangeListener<Buffered
 					continue;
 				}
 				PathObject temp = item.getValue();
-				if (temp == mainSelectedObject)
+				if (temp == primarySelected)
 					mainObjectInd = i;
-				if (model.isSelected(temp)) {
+				if (allSelected.contains(temp)) {
 					// Only select if necessary, or if this is the main selected object
 					if (!treeModel.isSelected(i))
 						treeModel.select(i);
@@ -355,30 +390,31 @@ public class PathObjectHierarchyView implements ImageDataChangeListener<Buffered
 	}
 	
 	
-	class PathObjectCell extends TreeCell<PathObject> {
+	static class PathObjectCell extends TreeCell<PathObject> {
 
-	     public PathObjectCell() {    }
-	       
-	     @Override protected void updateItem(PathObject item, boolean empty) {
-//	    	 updateSelected(isObjectSelected(item));
-	         super.updateItem(item, empty);
-	         setGraphic(null);
-	         if (item == null || empty) {
-	        	 setText(null);
-	        	 setGraphic(null);
-	         } else {
-	        	 setText(item.toString());
-	        	 if (item.hasROI() && (!item.isDetection() || detectionDisplay.get() == TreeDetectionDisplay.WITH_ICONS)) {
-	        		 // It consumes too many resources to create enough icons to represent every detection this way...
-	        		 // consider reintroducing in the future with a more efficient implementation, e.g. reusing images & canvases
- 	        		 Color color = ColorToolsFX.getDisplayedColor(item);
-	        		 setGraphic(PathIconFactory.createROIIcon(item.getROI(), 16, 16, color));
-	        	 } else
-	        		 setGraphic(null);
-	         }
-	     }
+		public PathObjectCell() {    }
 
-	 }
+		@Override
+		protected void updateItem(PathObject item, boolean empty) {
+			//	    	 updateSelected(isObjectSelected(item));
+			super.updateItem(item, empty);
+			setGraphic(null);
+			if (item == null || empty) {
+				setText(null);
+				setGraphic(null);
+			} else {
+				setText(item.toString());
+				if (item.hasROI() && (!item.isDetection() || detectionDisplay.get() == TreeDetectionDisplay.WITH_ICONS)) {
+					// It consumes too many resources to create enough icons to represent every detection this way...
+					// consider reintroducing in the future with a more efficient implementation, e.g. reusing images & canvases
+					Color color = ColorToolsFX.getDisplayedColor(item);
+					setGraphic(PathIconFactory.createPathObjectIcon(item, 16, 16));
+				} else
+					setGraphic(null);
+			}
+		}
+
+	}
 	
 	
 	
@@ -404,11 +440,12 @@ public class PathObjectHierarchyView implements ImageDataChangeListener<Buffered
 	}
 	
 	@Override
-	public void selectedPathObjectChanged(PathObject pathObjectSelected, PathObject previousObject) {
+	public void selectedPathObjectChanged(PathObject pathObjectSelected, PathObject previousObject, Collection<PathObject> allSelected) {
 		if (Platform.isFxApplicationThread())
-			synchronizeTreeToSelectionModel();
-		else
-			Platform.runLater(() -> selectedPathObjectChanged(pathObjectSelected, previousObject));
+			synchronizeTreeToSelectionModel(pathObjectSelected, allSelected);
+		// Do not synchronize to changes in other threads, as these may interfere with scripts
+//		else
+//			Platform.runLater(() -> synchronizeTreeToSelectionModel(pathObjectSelected, allSelected));
 	}
 	
 	public ImageData<?> getImageData() {
@@ -424,35 +461,49 @@ public class PathObjectHierarchyView implements ImageDataChangeListener<Buffered
 	
 	
 	
-	TreeItem<PathObject> createNode(final PathObject pathObject) {
-		return new TreeItem<PathObject>(pathObject) {
-			
-			private boolean childrenSet = false;
-	 
-	          @Override
-	          public ObservableList<TreeItem<PathObject>> getChildren() {
-	        	  ObservableList<TreeItem<PathObject>> children = super.getChildren();
-	        	  if (!childrenSet && children.isEmpty()) {
-	        		  childrenSet = true;
-	        		  List<TreeItem<PathObject>> newChildren = new ArrayList<>();
-	        		  Collection<PathObject> currentChildren = getValue().getChildObjects();
-	        		  boolean includeDetections = detectionDisplay.get() != TreeDetectionDisplay.NONE;
-                  for (PathObject child : currentChildren.toArray(new PathObject[currentChildren.size()])) {
-                	  	if (includeDetections || child.hasChildren() || !child.isDetection())
-                	  		newChildren.add(createNode(child));
-                  }
-	        		  super.getChildren().setAll(newChildren);
-	        	  }
-	              return children;
-	          }
-
-	          @Override
-	          public boolean isLeaf() {
-	        	  	return !getValue().hasChildren() || getChildren().isEmpty();
-	          }
-	          
-	      };
+	static TreeItem<PathObject> createNode(final PathObject pathObject) {
+		return new PathObjectTreeItem(pathObject);
 	}
+	
+	static class PathObjectTreeItem extends TreeItem<PathObject> {
+
+		private boolean childrenSet = false;
+		private Boolean isLeaf = null;
+
+		public PathObjectTreeItem(PathObject value) {
+			super(value);
+		}
+
+		@Override
+		public ObservableList<TreeItem<PathObject>> getChildren() {
+			ObservableList<TreeItem<PathObject>> children = super.getChildren();
+			var value = getValue();
+			if (!childrenSet && children.isEmpty()) {
+				childrenSet = true;
+				var childArray = value.getChildObjectsAsArray();
+				if (childArray.length > 0) {
+					Arrays.sort(childArray, DefaultPathObjectComparator.getInstance());
+					List<TreeItem<PathObject>> newChildren = new ArrayList<>();
+					boolean includeDetections = detectionDisplay.get() != TreeDetectionDisplay.NONE;
+					for (PathObject child : childArray) {
+						if (includeDetections || child.hasChildren() || !child.isDetection())
+							newChildren.add(createNode(child));
+					}
+					children.setAll(newChildren);
+				} else if (!children.isEmpty())
+					children.clear();
+			}
+			return children;
+		}
+
+		@Override
+		public boolean isLeaf() {
+			if (isLeaf == null)
+				isLeaf = !getValue().hasChildren() || getChildren().isEmpty();
+			return isLeaf;
+		}
+
+	};
 
 
 
@@ -460,18 +511,17 @@ public class PathObjectHierarchyView implements ImageDataChangeListener<Buffered
 	public void hierarchyChanged(PathObjectHierarchyEvent event) {
 		if (imageData == null)
 			return;
-//		if (event.isChanging())
-//			return;
+		if (event != null && event.isChanging())
+			return;
 		if (!Platform.isFxApplicationThread()) {
 			Platform.runLater(() -> hierarchyChanged(event));
 			return;
 		}
 		synchronizingTreeToModel = true;
 		treeView.setRoot(createNode(imageData.getHierarchy().getRootObject()));
-		synchronizingTreeToModel = false;
 		synchronizeTreeToSelectionModel();
+		synchronizingTreeToModel = false;
 	}
-	
 	
 	
 }

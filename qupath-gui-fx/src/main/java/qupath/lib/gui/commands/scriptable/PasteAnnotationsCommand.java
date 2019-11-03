@@ -27,7 +27,7 @@ public class PasteAnnotationsCommand implements PathCommand {
         Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
 
         try {
-            DataFlavor flavor = new DataFlavor("application/x-java-serialized-object;class=java.util.ArrayList");
+            /*DataFlavor flavor = new DataFlavor("application/x-java-serialized-object;class=java.util.ArrayList");
             if (clipboard.isDataFlavorAvailable(flavor)) {
                 ArrayList<PathObject> annotations = (ArrayList<PathObject>) clipboard.getData(flavor);
 
@@ -37,7 +37,7 @@ public class PasteAnnotationsCommand implements PathCommand {
                     qupath.getViewer().getSelectedObject().setName(annotation.getName());
                     qupath.getViewer().getSelectedObject().setColorRGB(annotation.getColorRGB());
                 }
-            }
+            }*/
         } catch (Exception e) {
             logger.info("Error while pasting annotations", e);
         }

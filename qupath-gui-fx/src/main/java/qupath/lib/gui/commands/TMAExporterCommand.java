@@ -33,9 +33,10 @@ import qupath.lib.gui.ViewerManager;
 import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.gui.prefs.PathPrefs;
+import qupath.lib.gui.tma.TMADataIO;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.images.ImageData;
-import qupath.lib.io.PathAwtIO;
+import qupath.lib.images.servers.ServerTools;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.plugins.workflow.DefaultScriptableWorkflowStep;
 import qupath.lib.plugins.workflow.WorkflowStep;
@@ -68,16 +69,18 @@ public class TMAExporterCommand implements PathCommand {
 			return;
 		}
 
-		String defaultName = viewer.getServer().getDisplayedImageName();
+		String defaultName = ServerTools.getDisplayableImageName(viewer.getServer());
 		File dirBase = dirPrevious;
 		if (dirBase == null && imageData.getLastSavedPath() != null)
 			dirBase = new File(imageData.getLastSavedPath()).getParentFile();
 		if (dirBase != null && !dirBase.isDirectory())
 			dirBase = null;
-		File file = QuPathGUI.getSharedDialogHelper().promptToSaveFile(null, dirBase, defaultName, "TMA data", "qptma");
+		File file = QuPathGUI.getSharedDialogHelper().promptToSaveFile(null, dirBase, defaultName, "TMA data", ".qptma");
 		if (file != null) {
+			if (!file.getName().endsWith(".qptma"))
+				file = new File(file.getParentFile(), file.getName() + ".qptma");
 			double downsample = PathPrefs.getTMAExportDownsample();
-			PathAwtIO.writeTMAData(file, imageData, viewer.getOverlayOptions(), downsample);
+			TMADataIO.writeTMAData(file, imageData, viewer.getOverlayOptions(), downsample);
 			WorkflowStep step = new DefaultScriptableWorkflowStep("Export TMA data", "exportTMAData(\"" + GeneralTools.escapeFilePath(file.getParentFile().getAbsolutePath()) + "\", " + downsample + ")");
 			imageData.getHistoryWorkflow().addStep(step);
 //			PathAwtIO.writeTMAData(file, imageData, viewer.getOverlayOptions(), Double.NaN);

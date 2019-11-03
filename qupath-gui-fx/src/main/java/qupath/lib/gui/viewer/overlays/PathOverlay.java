@@ -53,9 +53,9 @@ public interface PathOverlay {
 	public void paintOverlay(Graphics2D g2d, ImageRegion imageRegion, double downsampleFactor, ImageObserver observer, boolean paintCompletely);
 
 	/**
-	 * Check overlay visibility status.  If isVisible() returns false,
+	 * Check overlay visibility status.  If isVisible() returns {@code false},
 	 * then calls to paintOverlay() will not do anything.
-	 * @param visible
+	 * @return
 	 */
 	public boolean isVisible();
 
@@ -67,7 +67,7 @@ public interface PathOverlay {
 	public void setVisible(boolean visible);
 	
 	/**
-	 * Tests both isVisible() and whether opacity <= 0, i.e. will return true if this overlay could not cause
+	 * Tests both isVisible() and whether opacity &lt;= 0, i.e. will return {@code true} if this overlay could not cause
 	 * any change in appearance.
 	 * @return
 	 */
@@ -83,7 +83,7 @@ public interface PathOverlay {
 	public void setPreferredOverlayColor(Color color);
 
 	/**
-	 * @see setPreferredOverlayColor
+	 * @see #setPreferredOverlayColor
 	 */
 	public Color getPreferredOverlayColor();
 

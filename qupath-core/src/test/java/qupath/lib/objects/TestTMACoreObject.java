@@ -30,6 +30,7 @@ import org.junit.Test;
 
 import qupath.lib.roi.EllipseROI;
 
+@SuppressWarnings("javadoc")
 public class TestTMACoreObject {
 	private final Double xcenter = 0.0;
 	private final Double ycenter = 0.0;
@@ -38,7 +39,7 @@ public class TestTMACoreObject {
 	private final Double epsilon = 1e-15;
 	private final String name = "TMACoreObject";
 	TMACoreObject myPO = new TMACoreObject();
-	TMACoreObject myPO2 = new TMACoreObject(xcenter, ycenter, diameter, ismissing);
+	TMACoreObject myPO2 = PathObjects.createTMACoreObject(xcenter, ycenter, diameter, ismissing);
 	
 	@Test
 	public void test_BasicPO() {

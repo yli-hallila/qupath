@@ -25,17 +25,17 @@ package qupath.lib.gui.commands;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.util.SortedMap;
-
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import qupath.lib.gui.ImageWriterTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.helpers.DisplayHelpers;
+import qupath.lib.gui.helpers.DisplayHelpers.SnapshotType;
 import qupath.lib.gui.prefs.PathPrefs;
-import qupath.lib.io.ImageWriter;
+import qupath.lib.images.writers.ImageWriter;
+import qupath.lib.images.writers.ImageWriterTools;
 
 /**
  * 
@@ -51,31 +51,39 @@ public class SaveViewCommand implements PathCommand {
 	private final static Logger logger = LoggerFactory.getLogger(SaveViewCommand.class);
 
 	private QuPathGUI qupath;
-	private boolean wholeWindow;
+	private SnapshotType type;
 	
-	public SaveViewCommand(final QuPathGUI qupath, final boolean wholeWindow) {
+	private static File dirPrevious = null;
+	
+	public SaveViewCommand(final QuPathGUI qupath, final SnapshotType type) {
 		this.qupath = qupath;
-		this.wholeWindow = wholeWindow;
+		this.type = type;
 	}
 
 	@Override
 	public void run() {
-		BufferedImage img = DisplayHelpers.makeSnapshot(qupath, wholeWindow);			
+		BufferedImage img = DisplayHelpers.makeSnapshot(qupath, type);			
 		
 		String ext = PathPrefs.getDefaultScreenshotExtension();
-		SortedMap<ImageWriter<BufferedImage>, String> compatibleWriters = ImageWriterTools.getCompatibleWriters(null, ext);
+		List<ImageWriter<BufferedImage>> compatibleWriters = ImageWriterTools.getCompatibleWriters(BufferedImage.class, ext);
 		if (compatibleWriters.isEmpty()) {
 			logger.error("No compatible image writers found for extension: " + ext);
 			return;
 		}
 		
-		File fileOutput = qupath.getDialogHelper().promptToSaveFile(null, null, null, ext, ext);
+		File fileOutput = qupath.getDialogHelper().promptToSaveFile(null, dirPrevious, null, ext, ext);
 		if (fileOutput == null)
 			return;
-		try {
-			compatibleWriters.firstKey().writeImage(img, fileOutput.getAbsolutePath());
-		} catch (Exception e) {
-			e.printStackTrace();
+		
+		// Loop through the writers and stop when we are successful
+		for (var writer : compatibleWriters) {
+			try {
+				writer.writeImage(img, fileOutput.getAbsolutePath());
+				dirPrevious = fileOutput.getParentFile();
+				return;
+			} catch (Exception e) {
+				logger.error("Error saving snapshot " + type + " to " + fileOutput.getAbsolutePath(), e);
+			}
 		}
 	}
 	

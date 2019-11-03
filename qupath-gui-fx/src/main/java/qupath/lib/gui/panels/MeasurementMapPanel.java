@@ -26,11 +26,14 @@ package qupath.lib.gui.panels;
 import java.awt.image.BufferedImage;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.StringProperty;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
@@ -40,6 +43,7 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.Slider;
@@ -47,17 +51,19 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.TextAlignment;
-import qupath.lib.classifiers.PathClassificationLabellingHelper;
+import qupath.lib.classifiers.PathClassifierTools;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.gui.helpers.MeasurementMapper;
 import qupath.lib.gui.helpers.MeasurementMapper.ColorMapper;
+import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.viewer.OverlayOptions;
 import qupath.lib.gui.viewer.QuPathViewer;
-import qupath.lib.objects.PathDetectionObject;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 
@@ -76,17 +82,19 @@ public class MeasurementMapPanel {
 	
 	private QuPathGUI qupath;
 	
-	private HashMap<String, MeasurementMapper> mapperMap = new HashMap<>();
+	private Map<String, MeasurementMapper> mapperMap = new HashMap<>();
 
 	private BorderPane pane = new BorderPane();
+	
+	private ObservableList<ColorMapper> colorMappers = FXCollections.observableArrayList(MeasurementMapper.loadColorMappers());
+	private ObservableValue<ColorMapper> selectedColorMapper;
 	
 	private ObservableList<String> baseList = FXCollections.observableArrayList();
 	private FilteredList<String> filteredList = new FilteredList<>(baseList);
 	private ListView<String> listMeasurements = new ListView<>(filteredList);
 	
-	private int sliderRange = 200;
-	private Slider sliderMin = new Slider(0, sliderRange, 0);
-	private Slider sliderMax = new Slider(0, sliderRange, sliderRange);
+	private Slider sliderMin = new Slider(0, 1, 0);
+	private Slider sliderMax = new Slider(0, 1, 1);
 	
 	// For not painting values outside the mapper range
 	private CheckBox cbExcludeOutside = new CheckBox("Exclude outside range");
@@ -98,6 +106,13 @@ public class MeasurementMapPanel {
 	private Label labelMax = new Label("");
 	
 	private MeasurementMapper mapper = null;
+	
+	private BooleanProperty showMap;
+	private boolean updatingSliders = false;
+	
+	
+	private static StringProperty preferredMapperName = PathPrefs.createPersistentPreference("measurementMapperLUT", "viridis");
+	
 		
 	public MeasurementMapPanel(final QuPathGUI qupath) {
 		this.qupath = qupath;
@@ -109,18 +124,10 @@ public class MeasurementMapPanel {
 		final ToggleButton toggleShowMap = new ToggleButton("Show map");
 		toggleShowMap.setTooltip(new Tooltip("Show/hide the map"));
 		toggleShowMap.setSelected(true);
-		toggleShowMap.setOnAction(e -> {
-			if (toggleShowMap.isSelected())
-				showMap();
-			else
-				hideMap();
-		});
+		showMap = toggleShowMap.selectedProperty();
+		showMap.addListener((v, o, n) -> updateMap());
 		
-		listMeasurements.getSelectionModel().selectedItemProperty().addListener((e, f, g) -> {
-			if (toggleShowMap.isSelected())
-					showMap();
-			}			
-		);
+		listMeasurements.getSelectionModel().selectedItemProperty().addListener((e, f, g) -> updateMap());
 		listMeasurements.setTooltip(new Tooltip("List of available measurements"));
 		
 		pane.setCenter(listMeasurements);
@@ -134,8 +141,10 @@ public class MeasurementMapPanel {
 		sliderMax.setTooltip(new Tooltip("Max display value"));
 		
 		BorderPane panelLabels = new BorderPane();
-		labelMin.setTextAlignment(TextAlignment.RIGHT);
+		labelMax.setTextAlignment(TextAlignment.RIGHT);
 		labelMin.setTextAlignment(TextAlignment.LEFT);
+		labelMin.addEventFilter(MouseEvent.MOUSE_CLICKED, e -> setSliderValue(sliderMin, "Set minimum display"));
+		labelMax.addEventFilter(MouseEvent.MOUSE_CLICKED, e -> setSliderValue(sliderMax, "Set maximum display"));
 //		labelMin.setOnMouseClicked(e -> {
 //			if (e.getClickCount() == 2) {
 //				String input = DisplayHelpers.showInputDialog("Set minimum value", "Enter the minimum value for the measurement map", Double.toString(sliderMin.getValue()));
@@ -157,8 +166,7 @@ public class MeasurementMapPanel {
 		btnRefresh.setOnAction(e -> {
 			updateMeasurements();
 			mapperMap.clear();
-			if (toggleShowMap.isSelected())
-				showMap();
+			updateMap();
 		}
 				);
 
@@ -217,9 +225,32 @@ public class MeasurementMapPanel {
 		BorderPane paneFilter = new BorderPane();
 		paneFilter.setPadding(new Insets(5, 0, 10, 0));
 		paneFilter.setCenter(tfFilter);
+		
+		// Create a color mapper combobox
+		ComboBox<ColorMapper> comboMapper = new ComboBox<>(colorMappers);
+		selectedColorMapper = comboMapper.getSelectionModel().selectedItemProperty();
+		String name = preferredMapperName.get();
+		if (name != null) {
+			for (var mapper : colorMappers) {
+				if (name.equalsIgnoreCase(mapper.getName())) {
+					comboMapper.getSelectionModel().select(mapper);
+					break;
+				}
+			}
+		}
+		if (comboMapper.getSelectionModel().isEmpty() && !comboMapper.getItems().isEmpty())
+			comboMapper.getSelectionModel().selectFirst();
+		comboMapper.setTooltip(new Tooltip("Select color map"));
+		selectedColorMapper.addListener((v, o, n) -> {
+			updateMap();
+			if (n != null)
+				preferredMapperName.set(n.getName());
+		});
+		comboMapper.setMaxWidth(Double.MAX_VALUE);
 
 		VBox vbButtons = new VBox(
 				paneFilter,
+				comboMapper,
 				sliderMin,
 				sliderMax,
 				colorMapperKey,
@@ -242,13 +273,32 @@ public class MeasurementMapPanel {
 		pane.setBottom(vbButtons);
 
 		pane.setPadding(new Insets(10, 10, 10, 10));
-		
 	}
+	
+	
+	static void setSliderValue(Slider slider, String message) {
+		Double val = DisplayHelpers.showInputDialog("Measurement mapper", message, slider.getValue());
+		if (val != null && Double.isFinite(val)) {
+			if (val > slider.getMax())
+				slider.setMax(val);
+			else if (val < slider.getMin())
+				slider.setMin(val);
+			slider.setValue(val);
+		}
+	}
+	
 	
 	public Pane getPane() {
 		return pane;
 	}
 	
+	
+	private void updateMap() {
+		if (showMap.get())
+			showMap();
+		else
+			hideMap();
+	}
 	
 	public void showMap() {
 		String measurement = listMeasurements.getSelectionModel().getSelectedItem();
@@ -257,11 +307,28 @@ public class MeasurementMapPanel {
 			return;
 		// Reuse mappers if we can
 		mapper = mapperMap.get(measurement);
+		var colorMapper = selectedColorMapper.getValue();
 		if (mapper == null) {
-			mapper = new MeasurementMapper(measurement, viewer.getHierarchy().getObjects(null, null));
+			mapper = new MeasurementMapper(colorMapper, measurement, viewer.getHierarchy().getObjects(null, null));
 			if (mapper.isValid())
 				mapperMap.put(measurement, mapper);
+		} else if (colorMapper != null) {
+			mapper.setColorMapper(colorMapper);
 		}
+		if (mapper != null && mapper.isValid()) {
+			updatingSliders = true;
+			sliderMin.setMin(Math.min(mapper.getDataMinValue(), mapper.getDisplayMinValue()));
+			sliderMin.setMax(Math.max(mapper.getDataMaxValue(), mapper.getDisplayMaxValue()));
+			sliderMin.setValue(mapper.getDisplayMinValue());
+			sliderMin.setBlockIncrement((sliderMin.getMax() - sliderMin.getMin()) / 100);
+			
+			sliderMax.setMin(Math.min(mapper.getDataMinValue(), mapper.getDisplayMinValue()));
+			sliderMax.setMax(Math.max(mapper.getDataMaxValue(), mapper.getDisplayMaxValue()));
+			sliderMax.setValue(mapper.getDisplayMaxValue());		
+			sliderMax.setBlockIncrement((sliderMax.getMax() - sliderMax.getMin()) / 100);
+			updatingSliders = false;
+		}
+
 		colorMapperKeyImage = createPanelKey(mapper.getColorMapper());
 		updateColorMapperKey();
 		mapper.setExcludeOutsideRange(cbExcludeOutside.isSelected());
@@ -286,13 +353,11 @@ public class MeasurementMapPanel {
 	
 	
 	public void updateMapperBrightnessContrast() {
-		if (mapper == null)
+		if (mapper == null || updatingSliders)
 			return;
-		double minValueSlider = (double)sliderMin.getValue() / sliderRange;
-		double maxValueSlider = (double)sliderMax.getValue() / sliderRange;
 		
-		double minValue = mapper.getDataMinValue() + (mapper.getDataMaxValue() - mapper.getDataMinValue()) * minValueSlider;
-		double maxValue = mapper.getDataMinValue() + (mapper.getDataMaxValue() - mapper.getDataMinValue()) * maxValueSlider;
+		double minValue = sliderMin.getValue();
+		double maxValue = sliderMax.getValue();
 		
 		labelMin.setText(String.format("%.2f", minValue));
 		labelMax.setText(String.format("%.2f", maxValue));
@@ -326,8 +391,8 @@ public class MeasurementMapPanel {
 			return;
 		}
 		
-		Collection<PathObject> pathObjects = hierarchy.getObjects(null, PathDetectionObject.class);
-		Set<String> measurements = PathClassificationLabellingHelper.getAvailableFeatures(pathObjects);
+		Collection<PathObject> pathObjects = hierarchy.getDetectionObjects();
+		Set<String> measurements = PathClassifierTools.getAvailableFeatures(pathObjects);
 		for (PathObject pathObject : pathObjects) {
 			if (!Double.isNaN(pathObject.getClassProbability())) {
 				measurements.add("Class probability");

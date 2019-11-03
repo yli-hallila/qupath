@@ -52,13 +52,12 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Pane;
-import qupath.lib.classifiers.PathClassificationLabellingHelper;
+import qupath.lib.classifiers.PathClassifierTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.helpers.DisplayHelpers;
-import qupath.lib.gui.helpers.PanelToolsFX;
+import qupath.lib.gui.helpers.PaneToolsFX;
 import qupath.lib.images.ImageData;
 import qupath.lib.measurements.MeasurementList;
-import qupath.lib.objects.PathDetectionObject;
 import qupath.lib.objects.PathObject;
 
 /**
@@ -187,7 +186,7 @@ class FeatureSelectionPanel {
 				MeasurementList ml = pathObject.getMeasurementList();
 				int sizeBefore = ml.size();
 				ml.removeMeasurements(highlightedFeatures.toArray(new String[0]));
-				ml.closeList();
+				ml.close();
 				int sizeAfter = ml.size();
 				if (sizeAfter != sizeBefore)
 					changedObjects.add(pathObject);
@@ -230,7 +229,7 @@ class FeatureSelectionPanel {
 			for (SelectableFeature feature : tableFeatures.getItems())
 				feature.setSelected(false);
 		});
-		GridPane panelSelectButtons = PanelToolsFX.createColumnGridControls(btnSelectAll, btnSelectNone);
+		GridPane panelSelectButtons = PaneToolsFX.createColumnGridControls(btnSelectAll, btnSelectNone);
 
 		panelButtons.setTop(panelSelectButtons);
 //		panelButtons.setBottom(btnUpdateFeatures);
@@ -265,7 +264,7 @@ class FeatureSelectionPanel {
 
 	void updateMeasurements(final ImageData<?> imageData) {
 		if (imageData != null)
-			updateMeasurements(imageData.getHierarchy().getObjects(null, PathDetectionObject.class));
+			updateMeasurements(imageData.getHierarchy().getDetectionObjects());
 	}
 
 	void updateMeasurementsByNames(final Collection<String> availableFeatureNames) {
@@ -300,7 +299,7 @@ class FeatureSelectionPanel {
 		if (pathObjects == null || pathObjects.isEmpty())
 			availableFeatureNames = Collections.emptyList();
 		else
-			availableFeatureNames = PathClassificationLabellingHelper.getAvailableFeatures(pathObjects);
+			availableFeatureNames = PathClassifierTools.getAvailableFeatures(pathObjects);
 		updateMeasurementsByNames(availableFeatureNames);
 	}
 

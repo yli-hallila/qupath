@@ -27,9 +27,10 @@ package qupath.lib.gui.viewer;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 
+import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.SimpleBooleanProperty;
 import javafx.geometry.Bounds;
+import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
@@ -41,10 +42,10 @@ import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.text.TextAlignment;
 import qupath.lib.gui.helpers.ColorToolsFX;
+import qupath.lib.gui.images.stores.DefaultImageRegionStore;
 import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
-import qupath.lib.images.stores.DefaultImageRegionStore;
 
 /**
  * A whole slide viewer with optional extras... i.e. an overview, scalebar, location string...
@@ -90,14 +91,6 @@ public class QuPathViewerPlus extends QuPathViewer {
 			updateLocationString();
 		});
 		
-//		view.widthProperty().addListener((e, f, g) -> {
-//			System.err.println("Base width: " + basePane.getWidth() + "; View width: " + view.getWidth());
-//		});
-		
-//		basePane.minHeightProperty().bind(view.heightProperty());
-//		basePane.minHeightProperty().bind(view.heightProperty());
-
-		
 		// Add the overview (preview image for navigation)
 		if (imageData != null)
 			overview.imageDataChanged(this, null, imageData);
@@ -109,10 +102,16 @@ public class QuPathViewerPlus extends QuPathViewer {
 		// Add the location label
 		labelLocation.setTextFill(Color.WHITE);
 		labelLocation.setTextAlignment(TextAlignment.CENTER);
-		labelLocation.setStyle("-fx-font-size: 0.8em;");
+		var fontBinding = Bindings.createStringBinding(() -> {
+				var temp = PathPrefs.viewerFontSizeProperty().get();
+				return temp == null ? null : "-fx-font-size: " + temp.getFontSize();
+		}, PathPrefs.viewerFontSizeProperty());
+		labelLocation.styleProperty().bind(fontBinding);
+//		labelLocation.setStyle("-fx-font-size: 0.8em;");
 		panelLocation.setStyle("-fx-background-color: rgba(0, 0, 0, 0.4);");
 		panelLocation.setMinSize(140, 40);
 		panelLocation.setCenter(labelLocation);
+		panelLocation.setPadding(new Insets(5));
 		basePane.getChildren().add(panelLocation);
 		AnchorPane.setBottomAnchor(panelLocation, (double)padding);
 		AnchorPane.setRightAnchor(panelLocation, (double)padding);
@@ -177,32 +176,13 @@ public class QuPathViewerPlus extends QuPathViewer {
 			setSliderRange(sliderT, getTPosition(), 0, server.nTimepoints()-1);
 			sliderT.setVisible(true);
 		} else
-			sliderT.setVisible(false);	
-		
-		
-//		sliderZ.setVisible(true);	
-//		sliderT.setVisible(true);	
-
+			sliderT.setVisible(false);
 	}
 	
 	
 	static void setSliderRange(final Slider slider, double position, double min, double max) {
 		slider.setMin(min);
 		slider.setMax(max);
-//		int range = (int)(max - min + 0.5);
-//		if (range > 200) {
-//			slider.setMajorTickUnit(50);
-//			slider.setMinorTickCount(10);
-//		} else if (range >= 50) {
-//			slider.setMajorTickUnit(10);
-//			slider.setMinorTickCount(5);
-//		} else if (range >= 10) {
-//			slider.setMajorTickUnit(5);
-//			slider.setMinorTickCount(1);
-//		} else {
-//			slider.setMajorTickUnit(1);
-//			slider.setMinorTickCount(1);
-//		}
 		slider.setMajorTickUnit(1);
 		slider.setSnapToTicks(true);
 		slider.setShowTickMarks(false);
@@ -276,15 +256,6 @@ public class QuPathViewerPlus extends QuPathViewer {
 		
 		super.paintCanvas();
 		
-//		super.paintComponent(g);
-//		// Draw bottom panel background
-//		if (panelLocation.isVisible() && labelLocation.getText().length() > 0) {
-//			g.setColor(DisplayHelpers.TRANSLUCENT_BLACK);
-//			Rectangle bounds = panelLocation.getBounds();
-//			int pad = 0;
-//			g.fillRect(bounds.x-pad, bounds.y-pad, bounds.width+pad*2, bounds.height+pad*2);
-//		}
-		
 		// Ensure the scalebar color is set, if required
 		Bounds boundsFX = scalebar.getNode().getBoundsInParent();
 		Rectangle2D bounds = new Rectangle2D.Double(boundsFX.getMinX(), boundsFX.getMinY(), boundsFX.getMaxX(), boundsFX.getMaxY());
@@ -296,23 +267,12 @@ public class QuPathViewerPlus extends QuPathViewer {
 				scalebar.setTextColor(ColorToolsFX.TRANSLUCENT_WHITE_FX);
 			}
 		}
-		
-//		if (autoRecolorGridAndScalebar && colorOverlaySuggested != null) {
-//			Rectangle bounds = labelLocation.getBounds();
-//			scalebar.setForeground(getSuggestedOverlayColor(bounds.x, bounds.y, bounds.width, bounds.height));
-////			scalebar.setForeground(colorOverlaySuggested);
-//		}
 	}
+		
 	
 	public ViewerPlusDisplayOptions getViewerDisplayOptions() {
 		return viewerDisplayOptions;
 	}
-
-	
-//	@Override
-//	public Pane getView() {
-//		return basePane;
-//	}
 	
 
 	@Override
@@ -324,7 +284,8 @@ public class QuPathViewerPlus extends QuPathViewer {
 	@Override
 	public void repaintEntireImage() {
 		super.repaintEntireImage();
-		overview.repaint();
+		if (overview != null)
+			overview.repaint();
 	}
 	
 	

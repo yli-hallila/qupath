@@ -31,7 +31,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import qupath.lib.geom.Point2;
-import qupath.lib.rois.vertices.Vertices;
 
 /**
  * Simple class to store x,y coordinates as floating point arrays.
@@ -44,7 +43,7 @@ import qupath.lib.rois.vertices.Vertices;
  * @author Pete Bankhead
  *
  */
-public class DefaultVertices implements Vertices {
+class DefaultVertices implements Vertices {
 	
 	static Logger logger = LoggerFactory.getLogger(DefaultVertices.class);
 	
@@ -229,7 +228,7 @@ public class DefaultVertices implements Vertices {
 	public Vertices duplicate() {
 		DefaultVertices v = new DefaultVertices(x.length);
 		v.x = Arrays.copyOf(x, x.length);
-		v.y = Arrays.copyOf(y, x.length);
+		v.y = Arrays.copyOf(y, y.length);
 		v.size = size;
 		return v;
 	}

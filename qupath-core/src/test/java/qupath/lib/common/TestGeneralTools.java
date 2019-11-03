@@ -26,7 +26,11 @@ package qupath.lib.common;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
+import java.io.File;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -38,16 +42,75 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import qupath.lib.color.ColorDeconvolutionStains;
-import qupath.lib.color.ColorDeconvolutionStains.DEFAULT_CD_STAINS;
+import qupath.lib.color.ColorDeconvolutionStains.DefaultColorDeconvolutionStains;
 
+@SuppressWarnings("javadoc")
 public class TestGeneralTools {
 	
 	private static Logger logger = LoggerFactory.getLogger(TestGeneralTools.class);
 	
 	@Test
+	public void test_fileExtensions() {
+		File currentDir = new File(".");
+		File parentDir = new File(".");
+		File noExt = new File("My file");
+		
+		assertNull(GeneralTools.getExtension(currentDir).orElse(null));
+		assertNull(GeneralTools.getExtension(parentDir).orElse(null));
+		assertNull(GeneralTools.getExtension(noExt).orElse(null));
+		
+		String baseName = "anything a all. here or there";
+		for (String ext : Arrays.asList(".ext", ".tif", ".ome.tiff", ".tar.gz", ".ome.tif")) {
+			File file = new File(baseName + ext);
+			String parsed = GeneralTools.getExtension(file).orElse(null);
+			assertEquals(ext, parsed);
+			assertEquals(baseName, GeneralTools.getNameWithoutExtension(file));
+			
+			File fileUpper = new File(baseName + ext.toUpperCase());
+			String parsedUpper = GeneralTools.getExtension(fileUpper).orElse(null);
+			assertEquals(ext, parsedUpper);
+			assertEquals(baseName, GeneralTools.getNameWithoutExtension(fileUpper));
+		}
+		
+		for (String ext : Arrays.asList(".ext (here)", ".tif-not-valid", ".tif?")) {
+			File file = new File(baseName + ext);
+			String parsed = GeneralTools.getExtension(file).orElse(null);
+			assertNull(ext, parsed);
+		}
+		
+		assertTrue(GeneralTools.isMultipartExtension(".ome.tif"));
+		assertTrue(GeneralTools.isMultipartExtension("ome.tif"));
+		assertTrue(GeneralTools.isMultipartExtension("..ome.tif"));
+		assertFalse(GeneralTools.isMultipartExtension("tif"));
+		assertFalse(GeneralTools.isMultipartExtension(".tif"));
+		assertFalse(GeneralTools.isMultipartExtension("..tif"));
+	}
+	
+	
+	@Test
+	public void test_filenameValid() {
+		assertTrue(GeneralTools.isValidFilename("anything"));
+		assertTrue(GeneralTools.isValidFilename("anything.else"));
+		assertTrue(GeneralTools.isValidFilename(".anything.else"));
+		assertTrue(GeneralTools.isValidFilename(".anytHIng.else"));
+		
+		assertFalse(GeneralTools.isValidFilename("anything.else?"));
+		assertFalse(GeneralTools.isValidFilename("any<thing"));
+		assertFalse(GeneralTools.isValidFilename("anyt>hing"));
+		assertFalse(GeneralTools.isValidFilename("any:thing"));
+		assertFalse(GeneralTools.isValidFilename("any/thing"));
+		assertFalse(GeneralTools.isValidFilename("any\\thing"));
+		assertFalse(GeneralTools.isValidFilename("any\nthing"));
+		assertFalse(GeneralTools.isValidFilename("any\rthing"));
+		assertFalse(GeneralTools.isValidFilename(""));
+		assertFalse(GeneralTools.isValidFilename("  "));
+	}
+	
+	
+	@Test
 	public void test_parseArgStringValues() {
 		// Generate some Strings to parse
-		ColorDeconvolutionStains stains = ColorDeconvolutionStains.makeDefaultColorDeconvolutionStains(DEFAULT_CD_STAINS.H_E);
+		ColorDeconvolutionStains stains = ColorDeconvolutionStains.makeDefaultColorDeconvolutionStains(DefaultColorDeconvolutionStains.H_E);
 		String argsStains = ColorDeconvolutionStains.getColorDeconvolutionStainsAsString(stains, 3);
 		String argsStains2 = "{\"Name\" : \"H-DAB default\", \"Stain 1\" : \"Hematoxylin\", \"Values 1\" : \"0.65111 0.70119 0.29049 \", \"Stain 2\" : \"DAB\", \"Values 2\" : \"0.26917 0.56824 0.77759 \", \"Background\" : \" 255 255 255 \"}";
 		String argsDetection = "{\"detectionImageBrightfield\": \"Hematoxylin OD\",  \"requestedPixelSizeMicrons\": 0.5,  \"backgroundRadiusMicrons\": 8.0,  \"medianRadiusMicrons\": 0.0,  \"sigmaMicrons\": 1.5,  \"minAreaMicrons\": 10.0,  \"maxAreaMicrons\": 400.0,  \"threshold\": 0.1,  \"maxBackground\": 2.0,  \"watershedPostProcess\": true,  \"excludeDAB\": false,  \"cellExpansionMicrons\": 5.0,  \"includeNuclei\": true,  \"smoothBoundaries\": true,  \"makeMeasurements\": true}";

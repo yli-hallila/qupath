@@ -23,6 +23,8 @@
 
 package qupath.lib.roi;
 
+import java.awt.Shape;
+import java.awt.geom.Line2D;
 import java.io.InvalidObjectException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
@@ -30,9 +32,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import qupath.lib.geom.Point2;
-import qupath.lib.roi.interfaces.PathLine;
+import qupath.lib.regions.ImagePlane;
 import qupath.lib.roi.interfaces.ROI;
-import qupath.lib.roi.interfaces.TranslatableROI;
 
 /**
  * ROI representing a straight line, defined by its end points.
@@ -40,26 +41,22 @@ import qupath.lib.roi.interfaces.TranslatableROI;
  * @author Pete Bankhead
  *
  */
-public class LineROI extends AbstractPathROI implements PathLine, TranslatableROI, Serializable {
+public class LineROI extends AbstractPathROI implements Serializable {
 	
 	private static final long serialVersionUID = 1L;
 	
 	protected double x = Double.NaN, y = Double.NaN, x2 = Double.NaN, y2 = Double.NaN;
 	
-	protected LineROI() {
+	LineROI() {
 		super();
 	}
 	
-	public LineROI(double x, double y) {
-		this(x, y, x, y);
+	LineROI(double x, double y, double x2, double y2) {
+		this(x, y, x2, y2, null);
 	}
 	
-	public LineROI(double x, double y, double x2, double y2) {
-		this(x, y, x2, y2, -1, 0, 0);
-	}
-	
-	public LineROI(double x, double y, double x2, double y2, int c, int z, int t) {
-		super(c, z, t);
+	LineROI(double x, double y, double x2, double y2, ImagePlane plane) {
+		super(plane);
 		this.x = x;
 		this.y = y;
 		this.x2 = x2;
@@ -70,7 +67,7 @@ public class LineROI extends AbstractPathROI implements PathLine, TranslatableRO
 	 * @see qupath.lib.rois.LineROI#getROIType()
 	 */
 	@Override
-	public String getROIType() {
+	public String getRoiName() {
 		return "Line";
 	}
 
@@ -96,26 +93,48 @@ public class LineROI extends AbstractPathROI implements PathLine, TranslatableRO
 	 * @see qupath.lib.rois.LineROI#duplicate()
 	 */
 	@Override
+	@Deprecated
 	public ROI duplicate() {
-		return new LineROI(x, y, x2, y2, getC(), getZ(), getT());
+		return new LineROI(x, y, x2, y2, getImagePlane());
 	}
 	
-
+	/**
+	 * Returns 2 (since the line is defined by its end points).
+	 * @return
+	 */
+	@Override
+	public int getNumPoints() {
+		return 2;
+	}
+	
+	/**
+	 * Get the first x co-ordinate (start of the line).
+	 * @return
+	 */
 	public double getX1() {
 		return x;
 	}
 
-
+	/**
+	 * Get the first y co-ordinate (start of the line).
+	 * @return
+	 */
 	public double getY1() {
 		return y;
 	}
 
-
+	/**
+	 * Get the second x co-ordinate (end of the line).
+	 * @return
+	 */
 	public double getX2() {
 		return x2;
 	}
 
-
+	/**
+	 * Get the second y co-ordinate (end of the line).
+	 * @return
+	 */
 	public double getY2() {
 		return y2;
 	}
@@ -147,11 +166,11 @@ public class LineROI extends AbstractPathROI implements PathLine, TranslatableRO
 	}
 
 	@Override
-	public TranslatableROI translate(double dx, double dy) {
+	public ROI translate(double dx, double dy) {
 		if (dx == 0 && dy == 0)
 			return this;
 		// Shift the bounds
-		return new LineROI(x+dx, y+dy, x2+dx, y2+dy, getC(), getZ(), getT());
+		return new LineROI(x+dx, y+dy, x2+dx, y2+dy, getImagePlane());
 	}
 	
 	/* (non-Javadoc)
@@ -187,13 +206,32 @@ public class LineROI extends AbstractPathROI implements PathLine, TranslatableRO
 	}
 	
 	@Override
-	public List<Point2> getPolygonPoints() {
+	public List<Point2> getAllPoints() {
 		return Arrays.asList(new Point2(x, y),
 				new Point2(x2, y2));
 	}
 	
 	
+	@Override
+	public Shape getShape() {
+		return new Line2D.Double(x, y, x2, y2);
+	}
 	
+	
+//	public Geometry getGeometry() {
+//		GeometryFactory factory = new GeometryFactory();
+//	}
+	
+	
+	@Override
+	public RoiType getRoiType() {
+		return RoiType.LINE;
+	}
+	
+	@Override
+	public ROI getConvexHull() {
+		return this;
+	}
 	
 	private Object writeReplace() {
 		return new SerializationProxy(this);
@@ -225,12 +263,39 @@ public class LineROI extends AbstractPathROI implements PathLine, TranslatableRO
 		}
 		
 		private Object readResolve() {
-			LineROI roi = new LineROI(x, y, x2, y2, c, z, t);
+			LineROI roi = new LineROI(x, y, x2, y2, ImagePlane.getPlaneWithChannel(c, z, t));
 //			if (name != null)
 //				roi.setName(name);
 			return roi;
 		}
 		
+	}
+
+
+	@Override
+	public double getArea() {
+		return 0;
+	}
+	
+	@Override
+	public double getScaledArea(double pixelWidth, double pixelHeight) {
+		return 0;
+	}
+	
+	@Override
+	public boolean contains(double x, double y) {
+		return false;
+	}
+
+	@Override
+	public ROI scale(double scaleX, double scaleY, double originX, double originY) {
+		return new LineROI(
+				RoiTools.scaleOrdinate(x, scaleX, originX),
+				RoiTools.scaleOrdinate(y, scaleY, originY),
+				RoiTools.scaleOrdinate(x2, scaleX, originX),
+				RoiTools.scaleOrdinate(y2, scaleY, originY),
+				getImagePlane()
+				);
 	}
 	
 }

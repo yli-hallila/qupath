@@ -49,7 +49,7 @@ import qupath.lib.algorithms.HaralickFeaturesPlugin;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.commands.EstimateStainVectorsCommand;
 import qupath.lib.gui.commands.SummaryMeasurementTableCommand;
-import qupath.lib.gui.helpers.PanelToolsFX;
+import qupath.lib.gui.helpers.PaneToolsFX;
 import qupath.lib.objects.TMACoreObject;
 import qupath.lib.plugins.objects.SmoothFeaturesPlugin;
 
@@ -165,7 +165,7 @@ public class WorkflowPanel {
 		});
 		actionPrevious.setDisabled(!wizard.hasPrevious());
 		
-		Pane progressPane = PanelToolsFX.createColumnGridControls(
+		Pane progressPane = PaneToolsFX.createColumnGridControls(
 				ActionUtils.createButton(actionPrevious),
 				ActionUtils.createButton(actionNext)
 				);
@@ -208,7 +208,7 @@ public class WorkflowPanel {
 			pane.setTop(importanceLabel);
 		else {
 			VBox paneTop = new VBox();
-			GridPane buttonPane = PanelToolsFX.createRowGridControls(buttonNodeList.toArray(new Node[0]));
+			GridPane buttonPane = PaneToolsFX.createRowGridControls(buttonNodeList.toArray(new Node[0]));
 			paneTop.getChildren().addAll(
 					importanceLabel,
 					buttonPane
@@ -301,7 +301,7 @@ public class WorkflowPanel {
 		builder = new WizardStepBuilder("Detect cells")
 				.essential()
 				.setDescriptionByResource(base + count + "/description.html")
-				.setAction(qupath.createPluginAction("Cell detection", "qupath.imagej.detect.nuclei.WatershedCellDetection", false, null))
+				.setAction(qupath.createPluginAction("Cell detection", "qupath.imagej.detect.cells.WatershedCellDetection", false, null))
 				;
 		count++;
 		steps.add(builder.build());
@@ -315,7 +315,7 @@ public class WorkflowPanel {
 		count++;
 		steps.add(builder.build());
 
-		Action action = qupath.createCommandAction("qupath.opencv.classify.OpenCvClassifierCommand", "Create detection classifier", qupath);
+		Action action = qupath.createCommandAction("qupath.opencv.gui.classify.OpenCvClassifierCommand", "Create detection classifier", qupath);
 		builder = new WizardStepBuilder("Set up & run tumor classifier")
 				.essential()
 				.setDescriptionByResource(base + count + "/description.html")

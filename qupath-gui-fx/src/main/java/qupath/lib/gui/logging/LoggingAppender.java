@@ -23,6 +23,7 @@
 
 package qupath.lib.gui.logging;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -32,9 +33,11 @@ import org.slf4j.LoggerFactory;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.spi.StackTraceElementProxy;
 import ch.qos.logback.core.AppenderBase;
+import ch.qos.logback.core.FileAppender;
 import javafx.application.Platform;
 
 
@@ -67,6 +70,31 @@ public class LoggingAppender extends AppenderBase<ILoggingEvent> {
 			logger.warn("Cannot append logging info without logback!");
 	}
 
+	
+	/**
+	 * Send logging messages to the specified file.
+	 * 
+	 * @param file
+	 */
+	public void addFileAppender(File file) {
+		if (LoggerFactory.getILoggerFactory() instanceof LoggerContext) {
+			LoggerContext context = (LoggerContext)LoggerFactory.getILoggerFactory();
+			FileAppender appender = new FileAppender<>();
+			
+			PatternLayoutEncoder encoder = new PatternLayoutEncoder();
+			encoder.setContext(context);
+			encoder.setPattern("%d{HH:mm:ss.SSS} [%thread] [%-5level] %logger{36} - %msg%n");
+			encoder.start();
+				    
+			appender.setFile(file.getAbsolutePath());
+			appender.setContext(context);
+			appender.setEncoder(encoder);
+			appender.setName(file.getName());
+			appender.start();
+			context.getLogger(Logger.ROOT_LOGGER_NAME).addAppender(appender);
+		} else
+			logger.warn("Cannot append logging info without logback!");
+	}
 
 
 	public synchronized static LoggingAppender getInstance() {
@@ -75,12 +103,12 @@ public class LoggingAppender extends AppenderBase<ILoggingEvent> {
 		return instance;
 	}
 
-	public void addTextComponent(final TextAppendable component) {
+	public synchronized void addTextComponent(final TextAppendable component) {
 		textComponentsFX.add(component);
 		isActive = true;
 	}
 
-	public void removeTextComponent(final TextAppendable component) {
+	public synchronized void removeTextComponent(final TextAppendable component) {
 		textComponentsFX.remove(component);
 		isActive = !textComponentsFX.isEmpty();
 	}
@@ -89,17 +117,17 @@ public class LoggingAppender extends AppenderBase<ILoggingEvent> {
 	protected void append(ILoggingEvent event) {
 		// Log event if it's important enough
 		if (isActive && event.getLevel().isGreaterOrEqual(minLevel)) {
-			final boolean isError = event.getLevel().isGreaterOrEqual(Level.WARN);
-			String tempMessage = event.getLevel() + ": " + event.getFormattedMessage() + "\n";
+//			final boolean isError = event.getLevel().isGreaterOrEqual(Level.WARN);
+			String message = event.getLevel() + ": " + event.getFormattedMessage() + "\n";
 			if (event.getThrowableProxy() != null && event.getLevel().isGreaterOrEqual(Level.ERROR)) {
-				tempMessage += event.getThrowableProxy().getClassName() + ": " + event.getThrowableProxy().getMessage() + "\n";
+				message += event.getThrowableProxy().getClassName() + ": " + event.getThrowableProxy().getMessage() + "\n";
 				for (StackTraceElementProxy element : event.getThrowableProxy().getStackTraceElementProxyArray())
-					tempMessage += "    " + element.getSTEAsString() + "\n";
+					message += "    " + element.getSTEAsString() + "\n";
 				
 				if (event.getThrowableProxy().getCause() != null) {
-					tempMessage += "  Caused by " + event.getThrowableProxy().getCause().getMessage();
+					message += "  Caused by " + event.getThrowableProxy().getCause().getMessage();
 					for (StackTraceElementProxy element : event.getThrowableProxy().getCause().getStackTraceElementProxyArray())
-						tempMessage += "        " + element.getSTEAsString() + "\n";
+						message += "        " + element.getSTEAsString() + "\n";
 				}
 				
 //				for (StackTraceElement element : event.getCallerData())
@@ -107,21 +135,51 @@ public class LoggingAppender extends AppenderBase<ILoggingEvent> {
 //				tempMessage += "MESSAGE: " + event.getThrowableProxy().getMessage() + "\n";
 			}
 			
-			final String message = tempMessage;
-			synchronized(textComponentsFX) {
-				for (TextAppendable text : textComponentsFX) {
-					if (Platform.isFxApplicationThread())
-						log(text, message, isError);
-					else
-						Platform.runLater(() -> log(text, message, isError));
-				}
-			}
-			
+			// Buffer the next message
+			buffer(message);
 		}
 	}
 	
+	private boolean flushRequested = false;
+	private StringBuffer buffer = new StringBuffer();
 	
-	private static void log(final TextAppendable component, final String message, final boolean isError) {
+	private void buffer(String message) {
+		synchronized (buffer) {
+			buffer.append(message);
+			flushBuffer();
+		}
+	}
+	
+	private synchronized void flushBuffer() {
+		if (Platform.isFxApplicationThread()) {
+			String message;
+			synchronized(buffer) {
+				flushRequested = false;
+				message = buffer.toString();
+				buffer.setLength(0);
+			}
+			for (TextAppendable text : textComponentsFX) {
+				log(text, message);
+			}
+		} else {
+			if (!flushRequested) {
+				flushRequested = true;
+				Platform.runLater(() -> flushBuffer());
+			}
+		}
+	}
+	
+	private void logTextAppendables(final String message) {
+		if (Platform.isFxApplicationThread()) {
+			for (TextAppendable text : textComponentsFX) {
+				log(text, message);
+			}
+		} else
+			Platform.runLater(() -> logTextAppendables(message));
+	}
+	
+	
+	private static void log(final TextAppendable component, final String message) {
 		component.appendText(message);
 //		if (isError)
 //			component.setStyle( "-fx-text-fill: red" );

@@ -33,8 +33,8 @@ import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.TMACoreObject;
-import qupath.lib.objects.helpers.PathObjectTools;
 import qupath.lib.objects.hierarchy.DefaultTMAGrid;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.objects.hierarchy.TMAGrid;
@@ -130,7 +130,7 @@ public class TMAGridRemove implements PathCommand {
 			}
 		}
 		int newWidth = removeRow ? grid.getGridWidth() : grid.getGridWidth() - 1;
-		TMAGrid gridNew = new DefaultTMAGrid(coresNew, newWidth);
+		TMAGrid gridNew = DefaultTMAGrid.create(coresNew, newWidth);
 		hierarchy.setTMAGrid(gridNew);
 		hierarchy.getSelectionModel().clearSelection();
 		

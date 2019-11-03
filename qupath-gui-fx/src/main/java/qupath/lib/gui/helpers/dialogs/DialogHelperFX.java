@@ -24,29 +24,28 @@
 package qupath.lib.gui.helpers.dialogs;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javafx.application.Platform;
-import javafx.beans.property.ObjectProperty;
-import javafx.beans.property.SimpleObjectProperty;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
-import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
-import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.GridPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.FileChooser.ExtensionFilter;
+import qupath.lib.common.GeneralTools;
+import qupath.lib.gui.helpers.DisplayHelpers;
+import qupath.lib.gui.helpers.PaneToolsFX;
 import qupath.lib.gui.helpers.dialogs.DialogHelper;
 import javafx.stage.Window;
 
@@ -64,25 +63,28 @@ public class DialogHelperFX implements DialogHelper {
 	private FileChooser fileChooser = new FileChooser();
 	private DirectoryChooser directoryChooser = new DirectoryChooser();
 	
+	private ExtensionFilter allFiles = new ExtensionFilter("All Files", "*.*");
+	
 	protected File lastDir;
 	
-	
+	/**
+	 * Create a {@link DialogHelper} using JavaFX.
+	 * @param ownerWindow
+	 */
 	public DialogHelperFX(final Window ownerWindow) {
 		this.ownerWindow = ownerWindow;
-	}
-	
-	public DialogHelperFX() {
-		this(null);
 	}
 	
 
 	@Override
 	public void setLastDirectory(File dir) {
-		if (dir == null || !dir.exists())
+		if (dir == null)
 			lastDir = null;
-		else if (dir.isDirectory())
-			lastDir = dir;
-		else
+		else if (dir.isDirectory()) {
+			if (dir.exists())
+				lastDir = dir;
+			return;
+		} else
 			setLastDirectory(dir.getParentFile());
 	}
 
@@ -104,7 +106,7 @@ public class DialogHelperFX implements DialogHelper {
 	public File promptForDirectory(File dirBase) {
 		
 		if (!Platform.isFxApplicationThread()) {
-			return callOnPlatformThread(() -> promptForDirectory(dirBase));
+			return DisplayHelpers.callOnApplicationThread(() -> promptForDirectory(dirBase));
 		}
 		
 		File lastDir = getLastDirectory();
@@ -123,10 +125,11 @@ public class DialogHelperFX implements DialogHelper {
 	}
 	
 	
+	@Override
 	public List<File> promptForMultipleFiles(String title, File dirBase, String filterDescription, String... exts) {
 		
 		if (!Platform.isFxApplicationThread()) {
-			return callOnPlatformThread(() -> promptForMultipleFiles(title, dirBase, filterDescription, exts));
+			return DisplayHelpers.callOnApplicationThread(() -> promptForMultipleFiles(title, dirBase, filterDescription, exts));
 		}
 		
 		File lastDir = getLastDirectory();
@@ -135,10 +138,14 @@ public class DialogHelperFX implements DialogHelper {
 			fileChooser.setTitle(title);
 		else
 			fileChooser.setTitle("Choose file");
-		if (filterDescription != null && exts != null && exts.length > 0)
-			fileChooser.setSelectedExtensionFilter(new ExtensionFilter(filterDescription, exts));
-		else
+		if (filterDescription != null && exts != null && exts.length > 0) {
+			ExtensionFilter filter = getExtensionFilter(filterDescription, exts);
+			fileChooser.getExtensionFilters().setAll(filter, allFiles);
+			fileChooser.setSelectedExtensionFilter(filter);
+		} else {
+			fileChooser.getExtensionFilters().clear();
 			fileChooser.setSelectedExtensionFilter(null);
+		}
 		
 		
 		// Ensure we make our request on the correct thread
@@ -158,12 +165,32 @@ public class DialogHelperFX implements DialogHelper {
 
 	}
 	
+	
+	/**
+	 * Create extension filter, ensuring that the format is *.extension.
+	 * 
+	 * @param description
+	 * @param extensions
+	 * @return
+	 */
+	static ExtensionFilter getExtensionFilter(String description, String... extensions) {
+		List<String> ext = new ArrayList<>();
+		for (String e : extensions) {
+			if (e.startsWith(".")) {
+				e = "*" + e;
+			} else if (!e.startsWith("*"))
+				e = "*." + e;
+			ext.add(e);
+		}
+		return new ExtensionFilter(description, ext);
+	}
+	
 
 	@Override
 	public File promptForFile(String title, File dirBase, String filterDescription, String... exts) {
 		
 		if (!Platform.isFxApplicationThread()) {
-			return callOnPlatformThread(() -> promptForFile(title, dirBase, filterDescription, exts));
+			return DisplayHelpers.callOnApplicationThread(() -> promptForFile(title, dirBase, filterDescription, exts));
 		}
 		
 		File lastDir = getLastDirectory();
@@ -172,10 +199,14 @@ public class DialogHelperFX implements DialogHelper {
 			fileChooser.setTitle(title);
 		else
 			fileChooser.setTitle("Choose file");
-		if (filterDescription != null && exts != null && exts.length > 0)
-			fileChooser.setSelectedExtensionFilter(new ExtensionFilter(filterDescription, exts));
-		else
+		if (filterDescription != null && exts != null && exts.length > 0) {
+			ExtensionFilter filter = getExtensionFilter(filterDescription, exts);
+			fileChooser.getExtensionFilters().setAll(filter, allFiles);
+			fileChooser.setSelectedExtensionFilter(filter);
+		} else {
+			fileChooser.getExtensionFilters().clear();
 			fileChooser.setSelectedExtensionFilter(null);
+		}
 		
 		
 		// Ensure we make our request on the correct thread
@@ -204,22 +235,31 @@ public class DialogHelperFX implements DialogHelper {
 	public File promptToSaveFile(String title, File dirBase, String defaultName, String filterName, String ext) {
 		
 		if (!Platform.isFxApplicationThread()) {
-			return callOnPlatformThread(() -> promptToSaveFile(title, dirBase, defaultName, filterName, ext));
+			return DisplayHelpers.callOnApplicationThread(() -> promptToSaveFile(title, dirBase, defaultName, filterName, ext));
 		}
 
-		
 		File lastDir = getLastDirectory();
 		fileChooser.setInitialDirectory(getUsefulBaseDirectory(dirBase));
 		if (title != null)
 			fileChooser.setTitle(title);
 		else
 			fileChooser.setTitle("Save");
-		if (filterName != null && ext != null)
-			fileChooser.setSelectedExtensionFilter(new ExtensionFilter(filterName, ext));
-		else
+		// Multipart extensions can be troublesome... don't set a filter for these unless on Windows (which seems to cope)
+		if (filterName != null && ext != null && (GeneralTools.isWindows() || !GeneralTools.isMultipartExtension(ext))) {
+			ExtensionFilter filter = getExtensionFilter(filterName, ext);
+			fileChooser.getExtensionFilters().setAll(filter);
+			fileChooser.setSelectedExtensionFilter(filter);
+		} else {
+			fileChooser.getExtensionFilters().clear();
 			fileChooser.setSelectedExtensionFilter(null);
-		if (defaultName != null)
-			fileChooser.setInitialFileName(defaultName);
+		}
+		if (defaultName != null) {
+			if (ext != null)
+				fileChooser.setInitialFileName(GeneralTools.getNameWithoutExtension(new File(defaultName)));
+			else
+				fileChooser.setInitialFileName(defaultName);
+		} else
+			fileChooser.setInitialFileName(null);
 		File fileSelected = fileChooser.showSaveDialog(ownerWindow);
 		if (fileSelected != null) {
 			// Only change the last directory if we didn't specify one
@@ -229,7 +269,7 @@ public class DialogHelperFX implements DialogHelper {
 				fileChooser.setInitialDirectory(lastDir);
 			// Ensure the extension is present
 			String name = fileSelected.getName();
-			if (!name.toLowerCase().endsWith(ext.toLowerCase())) {
+			if (ext != null && !name.toLowerCase().endsWith(ext.toLowerCase())) {
 				if (name.endsWith("."))
 					name = name.substring(0, name.length()-1);
 				if (ext.startsWith("."))
@@ -249,13 +289,13 @@ public class DialogHelperFX implements DialogHelper {
 	@Override
 	public String promptForFilePathOrURL(String title, String defaultPath, File dirBase, String filterDescription, String... exts) {
 		if (!Platform.isFxApplicationThread()) {
-			return callOnPlatformThread(() -> promptForFilePathOrURL(title, defaultPath, dirBase, filterDescription, exts));
+			return DisplayHelpers.callOnApplicationThread(() -> promptForFilePathOrURL(title, defaultPath, dirBase, filterDescription, exts));
 		}
 		
 		// Create dialog
-        BorderPane pane = new BorderPane();
+        GridPane pane = new GridPane();
         
-        Label label = new Label("Enter image path (file or URL)");
+        Label label = new Label("Enter URL");
         TextField tf = new TextField();
         tf.setPrefWidth(400);
         
@@ -268,10 +308,12 @@ public class DialogHelperFX implements DialogHelper {
             }
         });
         
-        label.setPadding(new Insets(0, 0, 5, 0));
-        pane.setTop(label);
-        pane.setCenter(tf);
-        pane.setRight(button);
+//        label.setPadding(new Insets(0, 0, 5, 0));
+        PaneToolsFX.addGridRow(pane, 0, 0, "Input URL or choose file", label, tf, button);
+        pane.setHgap(5);
+//        pane.setTop(label);
+//        pane.setCenter(tf);
+//        pane.setRight(button);
         
 		
         // Show dialog
@@ -298,52 +340,6 @@ public class DialogHelperFX implements DialogHelper {
 		logger.trace("Returning path: {}", path);
 	    
 		return path;
-	}
-	
-	
-	@Override
-	public String promptForFilePathOrURL(String defaultPath, File dirBase, String filterDescription, String... exts) {
-		return promptForFilePathOrURL(null, defaultPath, dirBase, filterDescription, exts);
-	}
-	
-	
-	
-	/**
-	 * Return a result after executing a Callable on the JavaFX Platform thread.
-	 * 
-	 * @param callable
-	 * @return
-	 */
-	private static <T> T callOnPlatformThread(final Callable<T> callable) {
-		if (Platform.isFxApplicationThread()) {
-			try {
-				return callable.call();
-			} catch (Exception e) {
-				logger.error("Error calling directly on Platform thread", e);
-				return null;
-			}
-		}
-		
-		CountDownLatch latch = new CountDownLatch(1);
-		ObjectProperty<T> result = new SimpleObjectProperty<>();
-		Platform.runLater(() -> {
-			T value;
-			try {
-				value = callable.call();
-				result.setValue(value);
-			} catch (Exception e) {
-				logger.error("Error calling on Platform thread", e);
-			} finally {
-				latch.countDown();
-			}
-		});
-		
-		try {
-			latch.await();
-		} catch (InterruptedException e) {
-			logger.error("Interrupted while waiting result", e);
-		}
-		return result.getValue();
 	}
 
 }

@@ -40,14 +40,14 @@ import qupath.lib.awt.common.AwtTools;
 import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.viewer.ModeWrapper;
 import qupath.lib.gui.viewer.QuPathViewer;
+import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathROIObject;
 import qupath.lib.objects.TMACoreObject;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
-import qupath.lib.roi.ROIHelpers;
+import qupath.lib.roi.RoiTools;
 import qupath.lib.roi.RoiEditor;
 import qupath.lib.roi.interfaces.ROI;
-import qupath.lib.roi.interfaces.TranslatableROI;
 
 /**
  * The MoveTool is used for quite a lot of things, movement-related:
@@ -90,7 +90,8 @@ public class MoveTool extends AbstractPathTool {
 		if (!e.isPrimaryButtonDown() || e.isConsumed())
             return;
 		
-		Point2D p = viewer.componentPointToImagePoint(e.getX(), e.getY(), null, true);
+		boolean snapping = false;
+		Point2D p = mouseLocationToImage(e, false, snapping);
 		double xx = p.getX();
 		double yy = p.getY();
 		
@@ -126,7 +127,14 @@ public class MoveTool extends AbstractPathTool {
 //			return;
 //		}
 		
-		if (!viewer.isSpaceDown()) {
+		if (!viewer.isSpaceDown() && viewer.getHierarchy() != null) {
+			
+			// Set the current parent object based on the first click
+			PathObject currentObject = viewer.getSelectedObject();
+			PathObject parent = currentObject == null ? null : currentObject.getParent();
+			if (parent != null && parent.isDetection())
+				parent = null;
+			setCurrentParent(viewer.getHierarchy(), parent, currentObject);
 			
 			// See if we can get a handle to edit the ROI
 			// Don't want to edit detections / TMA cores
@@ -137,10 +145,14 @@ public class MoveTool extends AbstractPathTool {
 				if (editor.getROI() == currentROI) {
 					// 1.5 increases the range; the handle radius alone is too small a distance, especially if the handles are painted as squares -
 					// because 1.5 >~ sqrt(2) it ensures that at least the entire square is 'active' (and a bit beyond it)
-					if (editor.grabHandle(xx, yy, viewer.getROIHandleSize() * 1.5, e.isShiftDown()))
+					double search = viewer.getMaxROIHandleSize() * 1.5;
+//					if (snapping && search < 1)
+//						search = 1;
+					if (editor.grabHandle(xx, yy, search, e.isShiftDown()))
 						e.consume();
 				}
-				if (!e.isConsumed() && ROIHelpers.areaContains(currentROI, xx, yy) && canTranslate(viewer.getSelectedObject())) {
+				if (!e.isConsumed() && canAdjust(currentObject) &&
+						(RoiTools.areaContains(currentROI, xx, yy) || getSelectableObjectList(xx, yy).contains(currentObject))) {
 					// If we have a translatable ROI, try starting translation
 					if (editor.startTranslation(xx, yy))
 						e.consume();
@@ -153,14 +165,8 @@ public class MoveTool extends AbstractPathTool {
 		}
 		
 		// Store point for drag-to-pan
-        pDragging = viewer.componentPointToImagePoint(e.getX(), e.getY(), pDragging, false);
+        pDragging = mouseLocationToImage(e, false, true);
 //        viewer.setDoFasterRepaint(true); // Turn on if dragging is too slow
-	}
-	
-	
-	
-	public static boolean canTranslate(PathObject pathObject) {
-		return (canAdjust(pathObject) && pathObject.getROI() instanceof TranslatableROI);
 	}
 	
 	public static boolean canAdjust(PathObject pathObject) {
@@ -178,15 +184,17 @@ public class MoveTool extends AbstractPathTool {
 		
 		if (!e.isPrimaryButtonDown() || e.isConsumed())
             return;
-		
-		Point2D p = viewer.componentPointToImagePoint(e.getX(), e.getY(), null, true);
-		
+
 		// Handle ROIs if the spacebar isn't down
 		if (!viewer.isSpaceDown()) {
-			// Try moving handle
+			
 			RoiEditor editor = viewer.getROIEditor();
+			Point2D p = mouseLocationToImage(e, true, requestPixelSnapping() &&
+					editor.hasROI() && editor.getROI().isArea());
+
+			// Try moving handle
 			if (editor != null && editor.hasActiveHandle()) {
-				ROI updatedROI = editor.setActiveHandlePosition(p.getX(), p.getY(), 0.25, e.isShiftDown());
+				ROI updatedROI = editor.setActiveHandlePosition(p.getX(), p.getY(), viewer.getDownsampleFactor()/2.0, e.isShiftDown());
 				if (updatedROI == null)
 					// This shouldn't occur...?
 					logger.warn("Updated ROI is null! Will be skipped...");
@@ -243,7 +251,7 @@ public class MoveTool extends AbstractPathTool {
 		double yPrevious = pDragging.getY();
 		
 		// Calculate how much the image was dragged
-		pDragging = viewer.componentPointToImagePoint(e.getX(), e.getY(), pDragging, false);
+		pDragging = mouseLocationToImage(e, false, false);
 		dx = pDragging.getX() - xPrevious;
 		dy = pDragging.getY() - yPrevious;
 
@@ -251,7 +259,7 @@ public class MoveTool extends AbstractPathTool {
 		viewer.setDoFasterRepaint(true);
 		viewer.setCenterPixelLocation(viewer.getCenterPixelX() - dx, viewer.getCenterPixelY() - dy);
 //		viewer.setDoFasterRepaint(false);
-		pDragging = viewer.componentPointToImagePoint(e.getX(), e.getY(), pDragging, false);
+		pDragging = mouseLocationToImage(e, false, false);
 		lastDragTimestamp = System.currentTimeMillis();
 	}
 	
@@ -270,6 +278,11 @@ public class MoveTool extends AbstractPathTool {
 			e.consume();
 			PathObject pathObject = viewer.getSelectedObject();
 			
+			if (requestParentClipping(e) && pathObject instanceof PathAnnotationObject) {
+				ROI roiNew = refineROIByParent(pathObject.getROI());
+				((PathAnnotationObject)pathObject).setROI(roiNew);
+			}
+			
 			if (pathObject != null && pathObject.hasROI() && pathObject.getROI().isEmpty()) {
 				if (pathObject.getParent() != null)
 					viewer.getHierarchy().removeObject(pathObject, true);
@@ -281,14 +294,17 @@ public class MoveTool extends AbstractPathTool {
 				} else if (pathObject != null) {
 					// Handle ROI changes only if required
 					if (roiChanged) {
-						PathObject parentPrevious = pathObject.getParent();
-						hierarchy.removeObject(pathObject, true, false);
-						hierarchy.addPathObject(pathObject, false, false);
-						PathObject parentNew = pathObject.getParent();
-						if (parentPrevious == parentNew)
-							hierarchy.fireHierarchyChangedEvent(this, parentPrevious);
+//						PathObject parentPrevious = pathObject.getParent();
+						hierarchy.removeObjectWithoutUpdate(pathObject, true);
+						if (getCurrentParent() == null || !PathPrefs.getClipROIsForHierarchy() || e.isShiftDown())
+							hierarchy.addPathObject(pathObject);
 						else
-							hierarchy.fireHierarchyChangedEvent(this);
+							hierarchy.addPathObjectBelowParent(getCurrentParent(), pathObject, true);
+//						PathObject parentNew = pathObject.getParent();
+//						if (parentPrevious == parentNew)
+//							hierarchy.fireHierarchyChangedEvent(this, parentPrevious);
+//						else
+//							hierarchy.fireHierarchyChangedEvent(this);
 					}
 				}
 				viewer.setSelectedObject(pathObject);				
@@ -335,11 +351,11 @@ public class MoveTool extends AbstractPathTool {
 		
 		// Check if we should have a panning or moving cursor, changing if required
 		ROI currentROI = viewer.getCurrentROI();
-		if (currentROI != null && canTranslate(viewer.getSelectedObject())) {
-			Point2D p2 = viewer.componentPointToImagePoint(e.getX(), e.getY(), null, true);
+		if (currentROI != null && canAdjust(viewer.getSelectedObject())) {
+			Point2D p2 = mouseLocationToImage(e, true, requestPixelSnapping());
 			double xx = p2.getX();
 			double yy = p2.getY();
-			if (ROIHelpers.areaContains(currentROI, xx, yy)) {
+			if (RoiTools.areaContains(currentROI, xx, yy)) {
 				ensureCursorType(Cursor.MOVE);
 				return;
 			}

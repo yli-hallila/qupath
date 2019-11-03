@@ -25,7 +25,7 @@ package qupath.lib.gui.icons;
 
 import java.awt.*;
 import java.awt.geom.AffineTransform;
-import java.awt.geom.Area;
+import java.awt.geom.Path2D;
 import java.awt.geom.PathIterator;
 
 import javafx.scene.text.Text;
@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory;
 
 import javafx.beans.value.ObservableIntegerValue;
 import javafx.scene.Node;
+import javafx.scene.paint.Color;
 import javafx.scene.shape.ClosePath;
 import javafx.scene.shape.Ellipse;
 import javafx.scene.shape.Line;
@@ -48,6 +49,13 @@ import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.helpers.ColorToolsFX;
 import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.roi.*;
+import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectTools;
+import qupath.lib.roi.EllipseROI;
+import qupath.lib.roi.LineROI;
+import qupath.lib.roi.RoiTools;
+import qupath.lib.roi.PointsROI;
+import qupath.lib.roi.RectangleROI;
 import qupath.lib.roi.interfaces.ROI;
 
 /**
@@ -71,7 +79,7 @@ public class PathIconFactory {
 	public static enum PathIcons {	ANNOTATIONS("\ue901", PathPrefs.colorDefaultAnnotationsProperty()),
 									ANNOTATIONS_FILL("\ue900", PathPrefs.colorDefaultAnnotationsProperty()),
 									ARROW_TOOL("\uea3b", PathPrefs.colorDefaultAnnotationsProperty()),
-									
+
 									BRUSH_TOOL("\ue902", PathPrefs.colorDefaultAnnotationsProperty()),
 									
 									CELL_NULCEI_BOTH("\ue903"),
@@ -85,6 +93,8 @@ public class PathIconFactory {
 									ELLIPSE_TOOL("\ue909", PathPrefs.colorDefaultAnnotationsProperty()),
 									EXTRACT_REGION("\ue90a"),
 
+									SELECTION_MODE("S"),
+
 									GRID("\ue90b"),
 									
 									LINE_TOOL("\ue90c", PathPrefs.colorDefaultAnnotationsProperty()),
@@ -97,10 +107,15 @@ public class PathIconFactory {
 									
 									OVERVIEW("\ue911"),
 									
+									PIXEL_CLASSIFICATION("C"),
+
 									PLAYBACK_PLAY("\ue912"),
 									POINTS_TOOL("\ue913", PathPrefs.colorDefaultAnnotationsProperty()),
 									POLYGON_TOOL("\ue914", PathPrefs.colorDefaultAnnotationsProperty()),
 									
+									// TODO: Update to have a unique icon!
+									POLYLINE_TOOL("V", PathPrefs.colorDefaultAnnotationsProperty()),
+
 									PLAYBACK_RECORD("\ue915"),
 									RECTANGLE_TOOL("\ue916", PathPrefs.colorDefaultAnnotationsProperty()),
 									
@@ -168,8 +183,32 @@ public class PathIconFactory {
 		
 	};
 									
-	public static Node createROIIcon(ROI pathROI, int width, int height, javafx.scene.paint.Color color) {
-		
+	public static Node createPathObjectIcon(PathObject pathObject, int width, int height) {
+		var color = ColorToolsFX.getDisplayedColor(pathObject);
+		var roi = pathObject.getROI();
+		var roiNucleus = PathObjectTools.getROI(pathObject, true);
+		if (roi == null)
+			roi = roiNucleus;
+		if (roi == null)
+			return null;
+		if (roi != roiNucleus && roiNucleus != null) {
+			var shapeOuter = RoiTools.getShape(roi);
+			var shapeNucleus = RoiTools.getShape(roiNucleus);
+			var transform = new AffineTransform();
+			double scale = Math.min(width/roi.getBoundsWidth(), height/roi.getBoundsHeight());
+			transform.translate(-roi.getBoundsX(), -roi.getBoundsY());
+			transform.scale(scale, scale);
+			var shapeCombined = new Path2D.Double(shapeOuter);
+			shapeCombined.append(shapeNucleus, false);
+			PathIterator iterator = shapeCombined.getPathIterator(transform, Math.max(0.5, 1.0/scale));
+			return createShapeIcon(iterator, color);
+		}
+		return createROIIcon(roi, width, height, color);
+	}
+
+
+	public static Node createROIIcon(ROI pathROI, int width, int height, Color color) {
+
 		double scale = Math.min(width/pathROI.getBoundsWidth(), height/pathROI.getBoundsHeight());
 		if (pathROI instanceof RectangleROI) {
 			Rectangle rect = new Rectangle(0, 0, pathROI.getBoundsWidth()*scale, pathROI.getBoundsHeight()*scale);
@@ -201,88 +240,66 @@ public class PathIconFactory {
 			line.setStroke(color);
 			line.setFill(null);
 			return line;
-		} else if (pathROI instanceof PointsROI) {
+		} else if (pathROI.isPoint()) {
 			// Just show generic points
 			Node node = PathIconFactory.createNode(Math.min(width, height), Math.min(width, height), PathIconFactory.PathIcons.POINTS_TOOL);
 			if (node instanceof Glyph)
-				((Glyph) node).setColor(color);
+				((Glyph)node).setColor(color);
 			return node;
-//		} else if (pathROI instanceof PolygonROI) {
-//			PolygonROI p = (PolygonROI)pathROI;
-//			int i = 0;
-//			List<Point2> points = p.getPolygonPoints();
-//			double[] pts = new double[points.size()*2];
-//			double xMin = p.getBoundsX();
-//			double yMin = p.getBoundsY();
-//			double lastX = Double.NaN;
-//			double lastY = Double.NaN;
-//			for (Point2 p2 : points) {
-//				double x = (p2.getX() - xMin) * scale;
-//				double y = (p2.getY() - yMin) * scale;
-//				if (Math.round(lastX) == Math.round(x) &&
-//						Math.round(lastY) == Math.round(y)) {
-//					continue;
-//				}
-//				pts[i] = x;
-//				i++;
-//				pts[i+1] = y;
-//				i++;
-//			}
-//			if (i < pts.length)
-//				pts = Arrays.copyOf(pts, i);
-//			Polygon polygon = new Polygon(pts);
-//			polygon.setStroke(c);
-//			polygon.setFill(null);
-//			return polygon;
 		} else {
-			Area area = PathROIToolsAwt.getArea(pathROI);
-			if (area != null) {
-				double xMin = pathROI.getBoundsX();
-				double yMin = pathROI.getBoundsY();
-				Path path = new Path();
-				PathIterator iterator = area.getPathIterator(null, Math.max(0.5, 1.0/scale));
-				double[] coords = new double[6];
-				double lastX = Double.NaN;
-				double lastY = Double.NaN;
-				int n = 0;
-				int skipped = 0;
-				while (!iterator.isDone()) {
-					int type = iterator.currentSegment(coords);
-					double x = (coords[0] - xMin) * scale;
-					double y = (coords[1] - yMin) * scale;
-					n++;
-					if (type == PathIterator.SEG_LINETO && Math.round(lastX) == Math.round(x) &&
-							Math.round(lastY) == Math.round(y)) {
-						skipped++;
-						iterator.next();
-						continue;
-					}
-					lastX = x;
-					lastY = y;
-					
-					switch (type) {
-					case PathIterator.SEG_MOVETO:
-						path.getElements().add(new MoveTo(x, y));
-						break;
-					case PathIterator.SEG_LINETO:
-						path.getElements().add(new LineTo(x, y));
-						break;
-					case PathIterator.SEG_CLOSE:
-						path.getElements().add(new ClosePath());
-						break;
-					default:
-						continue;
-					}
-					iterator.next();
-				}
-				path.setStroke(color);
-				path.setFill(null);
-				logger.trace("Skipped {}/{}", skipped, n);
-				return path;
+			var shape = pathROI.isArea() ? RoiTools.getArea(pathROI) : RoiTools.getShape(pathROI);
+			if (shape != null) {
+				var transform = new AffineTransform();
+				transform.translate(-pathROI.getBoundsX(), -pathROI.getBoundsY());
+				transform.scale(scale, scale);
+				PathIterator iterator = shape.getPathIterator(transform, Math.max(0.5, 1.0/scale));
+				return createShapeIcon(iterator, color);
 			}
 		}
 		logger.warn("Unable to create icon for ROI: {}", pathROI);
 		return null;
+	}
+
+	private static Node createShapeIcon(PathIterator iterator, Color color) {
+		Path path = new Path();
+		double[] coords = new double[6];
+		double lastX = Double.NaN;
+		double lastY = Double.NaN;
+		int n = 0;
+		int skipped = 0;
+		while (!iterator.isDone()) {
+			int type = iterator.currentSegment(coords);
+			double x = coords[0];
+			double y = coords[1];
+			n++;
+			if (type == PathIterator.SEG_LINETO && Math.round(lastX) == Math.round(x) &&
+					Math.round(lastY) == Math.round(y)) {
+				skipped++;
+				iterator.next();
+				continue;
+			}
+			lastX = x;
+			lastY = y;
+
+			switch (type) {
+			case PathIterator.SEG_MOVETO:
+				path.getElements().add(new MoveTo(x, y));
+				break;
+			case PathIterator.SEG_LINETO:
+				path.getElements().add(new LineTo(x, y));
+				break;
+			case PathIterator.SEG_CLOSE:
+				path.getElements().add(new ClosePath());
+				break;
+			default:
+				continue;
+			}
+			iterator.next();
+		}
+		path.setStroke(color);
+		path.setFill(null);
+		logger.trace("Skipped {}/{}", skipped, n);
+		return path;
 	}
 	
 	public static Node createNode(int width, int height, PathIcons type) {
@@ -303,7 +320,7 @@ public class PathIconFactory {
 		}
 	}
 	
-	public static Node createNode(int width, int height, QuPathGUI.Modes mode) {
+	public static Node createNode(int width, int height, QuPathGUI.DefaultMode mode) {
 		switch (mode) {
 		case LINE:
 			return createNode(width, height, PathIcons.LINE_TOOL);
@@ -317,6 +334,8 @@ public class PathIconFactory {
 			return createNode(width, height, PathIcons.POINTS_TOOL);
 		case POLYGON:
 			return createNode(width, height, PathIcons.POLYGON_TOOL);
+		case POLYLINE:
+			return createNode(width, height, PathIcons.POLYLINE_TOOL);
 		case BRUSH:
 			return createNode(width, height, PathIcons.BRUSH_TOOL);
 		case WAND:

@@ -23,27 +23,25 @@
 
 package qupath.lib.gui.viewer;
 
-import qupath.lib.gui.QuPathGUI.Modes;
+import qupath.lib.gui.QuPathGUI.Mode;
 
 /**
  * Interface for defining a particular input mode, generally used 
  * for tools that draw on or otherwise manipulate the image or objects 
  * shown in a viewer.
- * 
+ * <p>
  * This can be used to enable tools to be set from different parts of the 
  * application, without necessarily needing to know exactly how the tool is 
  * implemented, e.g. to request a 'Move' input mode but without knowing  
  * how that will be implemented.
- * 
- * @see PathPrefs.getReturnToMoveMode()
  * 
  * @author Pete Bankhead
  *
  */
 public interface ModeWrapper {
 	
-	public void setMode(Modes mode);
+	public void setMode(Mode mode);
 	
-	public Modes getMode();	
+	public Mode getMode();	
 
 }
