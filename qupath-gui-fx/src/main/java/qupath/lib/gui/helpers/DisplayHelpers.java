@@ -272,6 +272,10 @@ public class DisplayHelpers {
 		} else
 			Platform.runLater(() -> showMessageDialog(title, message));
 	}
+
+	public static boolean showConfirmDialog(String title, Node node) {
+		return showConfirmDialog(title, node, true);
+	}
 	
 	/**
 	 * Show a confirm dialog (OK/Cancel).
@@ -279,14 +283,14 @@ public class DisplayHelpers {
 	 * @param node
 	 * @return
 	 */
-	public static boolean showConfirmDialog(String title, Node node) {
+	public static boolean showConfirmDialog(String title, Node node, boolean resizable) {
 		if (Platform.isFxApplicationThread()) {
 			Alert alert = new Alert(AlertType.NONE, null, ButtonType.OK, ButtonType.CANCEL);
 			if (QuPathGUI.getInstance() != null)
 				alert.initOwner(QuPathGUI.getInstance().getStage());
 			alert.setTitle(title);
 			alert.getDialogPane().setContent(node);
-			alert.setResizable(true);
+			alert.setResizable(resizable);
 			Optional<ButtonType> result = alert.showAndWait();
 			return result.isPresent() && result.get() == ButtonType.OK;
 		} else {

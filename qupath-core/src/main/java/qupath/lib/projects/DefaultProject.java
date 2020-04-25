@@ -25,10 +25,7 @@ package qupath.lib.projects;
 
 import java.awt.Desktop;
 import java.awt.image.BufferedImage;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
@@ -47,6 +44,8 @@ import java.util.UUID;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import javax.imageio.ImageIO;
 
@@ -61,11 +60,13 @@ import com.google.gson.reflect.TypeToken;
 import qupath.lib.classifiers.PathObjectClassifier;
 import qupath.lib.classifiers.pixel.PixelClassifier;
 import qupath.lib.common.GeneralTools;
+import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.ImageData.ImageType;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerBuilder.ServerBuilder;
 import qupath.lib.io.GsonTools;
+import qupath.lib.io.MultipartUtility;
 import qupath.lib.io.PathIO;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjectTools;
@@ -334,11 +335,51 @@ class DefaultProject implements Project<BufferedImage> {
 	public synchronized void syncChanges() throws IOException {
 		writeProject(getFile());
 		writePathClasses(pathClasses);
+
+		if (RemoteOpenslide.hasWriteAccess()) {
+			File projectFile = getFile();
+			Path tempFile = Files.createTempFile("qupath-project", ".zip");
+
+			if (projectFile.getAbsolutePath().contains(System.getProperty("java.io.tmpdir"))) {
+				File projectDirectory = projectFile.getParentFile();
+
+				ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tempFile.toAbsolutePath().toString()));
+				zipDirectory(projectDirectory, dirBase.getName(), zos);
+
+				zos.flush();
+				zos.close();
+			}
+
+			File projectZipFile = tempFile.toFile();
+			RemoteOpenslide.uploadProject(dirBase.getName(), projectZipFile);
+		}
+
+
 //		if (file.isDirectory())
 //			file = new File(dirBase, "project.qpproj");
 //		var json = new GsonBuilder().setLenient().setPrettyPrinting().create().toJson(this);
 //		Files.writeString(file.toPath(), json);
 //		logger.warn("Syncing project not yet implemented!");
+	}
+
+	private void zipDirectory(File folder, String parentFolder, ZipOutputStream zos) throws IOException {
+		for (File file : folder.listFiles()) {
+			if (file.isDirectory()) {
+				zipDirectory(file, parentFolder + "/" + file.getName(), zos);
+				continue;
+			}
+
+			zos.putNextEntry(new ZipEntry(parentFolder + "/" + file.getName()));
+			BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
+
+			byte[] bytesIn = new byte[4096];
+			int read;
+			while ((read = bis.read(bytesIn)) != -1) {
+				zos.write(bytesIn, 0, read);
+			}
+
+			zos.closeEntry();
+		}
 	}
 	
 	@Override

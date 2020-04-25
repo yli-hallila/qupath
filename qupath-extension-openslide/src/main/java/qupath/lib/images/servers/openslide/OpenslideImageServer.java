@@ -29,18 +29,9 @@ import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.URI;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import org.openslide.AssociatedImage;
 import org.openslide.OpenSlide;
@@ -49,6 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.gson.GsonBuilder;
 
+import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.images.servers.AbstractTileableImageServer;
 import qupath.lib.images.servers.ImageChannel;
 import qupath.lib.images.servers.ImageServerMetadata;
@@ -84,6 +76,8 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 	
 	private URI uri;
 	private String[] args;
+
+	private String serverURI;
 	
 	
 	private static double readNumericPropertyOrDefault(Map<String, String> properties, String name, double defaultValue) {
@@ -119,99 +113,102 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 		// from different classloader are likely to cause an error (although upon first further investigation it seems this doesn't really solve the problem...)
 		System.gc();
 
-        if (this.uri.getScheme().startsWith("http")) {
-            initializeRemotely();
-        } else {
-            initializeLocally(uri, args);
-
-        }
-    }
+		if (uri.getScheme().startsWith("http")) {
+			logger.info("Trying to load image remotely...");
+			initializeRemotely();
+		} else {
+			logger.info("Trying to load image locally...");
+			initializeLocally(uri, args);
+		}
+	}
 
     private void initializeRemotely() throws IOException {
-        URL urlROIs = new URL(
-    "http", "localhost", 7000, "/api/v0/properties" + uri.getPath()
-        );
+        Optional<JsonObject> properties = RemoteOpenslide.getProperties(uri.getPath().substring(1));
 
-        try (InputStreamReader reader = new InputStreamReader(urlROIs.openStream())) {
-            JsonObject osr = new Gson().fromJson(reader, JsonObject.class).getAsJsonObject();
+        if (properties.isEmpty()) {
+        	throw new IOException("Error when loading remote slide, properties were empty. See log for more information");
+		}
 
-            int width = osr.get("openslide.level[0].width").getAsInt();
-            int height = osr.get("openslide.level[0].height").getAsInt();
+        JsonObject json = properties.get();
 
-            // TODO: bounds
-			int tileWidth = osr.get("openslide.level[0].tile-width").getAsInt();
-			int tileHeight = osr.get("openslide.level[0].tile-height").getAsInt();
+        this.serverURI = json.get("openslide.remoteserver.uri").getAsString();
 
-			double pixelWidth = osr.get(OpenSlide.PROPERTY_NAME_MPP_X).getAsDouble();
-			double pixelHeight = osr.get(OpenSlide.PROPERTY_NAME_MPP_Y).getAsDouble();
-			double magnification = osr.get(OpenSlide.PROPERTY_NAME_OBJECTIVE_POWER).getAsDouble();
+		int width = json.get("openslide.level[0].width").getAsInt();
+		int height = json.get("openslide.level[0].height").getAsInt();
 
-			// Make sure the pixel sizes are valid
-			if (pixelWidth <= 0 || pixelHeight <= 0 || Double.isInfinite(pixelWidth) || Double.isInfinite(pixelHeight)) {
-				logger.warn("Invalid pixel sizes {} and {}, will use default", pixelWidth, pixelHeight);
-				pixelWidth = Double.NaN;
-				pixelHeight = Double.NaN;
+		// TODO: bounds
+		int tileWidth = json.get("openslide.level[0].tile-width").getAsInt();
+		int tileHeight = json.get("openslide.level[0].tile-height").getAsInt();
+
+		double pixelWidth = json.get(OpenSlide.PROPERTY_NAME_MPP_X).getAsDouble();
+		double pixelHeight = json.get(OpenSlide.PROPERTY_NAME_MPP_Y).getAsDouble();
+		double magnification = json.get(OpenSlide.PROPERTY_NAME_OBJECTIVE_POWER).getAsDouble();
+
+		// Make sure the pixel sizes are valid
+		if (pixelWidth <= 0 || pixelHeight <= 0 || Double.isInfinite(pixelWidth) || Double.isInfinite(pixelHeight)) {
+			logger.warn("Invalid pixel sizes {} and {}, will use default", pixelWidth, pixelHeight);
+			pixelWidth = Double.NaN;
+			pixelHeight = Double.NaN;
+		}
+
+		// Loop through the series again & determine downsamples - assume the image is not cropped for now
+		int levelCount = json.get("openslide.level-count").getAsInt();
+		var resolutionBuilder = new ImageResolutionLevel.Builder(width, height);
+		for (int i = 0; i < levelCount; i++) {
+			// When requesting downsamples from OpenSlide, these seem to be averaged from the width & height ratios:
+			// https://github.com/openslide/openslide/blob/7b99a8604f38280d14a34db6bda7a916563f96e1/src/openslide.c#L272
+			// However this can result in inexact floating point values whenever the 'true' downsample is
+			// almost certainly an integer value, therefore we prefer to use our own calculation.
+			// Other ImageServer implementations can also draw on our calculation for consistency (or override it if they can do better).
+			int w = json.get("openslide.level[" + i + "].width").getAsInt();
+			int h = json.get("openslide.level[" + i + "].height").getAsInt();
+			resolutionBuilder.addLevel(w, h);
+		}
+
+		var levels = resolutionBuilder.build();
+		String path = uri.toString();
+
+		// todo: bounds
+		boundsWidth = width;
+		boundsHeight = height;
+
+		originalMetadata = new ImageServerMetadata.Builder(getClass(),
+				path, boundsWidth, boundsHeight).
+				channels(ImageChannel.getDefaultRGBChannels()). // Assume 3 channels (RGB)
+				name(uri.getPath()).
+				rgb(true).
+				pixelType(PixelType.UINT8).
+				preferredTileSize(tileWidth, tileHeight).
+				pixelSizeMicrons(pixelWidth, pixelHeight).
+				magnification(magnification).
+				levels(levels).
+				build();
+
+		// todo: associated images
+		associatedImages = null;
+		associatedImageList = Collections.emptyList();
+
+		// Try to get a background color
+		try {
+			String bg = json.get(OpenSlide.PROPERTY_NAME_BACKGROUND_COLOR).getAsString();
+			if (bg != null) {
+				if (!bg.startsWith("#"))
+					bg = "#" + bg;
+				backgroundColor = Color.decode(bg);
 			}
+		} catch (Exception e) {
+			backgroundColor = null;
+			logger.debug("Unable to find background color: {}", e.getLocalizedMessage());
+		}
 
-			// Loop through the series again & determine downsamples - assume the image is not cropped for now
-			int levelCount = osr.get("openslide.level-count").getAsInt();
-			var resolutionBuilder = new ImageResolutionLevel.Builder(width, height);
-			for (int i = 0; i < levelCount; i++) {
-				// When requesting downsamples from OpenSlide, these seem to be averaged from the width & height ratios:
-				// https://github.com/openslide/openslide/blob/7b99a8604f38280d14a34db6bda7a916563f96e1/src/openslide.c#L272
-				// However this can result in inexact floating point values whenever the 'true' downsample is
-				// almost certainly an integer value, therefore we prefer to use our own calculation.
-				// Other ImageServer implementations can also draw on our calculation for consistency (or override it if they can do better).
-				int w = osr.get("openslide.level[" + i + "].width").getAsInt();
-				int h = osr.get("openslide.level[" + i + "].height").getAsInt();
-				resolutionBuilder.addLevel(w, h);
-			}
-
-			var levels = resolutionBuilder.build();
-			String path = uri.toString();
-
-			// todo: bounds
-			boundsWidth = width;
-			boundsHeight = height;
-
-			originalMetadata = new ImageServerMetadata.Builder(getClass(),
-					path, boundsWidth, boundsHeight).
-					channels(ImageChannel.getDefaultRGBChannels()). // Assume 3 channels (RGB)
-					name(uri.getPath()).
-					rgb(true).
-					pixelType(PixelType.UINT8).
-					preferredTileSize(tileWidth, tileHeight).
-					pixelSizeMicrons(pixelWidth, pixelHeight).
-					magnification(magnification).
-					levels(levels).
-					build();
-
-			// todo: associated images
-			associatedImages = null;
-			associatedImageList = Collections.emptyList();
-
-			// Try to get a background color
-			try {
-				String bg = osr.get(OpenSlide.PROPERTY_NAME_BACKGROUND_COLOR).getAsString();
-				if (bg != null) {
-					if (!bg.startsWith("#"))
-						bg = "#" + bg;
-					backgroundColor = Color.decode(bg);
-				}
-			} catch (Exception e) {
-				backgroundColor = null;
-				logger.debug("Unable to find background color: {}", e.getLocalizedMessage());
-			}
-
-			// Try reading a thumbnail... the point being that if this is going to fail,
-			// we want it to fail quickly so that it may yet be possible to try another server
-			// This can occur with corrupt .svs (.tif) files that Bioformats is able to handle better
-			try {
-				logger.debug("Test reading thumbnail with openslide: passed (" + getDefaultThumbnail(0, 0).toString() + ")");
-			} catch (IOException e) {
-				logger.error("Unable to read thumbnail using OpenSlide: {}", e.getLocalizedMessage());
-				throw(e);
-			}
+		// Try reading a thumbnail... the point being that if this is going to fail,
+		// we want it to fail quickly so that it may yet be possible to try another server
+		// This can occur with corrupt .svs (.tif) files that Bioformats is able to handle better
+		try {
+			logger.debug("Test reading thumbnail with openslide: passed (" + getDefaultThumbnail(0, 0).toString() + ")");
+		} catch (IOException e) {
+			logger.error("Unable to read thumbnail using OpenSlide: {}", e.getLocalizedMessage());
+			throw(e);
 		}
     }
 
@@ -395,7 +392,7 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 
 //		double downsampleFactor = getPreferredDownsamplesArray()[downsampleInd];
 		BufferedImage img = new BufferedImage(tileWidth, tileHeight, BufferedImage.TYPE_INT_ARGB_PRE);
-		int data[] = ((DataBufferInt)img.getRaster().getDataBuffer()).getData();
+		int[] data = ((DataBufferInt)img.getRaster().getDataBuffer()).getData();
 
 		// Create a thumbnail for the region
 //        	osr.paintRegionOfLevel(g, dx, dy, sx, sy, w, h, level);
@@ -420,17 +417,20 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 	private BufferedImage readTileRemotely(TileRequest tileRequest) throws IOException {
 		int tileX = tileRequest.getImageX() + boundsX;
 		int tileY = tileRequest.getImageY() + boundsY;
+		int level = tileRequest.getLevel();
 		int tileWidth = tileRequest.getTileWidth();
 		int tileHeight = tileRequest.getTileHeight();
 
-		String urlFile = "/api/v0/render_region" + uri.getPath() +
-				       "/" + tileX + "/" + tileY +
-				       "/" + tileRequest.getLevel() +
-				       "/" + tileWidth + "/" + tileHeight;
+		URI uriRegion = RemoteOpenslide.getRenderRegionURL(
+			this.serverURI,
+			uri.getPath().substring(1),
+			tileX, tileY,
+			level,
+			tileWidth,
+			tileHeight
+		);
 
-		URL url = new URL("http", "localhost", 7000, urlFile);
-
-		return ImageIO.read(url);
+		return ImageIO.read(uriRegion.toURL());
 	}
 
 	@Override

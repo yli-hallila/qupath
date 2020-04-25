@@ -459,18 +459,18 @@ buildscript {
   } else {
     println "I won't try to get the last commit - consider running with '-Prequest-git-tag=true' if you want this next time (assuming Git is installed)"
   }
-  
+
 }
 
 /**
  * Specify the order of some operations
  */
-//copyLicenses.dependsOn generateLicenseReport
-//copyLicenseReport.dependsOn generateLicenseReport
-//jar.dependsOn copyLicenses
-//jar.dependsOn copyChangelog
+copyLicenses.dependsOn generateLicenseReport
+copyLicenseReport.dependsOn generateLicenseReport
+jar.dependsOn copyLicenses
+jar.dependsOn copyChangelog
 jar.dependsOn extractNativeLibraries
-//build.dependsOn copyLicenseReport
+build.dependsOn copyLicenseReport
 build.dependsOn copyRuntimeLibs
 
 /**
@@ -498,7 +498,7 @@ jar {
 /**
  * Create javadocs for all modules/packages in one place.
  */
-/*task mergedJavadocs(type: Javadoc) {
+task mergedJavadocs(type: Javadoc) {
     source subprojects.collect { project ->
         project.sourceSets.main.allJava
     }
@@ -506,7 +506,7 @@ jar {
     classpath = files(subprojects.collect { project ->
         project.sourceSets.main.compileClasspath
     })
-}*/
+}
 
 
 
@@ -525,7 +525,7 @@ task createRuntime(dependsOn:build, type:Exec) {
    def params = ["${System.properties['java.home']}/bin/jlink"]
 	
     params << '--output' << outputDir.getAbsolutePath()
-    params << '--add-modules' << 'java.desktop,java.xml,java.scripting,java.sql,java.naming,jdk.unsupported,jdk.zipfs'
+    params << '--add-modules' << 'java.desktop,java.xml,java.scripting,java.sql,java.naming,jdk.unsupported,jdk.zipfs,jdk.jsobject,java.net.http'
 
     params << '--strip-debug'
     params << '--no-header-files'
@@ -592,13 +592,13 @@ task createPackage(dependsOn:createRuntime, type:Exec) {
 		params << '--mac-package-name' << 'QuPath'
 		params << '--mac-package-identifier' << 'QuPath'
 		if (packageType == 'installer') {
-			params << '--package-type' << 'dmg'
+			params << '--type' << 'dmg'
 		} else {
-			params << '--package-type' << 'app-image'
+			params << '--type' << 'app-image'
 		}
 	} else if (OperatingSystem.current().isWindows()) {
 		if (packageType == 'installer') {
-			params << '--package-type' << 'msi'
+			params << '--type' << 'msi'
 			params << '--win-menu-group' << 'QuPath'
 			params << '--win-dir-chooser'
 //			params << '--win-shortcut'
@@ -609,7 +609,7 @@ task createPackage(dependsOn:createRuntime, type:Exec) {
 				println "Simplifying QuPath version ${qupathVersion} to ${appVersion} for compatibility" 
 			}
 		} else
-			params << '--package-type' << 'app-image'
+			params << '--type' << 'app-image'
 		// Create a separate launcher with a console - this can help with debugging
 		def fileTemp = File.createTempFile('qupath-building', '.properties')
 		def consoleLauncherName = "QuPath-${qupathVersion} (debug)"
@@ -618,7 +618,7 @@ task createPackage(dependsOn:createRuntime, type:Exec) {
 //		fileTemp << System.lineSeparator() << 'java-options=' << '"-Dqupath.config="' << consoleLauncherName + '.cfg""'
 		params << '--add-launcher' << "\"${consoleLauncherName}\"=\"${fileTemp.getAbsolutePath()}\""
 	} else
-		params << '--package-type' << 'app-image'
+		params << '--type' << 'app-image'
 
     // Store the app version (typically a simplified version of the full format)
     params << '--app-version' << appVersion

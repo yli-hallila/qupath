@@ -112,6 +112,8 @@ public class Browser extends Region {
 
     private String getHtml(String content, boolean body) {
         String DATA_FOLDER_URI = "";
+        content = content == null ? "" : content;
+
         if (QuPathGUI.getInstance().getProject() != null) {
             DATA_FOLDER_URI = QuPathGUI.getInstance().getProjectBrowser().getProjectPath().toString();
         }

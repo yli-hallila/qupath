@@ -29,15 +29,12 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,6 +57,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
 import qupath.lib.common.GeneralTools;
+import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.display.ChannelDisplayInfo;
 import qupath.lib.display.ImageDisplay;
 import qupath.lib.gui.QuPathGUI;
@@ -105,8 +103,6 @@ public class ProjectImportImagesCommand implements PathCommand {
 		promptToImportImages(qupath);
 	}
 
-
-
 	public static List<ProjectImageEntry<BufferedImage>> promptToImportImages(QuPathGUI qupath, String... defaultPaths) {
 		if (qupath.getProject() == null) {
 			DisplayHelpers.showErrorMessage(commandName, "No project open!");
@@ -129,6 +125,9 @@ public class ProjectImportImagesCommand implements PathCommand {
 		
 		Button btnFileList = new Button("From path list");
 		btnFileList.setOnAction(e -> loadFromTextFile(listView.getItems()));
+
+		Button btnExternalSlide = new Button("External slide");
+		btnExternalSlide.setOnAction(e -> loadFromServer(listView.getItems()));
 		
 		TitledPane paneList = new TitledPane("Image paths", listView);
 		paneList.setCollapsible(false);
@@ -194,7 +193,7 @@ public class ProjectImportImagesCommand implements PathCommand {
 
 //		TilePane paneButtons = new TilePane();
 //		paneButtons.getChildren().addAll(btnFile, btnURL, btnClipboard, btnFileList);
-		GridPane paneButtons = PaneToolsFX.createColumnGridControls(btnFile, btnURL, btnClipboard, btnFileList);
+		GridPane paneButtons = PaneToolsFX.createColumnGridControls(btnFile, btnURL, btnClipboard, btnFileList, btnExternalSlide);
 		paneButtons.setHgap(5);
 		paneButtons.setPadding(new Insets(5));
 		
@@ -461,6 +460,38 @@ public class ProjectImportImagesCommand implements PathCommand {
 		possiblePaths.removeAll(list);
 		list.addAll(possiblePaths);
 		return possiblePaths.size();
+	}
+
+	static int loadFromServer(final List<String> list) {
+		ListView<String> listView = new ListView<>();
+		listView.setPrefSize(480, 480);
+
+		TitledPane paneList = new TitledPane("External slides", listView);
+		paneList.setCollapsible(false);
+
+		BorderPane pane = new BorderPane();
+		pane.setCenter(paneList);
+
+		Optional<JsonArray> slides = RemoteOpenslide.getSlides();
+		if (slides.isPresent()) {
+			for (JsonElement slide : slides.get()) {
+				listView.getItems().add(RemoteOpenslide.getHost() + "/" + slide.getAsString());
+			}
+		}
+
+		Dialog<ButtonType> dialog = new Dialog<>();
+		dialog.setTitle("Import images to project");
+		ButtonType typeImport = new ButtonType("Import selected slides", ButtonData.OK_DONE);
+		dialog.getDialogPane().setContent(pane);
+		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL, typeImport);
+
+		Optional<ButtonType> result = dialog.showAndWait();
+		if (result.isEmpty() || result.get() != typeImport) {
+			return 0;
+		}
+
+		list.addAll(listView.getSelectionModel().getSelectedItems());
+		return listView.getSelectionModel().getSelectedItems().size();
 	}
 	
 	/**

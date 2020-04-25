@@ -179,7 +179,6 @@ public class QuPath {
 				}
 				return;
 			}
-			
 			// Launch main GUI
 			QuPathApp.launch(QuPathApp.class, args);				
 		}

@@ -86,6 +86,7 @@ import qupath.lib.objects.hierarchy.events.PathObjectHierarchyListener;
 import qupath.lib.objects.hierarchy.events.PathObjectSelectionListener;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectIO;
+import qupath.lib.projects.ProjectImageEntry;
 import qupath.lib.roi.ArrowROI;
 import qupath.lib.roi.LineROI;
 import qupath.lib.regions.ImagePlane;
@@ -801,7 +802,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			listAnnotations.getItems().setAll(hierarchy.getAnnotationObjects());
 			hierarchy.getSelectionModel().setSelectedObject(selected);
 
-			updateImageDescription();
+			updateImageDescription(imageData);
 		} else {
 			listAnnotations.getItems().clear();
 		}
@@ -944,11 +945,16 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		TextArea textAreaAnswer = new TextArea(annotation.getAnswer());
 		textAreaAnswer.setPrefRowCount(2);
 		textAreaAnswer.setPrefColumnCount(25);
-		labAnswer.setLabelFor(table);
 
-		HBox controlButtons = new HBox();
+		Label labAnswerInformation = new Label("Answer Information");
+		TextArea textAreaAnswerInformation = new TextArea(""); // todo
+		textAreaAnswerInformation.setPrefRowCount(2);
+		textAreaAnswerInformation.setPrefColumnCount(25);
+		labAnswerInformation.setLabelFor(textAreaAnswerInformation);
 
-		Button newEntryButton = new Button("LisÃ¤Ã¤ uusi");
+		/* Control buttons */
+
+		Button newEntryButton = new Button("Lisää uusi");
 		newEntryButton.setOnMouseClicked(e -> {
 			addRowToTable(table, questions);
 		});
@@ -958,12 +964,20 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			table.getItems().remove(table.getSelectionModel().getFocusedIndex());
 		});
 
-		controlButtons.getChildren().addAll(newEntryButton, deleteEntryButton);
+		HBox controlButtons = new HBox(5, newEntryButton, deleteEntryButton);
+		VBox nodeMultipleChoiceQuestion = new VBox(table, controlButtons);
 
-		panel.add(controlButtons, 1, 3);
-		panel.add(labAnswer, 0, 4);
-		panel.add(table, 1, 4);
-		panel.add(textAreaAnswer, 1, 5);
+		TabPane tabPane = new TabPane();
+		tabPane.getTabs().addAll(
+			new Tab("Multiple-choice", nodeMultipleChoiceQuestion),
+			new Tab("Text-answer", textAreaAnswer)
+		);
+
+		panel.add(tabPane, 1, 3);
+		panel.add(labAnswer, 0, 3);
+
+		panel.add(labAnswerInformation, 0, 4);
+		panel.add(textAreaAnswerInformation, 1, 4);
 
 		if (!DisplayHelpers.showConfirmDialog("Set annotation properties", panel))
 			return false;
@@ -1075,13 +1089,20 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 	public void selectedPathObjectChanged(final PathObject pathObjectSelected, final PathObject previousObject, Collection<PathObject> allSelected) {
 		if (!Platform.isFxApplicationThread()) {
 			// Do not synchronize to changes on other threads (since these may interfere with scripts)
-//			Platform.runLater(() -> selectedPathObjectChanged(pathObjectSelected, previousObject, allSelected));
+			Platform.runLater(() -> selectedPathObjectChanged(pathObjectSelected, previousObject, allSelected));
 			return;
+		}
+
+		ObservableList<PathObject> selectedItems = listAnnotations.getSelectionModel().getSelectedItems();
+		if (selectedItems.size() == 1 && selectedItems.get(0).getAnswer() != null) {
+			showAnswerClassAction.disabledProperty().setValue(false);
+		} else {
+			showAnswerClassAction.disabledProperty().setValue(true);
 		}
 
 		if (changingSelection)
 			return;
-		
+
 		changingSelection = true;
 		if (synchronizePrimarySelectionOnly) {
 			try {
@@ -1096,9 +1117,8 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 				changingSelection = false;
 			}
 		}
-		
-		try {
 
+		try {
 			var hierarchySelected = new TreeSet<>(DefaultPathObjectComparator.getInstance());
 			hierarchySelected.addAll(allSelected);
 
@@ -1118,12 +1138,6 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			}
 			// Check if we're making changes
 			List<PathObject> currentlySelected = model.getSelectedItems();
-
-            if (currentlySelected.size() == 1 && hierarchy.getSelectionModel().getSelectedObject().getAnswer() != null) {
-                showAnswerClassAction.disabledProperty().setValue(false);
-            } else {
-                showAnswerClassAction.disabledProperty().setValue(true);
-            }
 
 			if (selected.size() == currentlySelected.size() && (hierarchySelected.containsAll(currentlySelected))) {
 				listAnnotations.refresh();
@@ -1244,7 +1258,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 	@Override
 	public void imageDataChanged(ImageDataWrapper<BufferedImage> source, ImageData<BufferedImage> imageDataOld, ImageData<BufferedImage> imageDataNew) {
 		setImageData(imageDataNew);
-		updateImageDescription();
+		updateImageDescription(imageDataNew);
 	}
 
 
@@ -1281,42 +1295,23 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		// If the lists are different, we need to update accordingly
 		listAnnotations.getSelectionModel().clearSelection();
 		listAnnotations.getItems().setAll(newList);
-		updateImageDescription();
+		updateImageDescription(imageData);
 	}
 
-	private void updateImageDescription() { // Hacky way to achieve this, since no event is fired when ImageData is ready
-		Thread t = new Thread(() -> {
-			try {
-				Thread.sleep(250);
-			} catch (InterruptedException ex) {}
+	private void updateImageDescription(ImageData<BufferedImage> imageData) { // Hacky way to achieve this, since no event is fired when ImageData is ready
+		if (QuPathGUI.getInstance().getProject() == null || imageData == null) {
+			browser.setContent(null);
+			return;
+		}
 
-			Platform.runLater(() -> {
-				ImageData<BufferedImage> data = QuPathGUI.getInstance().getImageData();
+		ImageData<BufferedImage> data = QuPathGUI.getInstance().getImageData();
+		ProjectImageEntry<BufferedImage> imageEntry = QuPathGUI.getInstance().getProject().getEntry(data);
 
-				if (data == null)
-					return;
-
-				// todo: fix this mess
-				String information = (String) data.getProperty("Information");
-				if (information != null && !information.isEmpty()) {
-					browser.setContent(information);
-				} else {
-					if (qupath.getProject() == null) {
-						browser.setContent("");
-					} else {
-						String description = qupath.getProject().getDescription();
-
-						if (description != null) {
-							browser.setContent(description);
-						} else {
-							browser.setContent("");
-						}
-					}
-				}
-			});
-		});
-
-		t.start();
+		if (data == null || imageEntry == null) {
+			browser.setContent(null);
+		} else {
+			browser.setContent(imageEntry.getDescription());
+		}
 	}
 
 

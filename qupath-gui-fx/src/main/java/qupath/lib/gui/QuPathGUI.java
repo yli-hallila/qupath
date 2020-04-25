@@ -60,9 +60,6 @@ import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.Optional;
-import java.nio.file.*;
-import java.util.*;
-import java.util.List;
 import java.util.Locale.Category;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutorCompletionService;
@@ -81,7 +78,6 @@ import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
 
-import com.google.common.base.Charsets;
 import com.google.gson.*;
 import javafx.scene.*;
 import javafx.scene.Cursor;
@@ -98,7 +94,6 @@ import javafx.scene.input.*;
 import javafx.scene.layout.*;
 import javafx.scene.text.*;
 import javafx.scene.text.Font;
-import javafx.stage.Modality;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
 import org.controlsfx.control.action.ActionUtils.ActionTextBehavior;
@@ -215,6 +210,7 @@ import qupath.lib.gui.helpers.CommandFinderTools;
 import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.gui.helpers.DisplayHelpers.DialogButton;
 import qupath.lib.gui.helpers.DisplayHelpers.SnapshotType;
+import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.gui.helpers.dialogs.DialogHelper;
 import qupath.lib.gui.helpers.dialogs.DialogHelperFX;
 import qupath.lib.gui.helpers.dialogs.ParameterPanelFX;
@@ -344,7 +340,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 								SUMMARY_TMA, SUMMARY_ANNOTATIONS, SUMMARY_DETECTIONS,
 								VIEW_TRACKER, MEASUREMENT_MAP, WORKFLOW_DISPLAY,
 								DELETE_SELECTED_OBJECTS, CLEAR_HIERARCHY, CLEAR_DETECTIONS, CLEAR_TMA_CORES, CLEAR_ANNOTATIONS,
-								PROJECT_NEW, PROJECT_OPEN, PROJECT_CLOSE, PROJECT_SAVE, PROJECT_IMPORT_IMAGES, PROJECT_EXPORT_IMAGE_LIST, PROJECT_METADATA, PROJECT_DESCRIPTION,
+								PROJECT_NEW, PROJECT_OPEN, CONNECT_TO_SERVER, PROJECT_CLOSE, PROJECT_SAVE, PROJECT_IMPORT_IMAGES, PROJECT_EXPORT_IMAGE_LIST, PROJECT_METADATA, PROJECT_DESCRIPTION,
 								PREFERENCES, QUPATH_SETUP,
 								TRANSFER_ANNOTATION, SELECT_ALL_ANNOTATION, COPY_ANNOTATION, PASTE_ANNOTATION, TOGGLE_SYNCHRONIZE_VIEWERS,
 								UNDO, REDO
@@ -423,7 +419,6 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	
 	private UndoRedoManager undoRedoManager;
 	private TabPane tabbedPanel;
-
 
 	private HostServices hostServices;
 
@@ -768,6 +763,17 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		// Show a startup message, if we have one
 		showStarupMesssage();
 
+		if (PathPrefs.showWorkspaceDialogOnStartupProperty().get()) {
+			try {
+				ConnectToServerCommand connectToServer = new ConnectToServerCommand(this);
+				connectToServer.run();
+			} catch (Exception e) {
+				DisplayHelpers.showErrorNotification("Error when connecting to server", e);
+				RemoteOpenslide.setHost(null);
+				RemoteOpenslide.setAuthentication(null, null);
+			}
+		}
+
 		// Run startup script, if we can
 		try {
 			runStartupScript();
@@ -921,8 +927,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 //		}
 //		return null;
 //	}
-	
-	
+
 	/**
 	 * Directory containing extensions.
 	 * 
@@ -1454,55 +1459,131 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 	}
 
 	public void showWorkspaceDialog() {
-		Optional<String> workspace = loadWorkspaceFile();
-		if (!workspace.isPresent())
+		if (RemoteOpenslide.getHost() == null) {
+			DisplayHelpers.showInfoNotification("Error", "Not connected to any server.");
+		} else {
+			showWorkspaceDialog(RemoteOpenslide.getWorkspace());
+		}
+	}
+
+	public void showWorkspaceDialog(Optional<String> workspace) {
+		if (workspace.isEmpty()) {
+			RemoteOpenslide.setHost(null);
+			DisplayHelpers.showErrorNotification("No workspace file", "Try reconnecting to server.");
 			return;
+		}
 
 		Dialog dialog = new Dialog(); // see: https://stackoverflow.com/questions/36949595
 		dialog.setTitle("Select project");
+		dialog.initOwner(getStage());
+		dialog.setWidth(500);
+		dialog.setHeight(600);
 
 		TabPane tabPane = new TabPane();
-		tabPane.setTabClosingPolicy(TabClosingPolicy.UNAVAILABLE);
+		tabPane.prefHeightProperty().bind(dialog.heightProperty().subtract(75));
+		tabPane.setTabClosingPolicy(TabClosingPolicy.SELECTED_TAB);
 		tabPane.getStyleClass().add("floating");
 
-		dialog.initOwner(getStage());
-		dialog.getDialogPane().setPrefWidth(500);
-		dialog.getDialogPane().setMaxHeight(600);
-
-		JsonObject jsonObject = new JsonParser().parse(workspace.get()).getAsJsonObject(); // todo: GSON
-		JsonArray workspaces = jsonObject.get("workspaces").getAsJsonArray();
+		JsonArray workspaces = JsonParser.parseString(workspace.get()).getAsJsonArray(); // todo: GSON
 
 		for (JsonElement workspaceElement : workspaces) {
 			JsonObject workspaceObject = workspaceElement.getAsJsonObject();
+			String workspaceName = workspaceObject.get("name").getAsString();
 
 			ScrollPane scrollPane = new ScrollPane();
-			scrollPane.setPrefSize(525, 600);
-			VBox list = new VBox();
+			scrollPane.prefWidthProperty().bind(tabPane.widthProperty());
+			VBox projects = new VBox();
 
-			JsonArray jsonArray = workspaceObject.get("projects").getAsJsonArray();
+			JsonArray projectsJson = workspaceObject.get("projects").getAsJsonArray();
 
-			for (JsonElement el : jsonArray) {
-				JsonObject object = el.getAsJsonObject();
-				try {
-					list.getChildren().add(createListItem(object, dialog));
-				} catch (IOException e) {
-					logger.error("Error when adding workspace item", e);
-				}
+			for (JsonElement project : projectsJson) {
+				JsonObject json = project.getAsJsonObject();
+				projects.getChildren().add(createListItem(json, dialog, scrollPane, workspaceName));
 			}
 
-			scrollPane.setContent(list);
-			tabPane.getTabs().add(new Tab(workspaceObject.get("name").getAsString(), scrollPane));
+			scrollPane.setContent(projects);
+			tabPane.getTabs().add(new Tab(workspaceName, scrollPane));
 		}
+
+		tabPane.getTabs().add(new Tab("+"));
+		tabPane.getSelectionModel().selectedItemProperty().addListener((observable, oldTab, newTab) -> {
+			if (newTab.getText().equals("+")) {
+				tabPane.getSelectionModel().select(oldTab);
+				String workspaceName = DisplayHelpers.showInputDialog("Workspace name", "", "");
+
+				if (workspaceName == null) {
+					return;
+				}
+
+				RemoteOpenslide.Result result = RemoteOpenslide.createNewWorkspace(workspaceName);
+
+				if (result == RemoteOpenslide.Result.OK) {
+					reopenWorkspace(dialog);
+				} else {
+					DisplayHelpers.showErrorNotification(
+					"Error when creating workspace", "See log for more details"
+					);
+				}
+			}
+		});
+
+		tabPane.getTabs().forEach(tab -> tab.setOnCloseRequest(event -> {
+			boolean confirm = DisplayHelpers.showConfirmDialog("Delete workspace",
+					"Are you sure you wish to delete this workspace? This is un-reversible.");
+
+			if (!confirm) {
+				event.consume();
+				return;
+			}
+
+			String workspaceName = tabPane.getSelectionModel().getSelectedItem().getText();
+			RemoteOpenslide.Result result = RemoteOpenslide.deleteWorkspace(workspaceName);
+
+			if (result == RemoteOpenslide.Result.FAIL) {
+				event.consume();
+				DisplayHelpers.showErrorNotification("Error when deleting workspace", "Server error");
+			}
+		}));
 
 		dialog.setDialogPane(new DialogPane() {
 			@Override
 			protected Node createDetailsButton() {
-				CheckBox checkbox = new CheckBox("Show on startup");
-				checkbox.setSelected(PathPrefs.showWorkspaceDialogOnStartupProperty().get());
-				checkbox.setOnAction(e -> PathPrefs.showWorkspaceDialogOnStartupProperty().set(checkbox.isSelected()));
-				return checkbox;
+				HBox hbox = new HBox(5);
+
+				Button createNewProject = new Button("Create new project");
+				createNewProject.setOnAction(action -> {
+					String projectName = DisplayHelpers.showInputDialog("Project name", "", "");
+					String workspaceName = tabPane.getSelectionModel().getSelectedItem().getText();
+
+					if (projectName == null) {
+						return;
+					}
+
+					RemoteOpenslide.Result result = RemoteOpenslide.createNewProject(workspaceName, projectName);
+
+					if (result == RemoteOpenslide.Result.OK) {
+						reopenWorkspace(dialog);
+					} else {
+						DisplayHelpers.showErrorNotification("Error when creating project", "See log for more details");
+					}
+				});
+
+				Button logout = new Button("Logout");
+				logout.setOnAction(action -> {
+					RemoteOpenslide.setHost(null);
+					RemoteOpenslide.setAuthentication(null, null);
+					dialog.close();
+				});
+
+				if (!RemoteOpenslide.hasWriteAccess()) {
+					createNewProject.setDisable(true);
+				}
+
+				hbox.getChildren().addAll(createNewProject, logout);
+				return hbox;
 			}
 		});
+
 
 		// TODO: Center window
 		dialog.getDialogPane().setContent(tabPane);
@@ -1511,28 +1592,21 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		dialog.getDialogPane().setExpandableContent(new Group());
 		dialog.getDialogPane().setExpanded(true);
 		dialog.setResizable(false);
-		dialog.showAndWait();
-	}
 
-	private Optional<String> loadWorkspaceFile() {
-		String QuPathInstallPath = System.getProperty("user.dir");
-		Path workspacePath = Paths.get(QuPathInstallPath, "workspace.qpdata");
-
-		if (Files.exists(workspacePath, LinkOption.NOFOLLOW_LINKS)) {
-			try {
-				String workspace = GeneralTools.readFileAsString(workspacePath);
-				return Optional.of(workspace);
-			} catch (IOException e) {
-				DisplayHelpers.showErrorMessage("Error reading workspace file", e);
-				logger.info("Path: ", workspacePath);
-			}
+		if (!RemoteOpenslide.hasWriteAccess()) {
+			tabPane.getTabs().get(tabPane.getTabs().size() - 1).setDisable(true);
+			tabPane.setTabClosingPolicy(TabClosingPolicy.UNAVAILABLE);
 		}
 
-		return Optional.empty();
+		dialog.show();
 	}
 
-	private HBox createListItem(JsonObject object, Dialog parent) throws IOException {
+	private HBox createListItem(JsonObject object, Dialog parent, ScrollPane scrollPane, String workspaceName)  {
+		String name = object.get("name").getAsString();
+		String description = object.get("description").getAsString();
+
 		HBox item = new HBox();
+		item.prefWidthProperty().bind(scrollPane.widthProperty());
 		item.setStyle("-fx-cursor: hand; -fx-border-style: hidden hidden solid hidden; -fx-border-width: 1; -fx-border-color: #ccc; ");
 		item.setPadding(new Insets(5));
 
@@ -1543,83 +1617,121 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		rightSide.setAlignment(Pos.CENTER_LEFT);
 		rightSide.setPadding(new Insets(0, 0, 0, 10));
 
-		Text header = new Text(object.get("name").getAsString());
+		Text header = new Text(name);
 		header.setFont(Font.font("Calibri", FontWeight.BOLD, FontPosture.REGULAR, 15));
 
-		Text description = new Text(object.get("description").getAsString());
-		description.setWrappingWidth(440);
+		Text subtext = new Text(object.get("description").getAsString());
 
-		rightSide.getChildren().addAll(header, description);
+		rightSide.getChildren().addAll(header, subtext);
 		item.getChildren().addAll(leftSide, rightSide);
 		item.setOnMouseClicked(event -> {
 			if (event.getButton() == MouseButton.PRIMARY) {
-				File projectFile;
+				loadProject(object, parent);
+			}
 
-				if (isUniversityMachine()) {
-					projectFile = new File(object.get("path").getAsString().replace("{$INSTALL_DIR}", System.getProperty("user.dir")));
-				} else {
-					try {
-						Task<Boolean> worker = new Task<>() {
-							@Override
-							protected Boolean call() throws Exception {
-								URL urlROIs = new URL(
-										"http", "localhost", 7000, "/api/v0/download_project/" + object.get("id").getAsString()
-								);
+			if (event.getButton() == MouseButton.SECONDARY) {
+				ContextMenu menu = new ContextMenu();
+				MenuItem rename = new MenuItem("Rename");
+				rename.setDisable(true);
 
-								File tempDir = new File(System.getProperty("java.io.tmpdir") + "qupath");
+				MenuItem delete = new MenuItem("Delete");
+				delete.setOnAction(action -> {
+					boolean confirm = DisplayHelpers.showConfirmDialog(
+					"Are you sure?",
+					"Do you wish to delete this project? This action is un-reversible."
+					);
 
-								updateMessage("Downloading project");
-								unzip(urlROIs.openConnection().getInputStream(), tempDir.getAbsolutePath(), this::updateMessage);
-								updateMessage("Extracted. Opening project");
-								return true;
-							}
-						};
+					if (confirm) {
+						RemoteOpenslide.Result result = RemoteOpenslide.deleteProject(name);
 
-						ProgressDialog progress = new ProgressDialog(worker);
-						progress.setTitle("Project import");
-						submitShortTask(worker);
-						progress.showAndWait();
-					} catch (Exception e) {
-						logger.error("Error when reading project zip", e);
+						if (result == RemoteOpenslide.Result.OK) {
+							reopenWorkspace(parent);
+						} else {
+							DisplayHelpers.showErrorNotification(
+							"Error when deleting project",
+						"See more information from log."
+							);
+						}
 					}
+				});
 
-					projectFile = new File(System.getProperty("java.io.tmpdir") + "qupath/" + object.get("id").getAsString() + "/project.qpproj");
-				}
+				MenuItem editDescription = new MenuItem("Edit description");
+				editDescription.setOnAction(action -> {
+					String newDescription = DisplayHelpers.showInputDialog(
+					"New description", "", description
+					);
 
-				try {
-					Project<BufferedImage> project = ProjectIO.loadProject(projectFile, BufferedImage.class);
+					RemoteOpenslide.Result result = RemoteOpenslide.editProjectDescription(name, newDescription);
+					if (result == RemoteOpenslide.Result.OK) {
+						reopenWorkspace(parent);
+					}
+				});
 
-					parent.close();
-					tabbedPanel.getSelectionModel().select(0);
-					((TabPane) analysisPanel).getSelectionModel().select(0);
-					setProject(project);
-				} catch (IOException e) {
-					DisplayHelpers.showErrorMessage("Load project", "Error when trying to load project. See log for additional information.");
-					logger.error("Error loading prpoject", e);
-				}
+				menu.getItems().addAll(rename, delete, editDescription);
+				menu.show(item, event.getScreenX(), event.getScreenY());
 			}
 		});
 
 		return item;
 	}
 
-	/**
-	 * Size of the buffer to read/write data
-	 */
-	private static final int BUFFER_SIZE = 4096;
+	private void reopenWorkspace(Dialog parent) {
+		parent.close();
+		showWorkspaceDialog();
+	}
+
+	private void loadProject(JsonObject object, Dialog parent) {
+		try {
+			Path tempPath = Path.of(System.getProperty("java.io.tmpdir"), "qupath-ext-project");
+			String tempPathStr = tempPath.toAbsolutePath().toString();
+			String projectId = object.get("id").getAsString();
+			Files.createDirectories(tempPath);
+
+			Task<Boolean> worker = new Task<>() {
+				@Override
+				protected Boolean call() throws Exception {
+					Optional<InputStream> is = RemoteOpenslide.getProject(projectId);
+
+					if (is.isPresent()) {
+						updateMessage("Downloading project");
+						unzip(is.get(), tempPathStr, this::updateMessage);
+						updateMessage("Extracted. Opening project");
+					} else {
+						updateMessage("Error when downloading project, see log.");
+					}
+
+					return true;
+				}
+			};
+
+			ProgressDialog progress = new ProgressDialog(worker);
+			progress.setTitle("Project import");
+			submitShortTask(worker);
+			progress.showAndWait();
+
+			File projectFile = new File(tempPathStr + "/" + projectId + "/project.qpproj");
+			Project<BufferedImage> project = ProjectIO.loadProject(projectFile, BufferedImage.class);
+
+			/* todo: make method: resetView() */
+			parent.close();
+			tabbedPanel.getSelectionModel().select(0);
+			((TabPane) analysisPanel).getSelectionModel().select(0);
+			setProject(project);
+		} catch (IOException e) {
+			DisplayHelpers.showErrorMessage("Load project", "Error when trying to load project. See log for additional information.");
+			e.printStackTrace();
+		}
+	}
+
 	/**
 	 * Extracts a zip file specified by the zipFilePath to a directory specified by
 	 * destDirectory (will be created if does not exists)
+	 *
 	 * @param is
 	 * @param destDirectory
 	 * @throws IOException
 	 */
 	public void unzip(InputStream is, String destDirectory, Consumer<String> updater) throws IOException {
-		File destDir = new File(destDirectory);
-		if (!destDir.exists()) {
-			destDir.mkdir();
-		}
-
 		ZipInputStream zipIn = new ZipInputStream(is, Charset.forName("Cp437"));
 		ZipEntry entry = zipIn.getNextEntry();
 
@@ -1628,11 +1740,11 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		while (entry != null) {
 			String filePath = destDirectory + File.separator + entry.getName();
 
-			if (!entry.isDirectory()) {
-				extractFile(zipIn, filePath);
+			if (entry.isDirectory()) {
+				Files.createDirectories(Path.of(filePath));
 			} else {
-				File dir = new File(filePath);
-				dir.mkdir();
+				Files.createDirectories(Path.of(filePath).getParent());
+				extractFile(zipIn, filePath);
 			}
 
 			zipIn.closeEntry();
@@ -1643,6 +1755,12 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 
 		zipIn.close();
 	}
+
+	/**
+	 * Size of the buffer to read/write data
+	 */
+	private static final int BUFFER_SIZE = 4096;
+
 	/**
 	 * Extracts a zip entry (file entry)
 	 * @param zipIn
@@ -1661,22 +1779,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		bos.close();
 	}
 
-	/*private File newFile(File destinationDir, ZipEntry zipEntry) throws IOException {
-		File destFile = new File(destinationDir, zipEntry.getName());
-		new File(destFile.getParent()).mkdirs();
-
-		String destDirPath = destinationDir.getCanonicalPath();
-		String destFilePath = destFile.getCanonicalPath();
-
-		if (!destFilePath.startsWith(destDirPath + File.separator)) {
-			throw new IOException("Entry is outside of the target dir: " + zipEntry.getName());
-		}
-
-		return destFile;
-	}*/
-
 	/**
-	 * Tries to guess if this is a univeristy machine with access to local network drive.
+	 * Tries to guess if this is a university machine with access to local network drive.
 	 * @return True if university machine with access to local files.
 	 */
 	private boolean isUniversityMachine() {
@@ -3176,6 +3280,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 						createCommandAction(new ProjectCheckUrisCommand(this), "Check project URIs")
 						),
 				menuRecent,
+				getActionMenuItem(GUIActions.CONNECT_TO_SERVER),
 				null,
 				getActionMenuItem(GUIActions.OPEN_IMAGE),
 				getActionMenuItem(GUIActions.OPEN_IMAGE_OR_URL),
@@ -3398,8 +3503,6 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 					getActionMenuItem(GUIActions.TRANSFER_ANNOTATION),
                     getActionMenuItem(GUIActions.COPY_ANNOTATION),
                     getActionMenuItem(GUIActions.PASTE_ANNOTATION),
-					null,
-                    createCommandAction(new AnnotateImageCommand(this), "Annotate image"),
 					null,
 					createPluginAction("Expand annotations", DilateAnnotationPlugin.class, null),
 					createPluginAction("Split annotations", SplitAnnotationsPlugin.class, null),
@@ -3989,6 +4092,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			return createCommandAction(new ProjectCreateCommand(this), "Create project");
 		case PROJECT_OPEN:
 			return createCommandAction(new ProjectOpenCommand(this), "Open project");
+		case CONNECT_TO_SERVER:
+			return createCommandAction(new ConnectToServerCommand(this), "Connect to server");
 		case PROJECT_CLOSE:
 			return createCommandAction(new ProjectCloseCommand(this), "Close project");
 		case PROJECT_SAVE:
@@ -4802,6 +4907,20 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		if (currentProject == project)
 			return;
 
+		// Check if we want to save the current image; we could still veto the project change at this point
+		var viewer = getViewer();
+		var imageData = viewer.getImageData();
+		if (imageData != null) {
+			ProjectImageEntry<BufferedImage> entry = getProjectImageEntry(imageData);
+//			if (entry != null) {
+			if (!checkSaveChanges(imageData)) {
+				return;
+			}
+			getViewer().setImageData(null);
+//			} else
+//				ProjectImportImagesCommand.addSingleImageToProject(project, imageData.getServer(), null);
+		}
+
 		// Ensure we save the current project
 		if (currentProject != null) {
 			try {
@@ -4811,19 +4930,6 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				if (!DisplayHelpers.showYesNoDialog("Project error", "A problem occurred while saving the last project - do you want to continue?"))
 					return;
 			}
-		}
-
-		// Check if we want to save the current image; we could still veto the project change at this point
-		var viewer = getViewer();
-		var imageData = viewer.getImageData();
-		if (imageData != null) {
-			ProjectImageEntry<BufferedImage> entry = getProjectImageEntry(imageData);
-//			if (entry != null) {
-				if (!checkSaveChanges(imageData))
-					return;
-				getViewer().setImageData(null);
-//			} else
-//				ProjectImportImagesCommand.addSingleImageToProject(project, imageData.getServer(), null);
 		}
 
 		// Confirm the URIs for the new project
@@ -4850,15 +4956,18 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			} else
 				list.add(0, uri);
 		}
-		
+
 		this.project.set(project);
 		if (!this.projectBrowser.setProject(project)) {
 			this.project.set(null);
 			this.projectBrowser.setProject(null);
-            this.browser.setContent("No description available for this project");
+		}
+
+		if (this.project == null || project == null || project.getDescription() == null) {
+			this.browser.setContent("No description available for this project");
 		} else {
-            this.browser.setContent(project.getDescription());
-        }
+			this.browser.setContent(project.getDescription());
+		}
 		
 		// Enable disable actions
 		updateProjectActionStates();

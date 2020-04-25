@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.stage.Stage;
+import qupath.lib.gui.commands.ConnectToServerCommand;
 import qupath.lib.gui.prefs.PathPrefs;
 
 /**
@@ -85,10 +86,6 @@ public class QuPathApp extends Application {
 					PathPrefs.savePreferences();
 				}
 			});
-		}
-
-		if (PathPrefs.showWorkspaceDialogOnStartupProperty().get()) {
-			Platform.runLater(gui::showWorkspaceDialog);
 		}
 	}
 

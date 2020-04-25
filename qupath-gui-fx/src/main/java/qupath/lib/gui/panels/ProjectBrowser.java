@@ -93,6 +93,7 @@ import qupath.lib.gui.ImageDataChangeListener;
 import qupath.lib.gui.ImageDataWrapper;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.QuPathGUI.GUIActions;
+import qupath.lib.gui.commands.ProjectDescriptionEditorCommand;
 import qupath.lib.gui.commands.ProjectImportImagesCommand;
 import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.gui.helpers.PaintingToolsFX;
@@ -406,7 +407,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		MenuItem miRefreshThumbnail = ActionUtils.createMenuItem(actionRefreshThumbnail);
 		MenuItem miEditDescription = ActionUtils.createMenuItem(actionEditDescription);
 		MenuItem miAddMetadata = ActionUtils.createMenuItem(actionAddMetadataValue);
-		
+
 		
 		// Set visibility as menu being displayed
 		menu.setOnShowing(e -> {

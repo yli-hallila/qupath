@@ -104,7 +104,8 @@ public class OpenslideServerBuilder implements ImageServerBuilder<BufferedImage>
 		try {
 			return new OpenslideImageServer(uri, args);
 		} catch (Exception e) {
-			logger.warn("Unable to open {} with OpenSlide: {}", uri, e.getLocalizedMessage());
+			logger.warn("Unable to open {} with OpenSlide: {}", uri, e.getMessage());
+			e.printStackTrace();
 		}
 		return null;
 	}
