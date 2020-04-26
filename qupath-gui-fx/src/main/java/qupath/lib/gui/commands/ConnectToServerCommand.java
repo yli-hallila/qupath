@@ -13,6 +13,7 @@ import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.common.RemoteOpenslide;
+import qupath.lib.gui.prefs.PathPrefs;
 
 import java.util.Base64;
 
@@ -43,6 +44,8 @@ public class ConnectToServerCommand implements PathCommand {
 
             // Java HTTPClient sends only credentials when asked.
             if ((username.isBlank() && password.isBlank()) || RemoteOpenslide.login()) {
+                PathPrefs.remoteOpenslideHost().setValue(host);
+
                 qupath.showWorkspaceDialog();
             } else {
                 RemoteOpenslide.setHost(null);
@@ -61,7 +64,7 @@ public class ConnectToServerCommand implements PathCommand {
         Label labUsername = new Label("Username");
         TextField tfUsername = new TextField();
         labUsername.setLabelFor(tfUsername);
-        tfUsername.setPromptText("Vieras");
+        tfUsername.setPromptText("Guest");
 
         Label labPassword = new Label("Password");
         PasswordField tfPassword = new PasswordField();
@@ -71,7 +74,7 @@ public class ConnectToServerCommand implements PathCommand {
         Label labHost = new Label("Host");
         TextField tfHost = new TextField();
         labHost.setLabelFor(tfHost);
-        tfHost.setText("http://qupath.yli-hallila.fi:7777");
+        tfHost.setText(PathPrefs.remoteOpenslideHost().get());
 
         int row = 0;
         ColumnConstraints col1 = new ColumnConstraints();

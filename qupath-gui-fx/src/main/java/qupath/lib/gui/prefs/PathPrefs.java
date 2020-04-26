@@ -1481,7 +1481,17 @@ public class PathPrefs {
 
 
 	private static BooleanProperty showWorkspaceDialog = createPersistentPreference("showWorkspaceDialog", true);
-	
+
+	/**
+	 * Flag to indicate whether to show workspace dialog on startup
+	 */
+	public static StringProperty remoteOpenslideHost() {
+		return remoteOpenslideHost;
+	}
+
+
+	private static StringProperty remoteOpenslideHost = createPersistentPreference("remoteOpenslideHost", "http://qupath.yli-hallila.fi:7777");
+
 	/**
 	 * Create a persistent property, i.e. one that will be saved to/reloaded from the user preferences.
 	 * 

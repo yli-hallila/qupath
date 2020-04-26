@@ -198,10 +198,17 @@ public class PreferencePanel {
 				category,
 				"When enabled, images will be referenced relatively to project root and not with an absolute path.");
 
+		category = "Workspaces";
+
 		addPropertyPreference(PathPrefs.showWorkspaceDialogOnStartupProperty(), Boolean.class,
 				"Show workspaces dialog on startup",
 				category,
 				"If enabled, opens the project selector on startup.");
+
+		addPropertyPreference(PathPrefs.remoteOpenslideHost(), String.class,
+				"RemoteOpenslide Host",
+				category,
+				"The default host used when opening the Connect To Server dialog.");
 
 		/*
 		 * Viewer
