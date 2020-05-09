@@ -554,7 +554,7 @@ public class PathHierarchyPaintingHelper {
 				Arrow2D arrow = arrowPool.getShape();
 				ArrowROI a = (ArrowROI)roi;
 
-				return arrow.createShape(a.getX1(), a.getY1(), a.getX2(), a.getY2());
+				return arrow.createShape(a.getX1(), a.getY1(), a.getX2(), a.getY2(), downsample);
 			}
 
 			if (roi instanceof LineROI) {

@@ -102,7 +102,7 @@ public class ROIs {
 	 * @return
 	 */
 	public static ROI createLineROI(double x, double y, double x2, double y2, ImagePlane plane) {
-		return new ArrowROI(x, y, x2, y2, plane);
+		return new LineROI(x, y, x2, y2, plane);
 	}
 
 	/**
@@ -140,7 +140,7 @@ public class ROIs {
 	 * @return
 	 */
 	public static ROI createArrowROI(double x, double y, ImagePlane plane) {
-		return createLineROI(x, y, x, y, plane);
+		return createArrowROI(x, y, x, y, plane);
 	}
 
 	/**

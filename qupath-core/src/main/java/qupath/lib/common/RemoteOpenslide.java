@@ -6,9 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.lib.io.MultipartUtility;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -130,15 +128,23 @@ public class RemoteOpenslide {
 		return Optional.of(slides);
 	}
 
-	public static Result uploadProject(String projectName, File projectFile) throws IOException {
-		String requestURL = host.resolve("/api/v0/projects/" + projectName).toASCIIString();
+	public static Result uploadProject(String projectName, File projectFile) {
+		try {
+			HttpClient client = getHttpClient();
+			HttpRequest request = HttpRequest.newBuilder()
+					.uri(host.resolve(
+						"/api/v0/projects/" + e(projectName)
+					))
+					.POST(HttpRequest.BodyPublishers.ofFile(projectFile.toPath()))
+					.build();
 
-		PasswordAuthentication auth = new PasswordAuthentication(username, password.toCharArray());
-		MultipartUtility multipart = new MultipartUtility(requestURL, "UTF-8", auth);
-		multipart.addFilePart("project", projectFile);
-		multipart.finish();
+			HttpResponse<String> response = client.send(request, BodyHandlers.ofString());
+			return response.statusCode() == 200 ? Result.OK : Result.FAIL;
+		} catch (IOException | InterruptedException e) {
+			logger.error("Error when making uploading project", e);
+		}
 
-		return Result.OK;
+		return Result.FAIL;
 	}
 
 	public static Result createNewProject(String workspaceName, String projectName) {
@@ -325,7 +331,7 @@ public class RemoteOpenslide {
 	 * @param toEncode plain string
 	 * @return An encoded URL valid for HTTP
 	 */
-	private static String e(String toEncode) {
+	public static String e(String toEncode) {
 		return URLEncoder.encode(toEncode, StandardCharsets.UTF_8).replace("+", "%20");
 	}
 
@@ -333,7 +339,7 @@ public class RemoteOpenslide {
 		return host;
 	}
 
-	public static enum Result {
+	public enum Result {
 		OK,
 		FAIL
 	}

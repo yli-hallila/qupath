@@ -72,19 +72,22 @@ public class Arrow2D extends Line2D {
         return new Rectangle2D.Float((float) x, (float) y, (float) w, (float) h);
     }
 
-    public Shape createShape(double x1, double y1, double x2, double y2) {
+    public Shape createShape(double x1, double y1, double x2, double y2, double downsample) {
         double angle = Math.atan2(y2 - y1, x2 - x1);
         AffineTransform tx = new AffineTransform();
         tx.translate(x1, y1);
         tx.rotate(angle);
 
+        downsample = Math.max(downsample, 1);
+        downsample = Math.min(downsample, 20);
+
         double len = Math.hypot(x2 - x1, y2 - y1);
         Path2D shape = new Path2D.Double();
         shape.moveTo(0, 0);
         shape.lineTo(len, 0);
-        shape.lineTo(len, -10);
-        shape.lineTo(len + 12, 0);
-        shape.lineTo(len, 10);
+        shape.lineTo(len, -10 * downsample);
+        shape.lineTo(len + (12 * downsample), 0);
+        shape.lineTo(len, 10 * downsample);
         shape.lineTo(len, 0);
 
         return shape.createTransformedShape(tx);

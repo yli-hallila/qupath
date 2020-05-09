@@ -35,23 +35,14 @@ import java.util.stream.Collectors;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import javafx.scene.control.*;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
-import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.ComboBox;
-import javafx.scene.control.Dialog;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.ListView;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TitledPane;
 import javafx.scene.input.Clipboard;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
@@ -467,6 +458,7 @@ public class ProjectImportImagesCommand implements PathCommand {
 		listView.setPrefSize(480, 480);
 
 		TitledPane paneList = new TitledPane("External slides", listView);
+		listView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
 		paneList.setCollapsible(false);
 
 		BorderPane pane = new BorderPane();
@@ -475,7 +467,7 @@ public class ProjectImportImagesCommand implements PathCommand {
 		Optional<JsonArray> slides = RemoteOpenslide.getSlides();
 		if (slides.isPresent()) {
 			for (JsonElement slide : slides.get()) {
-				listView.getItems().add(RemoteOpenslide.getHost() + "/" + slide.getAsString());
+				listView.getItems().add(slide.getAsString());
 			}
 		}
 
@@ -490,7 +482,11 @@ public class ProjectImportImagesCommand implements PathCommand {
 			return 0;
 		}
 
-		list.addAll(listView.getSelectionModel().getSelectedItems());
+		// TODO: make /slides/ API return JSON objects, with UUID
+		listView.getSelectionModel().getSelectedItems().forEach(item -> {
+			list.add(RemoteOpenslide.getHost() + "/" + RemoteOpenslide.e(item));
+		});
+
 		return listView.getSelectionModel().getSelectedItems().size();
 	}
 	

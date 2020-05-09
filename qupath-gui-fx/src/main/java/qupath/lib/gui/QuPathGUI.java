@@ -1696,6 +1696,8 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 						updateMessage("Downloading project");
 						unzip(is.get(), tempPathStr, this::updateMessage);
 						updateMessage("Extracted. Opening project");
+
+						is.get().close();
 					} else {
 						updateMessage("Error when downloading project, see log.");
 					}

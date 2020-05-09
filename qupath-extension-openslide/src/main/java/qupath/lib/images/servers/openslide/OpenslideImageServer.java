@@ -175,7 +175,7 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 		originalMetadata = new ImageServerMetadata.Builder(getClass(),
 				path, boundsWidth, boundsHeight).
 				channels(ImageChannel.getDefaultRGBChannels()). // Assume 3 channels (RGB)
-				name(uri.getPath()).
+				name(uri.getPath().substring(1)).
 				rgb(true).
 				pixelType(PixelType.UINT8).
 				preferredTileSize(tileWidth, tileHeight).
@@ -414,7 +414,7 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 		return img2;
 	}
 
-	private BufferedImage readTileRemotely(TileRequest tileRequest) throws IOException {
+	private BufferedImage readTileRemotely(TileRequest tileRequest) {
 		int tileX = tileRequest.getImageX() + boundsX;
 		int tileY = tileRequest.getImageY() + boundsY;
 		int level = tileRequest.getLevel();
@@ -430,7 +430,13 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 			tileHeight
 		);
 
-		return ImageIO.read(uriRegion.toURL());
+		try {
+			return ImageIO.read(uriRegion.toURL());
+		} catch (IOException e) {
+			logger.error("Error when loading remotely tile", e);
+		}
+
+		return null;
 	}
 
 	@Override

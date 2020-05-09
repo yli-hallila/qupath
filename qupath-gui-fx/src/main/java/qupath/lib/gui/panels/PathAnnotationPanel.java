@@ -35,8 +35,12 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import com.google.gson.*;
+import javafx.beans.InvalidationListener;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableStringValue;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.CheckBoxTableCell;
@@ -628,6 +632,8 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 				String message  = result.isAnswer() ? "Right answer!" : "Wrong answer!";
 				       message += "\n\n";
 				       message += "All the right answers are: " + rightAnswers.toString().replaceAll("\\[|\\]", "");
+				       message += "\n\n";
+				       message += ((PathAnnotationObject) pathObject).getDescription();
 
 				DisplayHelpers.showMessageDialog("Answer", message);
 			}
@@ -888,7 +894,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		TableView<Option> table = new TableView<>();
 		table.setEditable(true);
 
-		TableColumn<Option, String> questions = new TableColumn<>("Question");
+		TableColumn<Option, String> questions = new TableColumn<>("Choice");
 		TableColumn<Option, Boolean> answers = new TableColumn<>("Answer(s)");
 
 		questions.setEditable(true);
@@ -927,7 +933,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		});
 
 		if (annotation.getAnswer() != null && isJSON(annotation.getAnswer())) {
-			ObservableList<Option> list = FXCollections.observableArrayList();
+			ArrayList<Option> list = new ArrayList<>();
 
 			JsonArray jsonArray = new Gson().fromJson(annotation.getAnswer(), JsonArray.class);
 			for (JsonElement element : jsonArray) {
@@ -938,7 +944,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 				));
 			}
 
-			table.setItems(list);
+			table.getItems().addAll(list);
 		}
 
 		Label labAnswer = new Label("Answer");
@@ -946,20 +952,12 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		textAreaAnswer.setPrefRowCount(2);
 		textAreaAnswer.setPrefColumnCount(25);
 
-		Label labAnswerInformation = new Label("Answer Information");
-		TextArea textAreaAnswerInformation = new TextArea(""); // todo
-		textAreaAnswerInformation.setPrefRowCount(2);
-		textAreaAnswerInformation.setPrefColumnCount(25);
-		labAnswerInformation.setLabelFor(textAreaAnswerInformation);
-
-		/* Control buttons */
-
-		Button newEntryButton = new Button("Lisää uusi");
+		Button newEntryButton = new Button("Add new");
 		newEntryButton.setOnMouseClicked(e -> {
 			addRowToTable(table, questions);
 		});
 
-		Button deleteEntryButton = new Button("Poista valittu");
+		Button deleteEntryButton = new Button("Remove selected");
 		deleteEntryButton.setOnMouseClicked(e -> {
 			table.getItems().remove(table.getSelectionModel().getFocusedIndex());
 		});
@@ -968,16 +966,14 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		VBox nodeMultipleChoiceQuestion = new VBox(table, controlButtons);
 
 		TabPane tabPane = new TabPane();
+		tabPane.getStyleClass().add("floating");
 		tabPane.getTabs().addAll(
-			new Tab("Multiple-choice", nodeMultipleChoiceQuestion),
-			new Tab("Text-answer", textAreaAnswer)
+			new Tab("Multiple choice", nodeMultipleChoiceQuestion),
+			new Tab("Text answer", textAreaAnswer)
 		);
 
 		panel.add(tabPane, 1, 3);
 		panel.add(labAnswer, 0, 3);
-
-		panel.add(labAnswerInformation, 0, 4);
-		panel.add(textAreaAnswerInformation, 1, 4);
 
 		if (!DisplayHelpers.showConfirmDialog("Set annotation properties", panel))
 			return false;
@@ -1011,13 +1007,14 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 
 			for (Option option : quizItems) {
 				JsonObject obj = new JsonObject();
-				obj.addProperty("question", option.question.getValue());
-				obj.addProperty("answer", option.answer.getValue());
+				obj.addProperty("question", option.getQuestion());
+				obj.addProperty("answer", option.isAnswer());
 
 				jsonArray.add(obj);
 			}
 
-			annotation.setAnswer(new Gson().toJson(jsonArray));
+			String json = new Gson().toJson(jsonArray);
+			annotation.setAnswer(json);
 		}
 
 		return true;
@@ -1074,7 +1071,10 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 
 		@Override
 		public String toString() {
-			return questionProperty().get();
+			return "Option{" +
+					"question=" + question +
+					", answer=" + answer +
+					'}';
 		}
 	}
 
