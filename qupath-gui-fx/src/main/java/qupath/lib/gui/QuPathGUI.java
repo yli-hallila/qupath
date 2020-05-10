@@ -3965,7 +3965,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			return createSelectableCommandAction(viewerDisplayOptions.showScalebarProperty(), "Show scalebar", PathIconFactory.PathIcons.SHOW_SCALEBAR, null);
 		case SHOW_ANALYSIS_PANEL:
 			// I don't understand why registering a listener within the ShowAnalysisPanelSelectable constructor didn't work... but it didn't
-			ShowAnalysisPanelSelectable temp = new ShowAnalysisPanelSelectable(pane, splitPane, analysisPanel, viewerManager, true);
+			ShowAnalysisPanelSelectable temp = new ShowAnalysisPanelSelectable(pane, splitPane, analysisPanel, tabbedPanel, true);
 			action = createSelectableCommandAction(temp.showPanelProperty(), "Show analysis panel", PathIconFactory.PathIcons.MEASURE, new KeyCodeCombination(KeyCode.A, KeyCombination.SHIFT_DOWN));
 			action.selectedProperty().addListener((e, f, g) -> temp.setAnalysisPanelVisible(g));
 			return action;
@@ -5103,16 +5103,16 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		private BorderPane parent;
 		private SplitPane splitPane;
 		private Control analysisPanel;
-		private MultiviewManager manager;
+		private TabPane tabPane;
 		protected double lastDividerLocation;
 		
 		private BooleanProperty showPanel = new SimpleBooleanProperty();
 		
-		public ShowAnalysisPanelSelectable(final BorderPane parent, final SplitPane splitPane, final Control analysisPanel, final MultiviewManager manager, final boolean defaultVisible) {
+		public ShowAnalysisPanelSelectable(final BorderPane parent, final SplitPane splitPane, final Control analysisPanel, final TabPane tabPane, final boolean defaultVisible) {
 			this.parent = parent;
 			this.splitPane = splitPane;
 			this.analysisPanel = analysisPanel;
-			this.manager = manager;
+			this.tabPane = tabPane;
 			
 			showPanel.setValue(parent.getCenter() == splitPane);
 			
@@ -5127,14 +5127,14 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			if (visible) {
 				if (analysisPanelVisible())
 					return;
-				splitPane.getItems().setAll(analysisPanel, manager.getNode());
+				splitPane.getItems().setAll(analysisPanel, tabPane);
 				splitPane.setDividerPosition(0, lastDividerLocation);
 				parent.setCenter(splitPane);
 			} else {
 				if (!analysisPanelVisible())
 					return;
 				lastDividerLocation = splitPane.getDividers().get(0).getPosition();
-				parent.setCenter(manager.getNode());				
+				parent.setCenter(tabPane);
 			}
 		}
 			
