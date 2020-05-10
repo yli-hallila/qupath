@@ -10,15 +10,17 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.net.*;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 public class RemoteOpenslide {
 
@@ -130,12 +132,17 @@ public class RemoteOpenslide {
 
 	public static Result uploadProject(String projectName, File projectFile) {
 		try {
+			String boundary = new BigInteger(256, new Random()).toString();
+			Map<Object, Object> data = new LinkedHashMap<>();
+			data.put("project", projectFile.toPath());
+
 			HttpClient client = getHttpClient();
 			HttpRequest request = HttpRequest.newBuilder()
 					.uri(host.resolve(
 						"/api/v0/projects/" + e(projectName)
 					))
-					.POST(HttpRequest.BodyPublishers.ofFile(projectFile.toPath()))
+					.POST(ofMimeMultipartData(data, boundary))
+					.header("Content-Type", "multipart/form-data;boundary=" + boundary)
 					.build();
 
 			HttpResponse<String> response = client.send(request, BodyHandlers.ofString());
@@ -322,6 +329,37 @@ public class RemoteOpenslide {
 			builder.append("=");
 			builder.append(e(entry.getValue().toString()));
 		}
+
+		return HttpRequest.BodyPublishers.ofString(builder.toString());
+	}
+
+	private static final String LINE_FEED = "\r\n";
+
+	private static HttpRequest.BodyPublisher ofMimeMultipartData(Map<Object, Object> data, String boundary) throws IOException {
+		StringBuilder builder = new StringBuilder();
+		String separator = ("--" + boundary).concat(LINE_FEED).concat("Content-Disposition: form-data; name=");
+
+		for (Map.Entry<Object, Object> entry : data.entrySet()) {
+			builder.append(separator);
+
+			if (entry.getValue() instanceof Path) {
+				Path path = (Path) entry.getValue();
+				String mimeType = Files.probeContentType(path);
+
+				builder.append("\"" + entry.getKey() + "\"; filename=\"" + path.getFileName()).append(LINE_FEED);
+				builder.append("Content-Type: " + mimeType).append(LINE_FEED);
+				builder.append(LINE_FEED);
+				builder.append(Files.readString(path, StandardCharsets.ISO_8859_1));
+				builder.append(LINE_FEED);
+			} else {
+				builder.append("\"" + entry.getKey() + "\"").append(LINE_FEED);
+				builder.append(LINE_FEED);
+				builder.append(entry.getValue());
+				builder.append(LINE_FEED);
+			}
+		}
+
+		builder.append("--" + boundary + "--");
 
 		return HttpRequest.BodyPublishers.ofString(builder.toString());
 	}
