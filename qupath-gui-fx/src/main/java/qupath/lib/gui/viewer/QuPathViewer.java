@@ -1479,7 +1479,7 @@ public class QuPathViewer implements TileListener<BufferedImage>, PathObjectHier
 
 		initializeForServer(server);
 		
-		fireImageDataChanged(imageDataOld, imageDataNew);
+		Platform.runLater(() -> fireImageDataChanged(imageDataOld, imageDataNew));
 
 		//		featureMapWrapper = new TiledFeatureMapImageWrapper(server.getWidth(), server.getHeight());
 

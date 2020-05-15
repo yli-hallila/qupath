@@ -769,8 +769,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 				connectToServer.run();
 			} catch (Exception e) {
 				DisplayHelpers.showErrorNotification("Error when connecting to server", e);
-				RemoteOpenslide.setHost(null);
-				RemoteOpenslide.setAuthentication(null, null);
+				RemoteOpenslide.logout();
 			}
 		}
 
@@ -1468,7 +1467,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 
 	public void showWorkspaceDialog(Optional<String> workspace) {
 		if (workspace.isEmpty()) {
-			RemoteOpenslide.setHost(null);
+			RemoteOpenslide.logout();
 			DisplayHelpers.showErrorNotification("No workspace file", "Try reconnecting to server.");
 			return;
 		}
@@ -1570,22 +1569,18 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 
 				Button logout = new Button("Logout");
 				logout.setOnAction(action -> {
-					RemoteOpenslide.setHost(null);
-					RemoteOpenslide.setAuthentication(null, null);
+					RemoteOpenslide.logout();
+					setProject(null);
 					dialog.close();
 				});
 
-				if (!RemoteOpenslide.hasWriteAccess()) {
-					createNewProject.setDisable(true);
-				}
+				createNewProject.setDisable(!RemoteOpenslide.hasWriteAccess());
 
 				hbox.getChildren().addAll(createNewProject, logout);
 				return hbox;
 			}
 		});
 
-
-		// TODO: Center window
 		dialog.getDialogPane().setContent(tabPane);
 		dialog.getDialogPane().setPadding(new Insets(0));
 		dialog.getDialogPane().getButtonTypes().setAll(ButtonType.CLOSE);
@@ -1690,7 +1685,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			Task<Boolean> worker = new Task<>() {
 				@Override
 				protected Boolean call() throws Exception {
-					Optional<InputStream> is = RemoteOpenslide.getProject(projectId);
+					Optional<InputStream> is = RemoteOpenslide.downloadProject(projectId);
 
 					if (is.isPresent()) {
 						updateMessage("Downloading project");
@@ -2628,17 +2623,17 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 
 		// Check if we need to rotate the image
 		try {
-			imageData = entry.readImageData();
-			viewer.setImageData(imageData);
-			setInitialLocationAndMagnification(viewer);
-			if (imageData != null && (imageData.getImageType() == null || imageData.getImageType() == ImageType.UNSET)) {
+			ImageData<BufferedImage> newImageData = entry.readImageData();
+			viewer.setImageData(newImageData);
+			Platform.runLater(() -> setInitialLocationAndMagnification(viewer));
+			if (newImageData != null && (newImageData.getImageType() == null || newImageData.getImageType() == ImageType.UNSET)) {
 				if (PathPrefs.getAutoEstimateImageType()) {
-					var type = DisplayHelpers.estimateImageType(imageData.getServer(), imageRegionStore.getThumbnail(imageData.getServer(), 0, 0, true));
+					var type = DisplayHelpers.estimateImageType(newImageData.getServer(), imageRegionStore.getThumbnail(newImageData.getServer(), 0, 0, true));
 					logger.info("Image type estimated to be {}", type);
-					imageData.setImageType(type);
-					imageData.setChanged(false); // Don't want to retain this as a change resulting in a prompt to save the data
+					newImageData.setImageType(type);
+					newImageData.setChanged(false); // Don't want to retain this as a change resulting in a prompt to save the data
 				} else if (PathPrefs.getPromptForImageType()) {
-					PathImageDetailsPanel.promptToSetImageType(imageData);
+					Platform.runLater(() -> PathImageDetailsPanel.promptToSetImageType(newImageData));
 				}
 			}
 			return true;

@@ -48,9 +48,11 @@ import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
+import javafx.concurrent.Task;
 import org.controlsfx.control.MasterDetailPane;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
+import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -177,7 +179,20 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		tree.setOnMouseClicked(e -> {
 			if (e.getClickCount() > 1) {
 				qupath.getTabbedPanel().getSelectionModel().select(1);
-				qupath.openImageEntry(getSelectedEntry());
+
+				Task<Boolean> worker = new Task<>() {
+					@Override
+					protected Boolean call() {
+						updateMessage("Loading slide");
+						return qupath.openImageEntry(getSelectedEntry());
+					}
+				};
+
+				ProgressDialog progress = new ProgressDialog(worker);
+				progress.setTitle("Please wait");
+				qupath.submitShortTask(worker);
+				progress.showAndWait();
+
 				e.consume();
 			}
 		});

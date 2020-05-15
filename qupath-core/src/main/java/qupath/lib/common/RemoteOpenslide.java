@@ -54,6 +54,12 @@ public class RemoteOpenslide {
 		RemoteOpenslide.password = password;
 	}
 
+	public static void logout() {
+		setHost(null);
+		setAuthentication(null, null);
+		setWriteAccess(false);
+	}
+
 	public static boolean login() {
 		Optional<HttpResponse<String>> response = get(
 			"/api/v0/users/login"
@@ -88,7 +94,7 @@ public class RemoteOpenslide {
 		return Optional.of(slides);
 	}
 
-	public static Optional<InputStream> getProject(String id) {
+	public static Optional<InputStream> downloadProject(String id) {
 		try { // todo: fix this piece of shit code; only changed ofString() -> ofInputStream()
 			HttpClient client = HttpClient.newHttpClient();
 			HttpRequest request = HttpRequest.newBuilder()
@@ -122,7 +128,7 @@ public class RemoteOpenslide {
 			"/api/v0/slides/" + e(id)
 		);
 
-		if (response.isEmpty()) {
+		if (response.isEmpty() || response.get().statusCode() == 404) {
 			return Optional.empty();
 		}
 
@@ -336,32 +342,30 @@ public class RemoteOpenslide {
 	private static final String LINE_FEED = "\r\n";
 
 	private static HttpRequest.BodyPublisher ofMimeMultipartData(Map<Object, Object> data, String boundary) throws IOException {
-		StringBuilder builder = new StringBuilder();
-		String separator = ("--" + boundary).concat(LINE_FEED).concat("Content-Disposition: form-data; name=");
+		var byteArrays = new ArrayList<byte[]>();
+		byte[] separator = ("--" + boundary + LINE_FEED
+				+"Content-Disposition: form-data; name=").getBytes();
 
 		for (Map.Entry<Object, Object> entry : data.entrySet()) {
-			builder.append(separator);
+			byteArrays.add(separator);
 
 			if (entry.getValue() instanceof Path) {
-				Path path = (Path) entry.getValue();
+				var path = (Path) entry.getValue();
 				String mimeType = Files.probeContentType(path);
-
-				builder.append("\"" + entry.getKey() + "\"; filename=\"" + path.getFileName()).append(LINE_FEED);
-				builder.append("Content-Type: " + mimeType).append(LINE_FEED);
-				builder.append(LINE_FEED);
-				builder.append(Files.readString(path, StandardCharsets.ISO_8859_1));
-				builder.append(LINE_FEED);
+				byteArrays.add(("\"" + entry.getKey() + "\"; filename=\"" + path.getFileName() + "\""
+						+ LINE_FEED + "Content-Type: " + mimeType).getBytes());
+				byteArrays.add((LINE_FEED + LINE_FEED).getBytes());
+				byteArrays.add(Files.readAllBytes(path));
+				byteArrays.add(LINE_FEED.getBytes());
 			} else {
-				builder.append("\"" + entry.getKey() + "\"").append(LINE_FEED);
-				builder.append(LINE_FEED);
-				builder.append(entry.getValue());
-				builder.append(LINE_FEED);
+				byteArrays.add(("\"" + entry.getKey() + "\"").getBytes());
+				byteArrays.add((LINE_FEED + LINE_FEED).getBytes());
+				byteArrays.add((entry.getValue() + LINE_FEED).getBytes());
 			}
 		}
 
-		builder.append("--" + boundary + "--");
-
-		return HttpRequest.BodyPublishers.ofString(builder.toString());
+		byteArrays.add(("--" + boundary + "--").getBytes());
+		return HttpRequest.BodyPublishers.ofByteArrays(byteArrays);
 	}
 
 	/**

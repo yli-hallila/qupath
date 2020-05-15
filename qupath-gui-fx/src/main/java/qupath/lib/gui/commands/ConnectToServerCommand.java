@@ -47,12 +47,10 @@ public class ConnectToServerCommand implements PathCommand {
             RemoteOpenslide.setHost(PathPrefs.remoteOpenslideHost().get());
             RemoteOpenslide.setAuthentication(username, password);
 
-            // Java HTTPClient sends only credentials when asked.
             if (this.guest || RemoteOpenslide.login()) {
                 qupath.showWorkspaceDialog();
             } else {
-                RemoteOpenslide.setHost(null);
-                RemoteOpenslide.setAuthentication(null, null);
+                RemoteOpenslide.logout();
                 this.run();
             }
         }
