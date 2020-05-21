@@ -34,7 +34,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.scene.control.*;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
@@ -454,6 +456,9 @@ public class ProjectImportImagesCommand implements PathCommand {
 	}
 
 	static int loadFromServer(final List<String> list) {
+		TextField filterTextField = new TextField();
+		filterTextField.setPromptText("Search for slides");
+
 		ListView<String> listView = new ListView<>();
 		listView.setPrefSize(480, 480);
 
@@ -462,14 +467,34 @@ public class ProjectImportImagesCommand implements PathCommand {
 		paneList.setCollapsible(false);
 
 		BorderPane pane = new BorderPane();
+		BorderPane.setMargin(filterTextField, new Insets(10));
+		pane.setTop(filterTextField);
 		pane.setCenter(paneList);
 
-		Optional<JsonArray> slides = RemoteOpenslide.getSlides();
-		if (slides.isPresent()) {
-			for (JsonElement slide : slides.get()) {
-				listView.getItems().add(slide.getAsString());
-			}
+		Optional<JsonArray> rawData = RemoteOpenslide.getSlides();
+		ObservableList<String> slides = FXCollections.observableArrayList();
+
+		if (rawData.isPresent()) {
+			rawData.get().forEach(slide -> {
+				slides.add(slide.getAsString());
+			});
+		} else {
+			slides.add("No external slides found");
 		}
+
+		FilteredList<String> filteredList = new FilteredList<>(slides, data -> true);
+		filterTextField.textProperty().addListener(((observable, oldValue, newValue) -> {
+			filteredList.setPredicate(data -> {
+				if (newValue == null || newValue.isEmpty()) {
+					return true;
+				}
+
+				String lowerCaseSearch = newValue.toLowerCase();
+				return data.toLowerCase().contains(lowerCaseSearch);
+			});
+		}));
+
+		listView.setItems(filteredList);
 
 		Dialog<ButtonType> dialog = new Dialog<>();
 		dialog.setTitle("Import images to project");
