@@ -35,13 +35,8 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import com.google.gson.*;
-import javafx.beans.InvalidationListener;
-import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableStringValue;
-import javafx.beans.value.ObservableValue;
-import javafx.collections.FXCollections;
+import javafx.beans.property.*;
+import javafx.geometry.Side;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
@@ -49,13 +44,13 @@ import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.*;
 import javafx.util.converter.DefaultStringConverter;
+import org.controlsfx.control.MasterDetailPane;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javafx.application.Platform;
-import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -81,7 +76,6 @@ import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.PathObjects;
 import qupath.lib.objects.DefaultPathObjectComparator;
-import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.classes.PathClassFactory;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
@@ -118,7 +112,10 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 	private static boolean synchronizePrimarySelectionOnly = true;
 
 	private QuPathGUI qupath;
-	
+
+	private StringProperty descriptionText = new SimpleStringProperty();
+
+	private MasterDetailPane mdPane;
 	private BorderPane pane = new BorderPane();
 
 	private ImageData<BufferedImage> imageData;
@@ -333,14 +330,25 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 
 			@Override
 			public ListCell<PathObject> call(ListView<PathObject> p) {
+				ListCell<PathObject> cell = new ListCell<PathObject>() {
 
-				ListCell<PathObject> cell = new ListCell<PathObject>(){
-					
+					{
+						setWrapText(true);
+						setPrefWidth(10);
+					}
+
 					Tooltip tooltip;
 
 					@Override
 					protected void updateItem(PathObject value, boolean empty) {
 						super.updateItem(value, empty);
+
+						setMinWidth(listAnnotations.getWidth());
+						setMaxWidth(listAnnotations.getWidth());
+						setWidth(listAnnotations.getWidth());
+
+						setWrapText(true);
+
 						updateTooltip(value);
 						if (value == null || empty) {
 							setText(null);
@@ -381,7 +389,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 						}
 						PathAnnotationObject annotation = (PathAnnotationObject)pathObject;
 						String description = annotation.getDescription();
-						if (description == null) {
+						if (description == null || annotation.getAnswer() != null) {
 							setTooltip(null);
 						} else {
 							tooltip.setText(description);
@@ -412,8 +420,19 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		listAnnotations.getSelectionModel().selectedItemProperty().addListener((v, o, n) -> synchronizeListSelectionToHierarchy());
 
 		listAnnotations.setOnMouseClicked(e -> {
+			PathObject pathObject = listAnnotations.getSelectionModel().getSelectedItem();
+
+			if (pathObject.isAnnotation()) {
+				PathAnnotationObject annotation = (PathAnnotationObject)pathObject;
+
+				if (annotation.getDescription() != null && annotation.getAnswer() == null) {
+					descriptionText.set(annotation.getDescription());
+				} else {
+					descriptionText.set(null);
+				}
+			}
+
 			if (e.getClickCount() > 1) {
-				PathObject pathObject = listAnnotations.getSelectionModel().getSelectedItem();
 				if (pathObject == null || !pathObject.hasROI())
 					return;
 				ROI roi = pathObject.getROI();
@@ -424,6 +443,32 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 					if (roi.getT() >= 0)
 						viewer.setTPosition(roi.getT());
 					viewer.setCenterPixelLocation(roi.getCentroidX(), roi.getCentroidY());
+
+					double areaROI;
+
+					if (roi.isLine()) {
+						// Estimate area as an circle
+						areaROI = (2 * Math.PI *
+							Math.pow(
+								0.5 * roi.getScaledLength(
+									viewer.getServer().getPixelCalibration().getPixelWidthMicrons(),
+									viewer.getServer().getPixelCalibration().getPixelHeightMicrons()
+								), 2
+							)
+						);
+					} else {
+						areaROI = roi.getScaledArea(
+							viewer.getServer().getPixelCalibration().getPixelWidthMicrons(),
+							viewer.getServer().getPixelCalibration().getPixelHeightMicrons()
+						);
+					}
+
+					double defaultPixelCalibration = viewer.getServer().getPixelCalibration().getPixelHeightMicrons() * viewer.getServer().getMetadata().getMagnification();
+					double areaViewerDefault = (viewer.getHeight() * defaultPixelCalibration) * (viewer.getWidth() * defaultPixelCalibration);
+
+					double magnification = Math.min(60, Math.sqrt(areaViewerDefault / (areaROI * 2)));
+
+					viewer.setMagnification(magnification);
 				}
 			}
 		});
@@ -597,6 +642,18 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 			pane.setTop(browser);
 			pane.setBottom(showAnswerButton);
 			pane.setCenter(paneRow);
+
+			TextArea textDescription = new TextArea();
+			textDescription.setWrapText(true);
+			textDescription.textProperty().bind(descriptionText);
+
+			mdPane = new MasterDetailPane();
+			mdPane.setMasterNode(pane);
+			mdPane.setDetailNode(textDescription);
+			mdPane.setDetailSide(Side.BOTTOM);
+			mdPane.setShowDetailNode(true);
+			mdPane.setDividerPosition(0.9);
+			mdPane.showDetailNodeProperty().bind(descriptionText.isNotEmpty());
 		}
 
 		qupath.addImageDataChangeListener(this);
@@ -619,6 +676,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 					obj.get("question").getAsString(),
 					obj.get("answer").getAsBoolean()
 				);
+
 				questions.add(option);
 
 				if (option.isAnswer()) {
@@ -632,8 +690,12 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 				String message  = result.isAnswer() ? "Right answer!" : "Wrong answer!";
 				       message += "\n\n";
 				       message += "All the right answers are: " + rightAnswers.toString().replaceAll("\\[|\\]", "");
-				       message += "\n\n";
-				       message += ((PathAnnotationObject) pathObject).getDescription();
+
+			   String description = ((PathAnnotationObject) pathObject).getDescription();
+			   if (description != null) {
+				   message += "\n\n";
+				   message += description;
+			   }
 
 				DisplayHelpers.showMessageDialog("Answer", message);
 			}
@@ -776,7 +838,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 
 
 	public Pane getPane() {
-		return pane;
+		return new BorderPane(mdPane);
 	}
 
 
@@ -1071,10 +1133,7 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 
 		@Override
 		public String toString() {
-			return "Option{" +
-					"question=" + question +
-					", answer=" + answer +
-					'}';
+			return question.get();
 		}
 	}
 
