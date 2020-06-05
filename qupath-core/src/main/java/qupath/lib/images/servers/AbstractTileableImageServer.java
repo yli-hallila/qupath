@@ -225,10 +225,16 @@ public abstract class AbstractTileableImageServer extends AbstractImageServer<Bu
 			// Interpolate if downsampling
 			if (request.getDownsample() > 1)
 				g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-			for (TileRequest tileRequest : tiles) {
-				BufferedImage imgTile = getTile(tileRequest);
-				g2d.drawImage(imgTile, tileRequest.getImageX(), tileRequest.getImageY(), tileRequest.getImageWidth(), tileRequest.getImageHeight(), null);
-			}
+
+			tiles.parallelStream().forEach(tileRequest -> {
+				try {
+					BufferedImage imgTile = getTile(tileRequest);
+					g2d.drawImage(imgTile, tileRequest.getImageX(), tileRequest.getImageY(), tileRequest.getImageWidth(), tileRequest.getImageHeight(), null);
+				} catch (IOException e) {
+					logger.error("Error while drawing tile: {}", tileRequest);
+				}
+			});
+
 			g2d.dispose();
 			
 			long endTime = System.currentTimeMillis();

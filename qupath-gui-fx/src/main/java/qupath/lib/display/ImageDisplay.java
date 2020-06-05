@@ -141,7 +141,6 @@ public class ImageDisplay extends AbstractImageRenderer {
 		
 		this.imageData = imageData;
 		updateChannelOptions(true);
-		updateHistogramMap();
 		if (imageData != null) {
 			// Load any existing color properties
 			loadChannelColorProperties();

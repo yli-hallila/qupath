@@ -94,6 +94,14 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 			return defaultValue;
 		}
 	}
+
+	private static double readJsonPropertyOrDefault(JsonObject json, String parameter, double defaultValue) {
+		if (json.has(parameter)) {
+			return json.get(parameter).getAsDouble();
+		} else {
+			return defaultValue;
+		}
+	}
 	
 	/**
 	 * Create an ImageServer using OpenSlide for the specified file.
@@ -137,12 +145,12 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 		int height = json.get("openslide.level[0].height").getAsInt();
 
 		// TODO: bounds
-		int tileWidth = json.get("openslide.level[0].tile-width").getAsInt();
-		int tileHeight = json.get("openslide.level[0].tile-height").getAsInt();
+		int tileWidth = (int) readJsonPropertyOrDefault(json, "openslide.level[0].tile-width", 256);
+		int tileHeight = (int) readJsonPropertyOrDefault(json, "openslide.level[0].tile-height", 256);
 
-		double pixelWidth = json.get(OpenSlide.PROPERTY_NAME_MPP_X).getAsDouble();
-		double pixelHeight = json.get(OpenSlide.PROPERTY_NAME_MPP_Y).getAsDouble();
-		double magnification = json.get(OpenSlide.PROPERTY_NAME_OBJECTIVE_POWER).getAsDouble();
+		double pixelWidth = readJsonPropertyOrDefault(json, OpenSlide.PROPERTY_NAME_MPP_X, Double.NaN);
+		double pixelHeight = readJsonPropertyOrDefault(json, OpenSlide.PROPERTY_NAME_MPP_Y, Double.NaN);
+		double magnification = readJsonPropertyOrDefault(json, OpenSlide.PROPERTY_NAME_OBJECTIVE_POWER, Double.NaN);
 
 		// Make sure the pixel sizes are valid
 		if (pixelWidth <= 0 || pixelHeight <= 0 || Double.isInfinite(pixelWidth) || Double.isInfinite(pixelHeight)) {
@@ -199,16 +207,6 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 		} catch (Exception e) {
 			backgroundColor = null;
 			logger.debug("Unable to find background color: {}", e.getLocalizedMessage());
-		}
-
-		// Try reading a thumbnail... the point being that if this is going to fail,
-		// we want it to fail quickly so that it may yet be possible to try another server
-		// This can occur with corrupt .svs (.tif) files that Bioformats is able to handle better
-		try {
-			logger.debug("Test reading thumbnail with openslide: passed (" + getDefaultThumbnail(0, 0).toString() + ")");
-		} catch (IOException e) {
-			logger.error("Unable to read thumbnail using OpenSlide: {}", e.getLocalizedMessage());
-			throw(e);
 		}
     }
 

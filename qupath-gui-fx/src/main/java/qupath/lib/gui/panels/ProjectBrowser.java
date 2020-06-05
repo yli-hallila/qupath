@@ -179,20 +179,7 @@ public class ProjectBrowser implements ImageDataChangeListener<BufferedImage> {
 		tree.setOnMouseClicked(e -> {
 			if (e.getClickCount() > 1) {
 				qupath.getTabbedPanel().getSelectionModel().select(1);
-
-				Task<Boolean> worker = new Task<>() {
-					@Override
-					protected Boolean call() {
-						updateMessage("Loading slide");
-						return qupath.openImageEntry(getSelectedEntry());
-					}
-				};
-
-				ProgressDialog progress = new ProgressDialog(worker);
-				progress.setTitle("Please wait");
-				qupath.submitShortTask(worker);
-				progress.showAndWait();
-
+				qupath.openImageEntry(getSelectedEntry());
 				e.consume();
 			}
 		});
