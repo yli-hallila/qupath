@@ -422,14 +422,17 @@ public class PathAnnotationPanel implements PathObjectSelectionListener, ImageDa
 		listAnnotations.setOnMouseClicked(e -> {
 			PathObject pathObject = listAnnotations.getSelectionModel().getSelectedItem();
 
-			if (pathObject.isAnnotation()) {
+			if (pathObject != null && pathObject.isAnnotation()) {
 				PathAnnotationObject annotation = (PathAnnotationObject)pathObject;
 
+				// Only show the description when the answer field is empty.
 				if (annotation.getDescription() != null && annotation.getAnswer() == null) {
 					descriptionText.set(annotation.getDescription());
 				} else {
 					descriptionText.set(null);
 				}
+			} else {
+				descriptionText.set(null);
 			}
 
 			if (e.getClickCount() > 1) {
