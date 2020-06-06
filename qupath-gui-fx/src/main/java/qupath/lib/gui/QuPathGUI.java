@@ -1491,14 +1491,25 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 
 			ScrollPane scrollPane = new ScrollPane();
 			scrollPane.prefWidthProperty().bind(tabPane.widthProperty());
-			VBox projects = new VBox();
 
-			JsonArray projectsJson = workspaceObject.get("projects").getAsJsonArray();
+			JsonArray projectsJson = workspaceObject.getAsJsonArray("projects");
+			VBox projects = new VBox();
 
 			for (JsonElement project : projectsJson) {
 				JsonObject json = project.getAsJsonObject();
-				projects.getChildren().add(createListItem(json, dialog, scrollPane, workspaceName));
+				createListItem(json, dialog, scrollPane, projects);
 			}
+
+			projects.setOnMouseDragReleased(event -> {
+				removePreview(projects);
+
+				int indexOfDraggingNode = projects.getChildren().indexOf(event.getGestureSource());
+				rotateNodes(projects, indexOfDraggingNode, projects.getChildren().size() - 1);
+			});
+
+			projects.setOnMouseDragExited(event -> {
+				removePreview(projects);
+			});
 
 			scrollPane.setContent(projects);
 			tabPane.getTabs().add(new Tab(workspaceName, scrollPane));
@@ -1596,7 +1607,7 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 		dialog.show();
 	}
 
-	private HBox createListItem(JsonObject object, Dialog parent, ScrollPane scrollPane, String workspaceName)  {
+	private void createListItem(JsonObject object, Dialog parent, ScrollPane scrollPane, VBox vbox) {
 		String name = object.get("name").getAsString();
 		String description = object.get("description").getAsString();
 
@@ -1667,7 +1678,47 @@ public class QuPathGUI implements ModeWrapper, ImageDataWrapper<BufferedImage>, 
 			}
 		});
 
-		return item;
+		item.setOnDragDetected(event -> {
+			addPreview(vbox, item);
+
+			item.startFullDrag();
+		});
+
+		item.setOnMouseDragReleased(event -> {
+			removePreview(vbox);
+
+			int indexOfDraggingNode = vbox.getChildren().indexOf(event.getGestureSource());
+			int indexOfDropTarget = vbox.getChildren().indexOf(item);
+			rotateNodes(vbox, indexOfDraggingNode, indexOfDropTarget);
+			event.consume();
+		});
+
+		vbox.getChildren().add(item);
+	}
+
+	private void rotateNodes(VBox root, int indexOfDraggingNode, int indexOfDropTarget) {
+		if (indexOfDraggingNode >= 0 && indexOfDropTarget >= 0) {
+			Node node = root.getChildren().remove(indexOfDraggingNode);
+			root.getChildren().add(indexOfDropTarget, node);
+		}
+	}
+
+	private void addPreview(VBox root, HBox item) {
+		ImageView imageView = new ImageView(item.snapshot(null, null));
+		imageView.setManaged(false);
+		imageView.setMouseTransparent(true);
+
+		root.getChildren().add(imageView);
+		root.setUserData(imageView);
+		root.setOnMouseDragged(event -> {
+			imageView.relocate(event.getX(), event.getY());
+		});
+	}
+
+	private void removePreview(VBox root) {
+		root.setOnMouseDragged(null);
+		root.getChildren().remove(root.getUserData());
+		root.setUserData(null);
 	}
 
 	private void reopenWorkspace(Dialog parent) {
