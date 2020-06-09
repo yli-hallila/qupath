@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -27,10 +27,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.WeakHashMap;
 
 import org.slf4j.Logger;
@@ -40,19 +38,19 @@ import org.slf4j.LoggerFactory;
 /**
  * 
  * A MeasurementList that stores its measurements in either a float or a double array, 
- * to avoid the overhead of storing large numbers of Measurement objects.
+ * to avoid the overhead of storing large numbers of {@link Measurement} objects.
  * <p>
  * This makes the storage quite efficient for lists that don't require supporting dynamic measurements.
  * <p>
  * In this implementation, lookups by measurement name initially use indexOf with a list - and
  * can be rather slow.  Therefore while 'adding' is fast, 'putting' is not.
  * <p>
- * However, upon calling closeList(), name lists are shared between similarly closed NumericMeasurementLists,
+ * However, upon calling {@code close()}, name lists are shared between similarly closed NumericMeasurementLists,
  * and a map used to improve random access of measurements.  Therefore if many lists of the same measurements
  * are made, remembering to close each list when it is fully populated can improve performance and greatly
  * reduce memory requirements.
  * <p>
- * These lists can be instantiated through the MeasurementListFactory class.
+ * These lists can be instantiated through the {@link MeasurementListFactory} class.
  * 
  * @author Pete Bankhead
  *
@@ -83,7 +81,7 @@ class NumericMeasurementList {
 			}
 		}
 		
-		List<String> getNames() {
+		List<String> getUnmodifiableNames() {
 			return names;
 		}
 		
@@ -102,12 +100,14 @@ class NumericMeasurementList {
 		protected static final int EXPAND = 8; // Amount by which to expand array as required
 		
 		List<String> names;
+		transient List<String> namesUnmodifiable; // Cache an unmodifiable list so we can return the same one
 		boolean isClosed = false;
 
 		private Map<String, Integer> map; // Optional map for fast measurement lookup
 
 		AbstractNumericMeasurementList(int capacity) {
 			names = new ArrayList<>(capacity);
+			namesUnmodifiable = null;
 		}
 		
 		/**
@@ -128,20 +128,28 @@ class NumericMeasurementList {
 				return;
 			compactStorage();
 			// Try to get a shared list & map
+			NameMap nameMap = getNameMap();				
+			this.names = nameMap.getUnmodifiableNames();
+			this.namesUnmodifiable = names; // NameMap always returns an unmodifiable list
+			this.map = nameMap.getMap();
+			isClosed = true;
+		}
+		
+		
+		private NameMap getNameMap() {
+			NameMap nameMap = namesPool.get(names);
+			if (nameMap != null)
+				return nameMap;
 			synchronized(namesPool) {
-				NameMap nameMap = namesPool.get(names);
+				nameMap = namesPool.get(names);
 				if (nameMap == null) {
 					nameMap = new NameMap(this.names);
 					namesPool.put(nameMap.names, nameMap);
-//					logger.info("CREATED");
 				}
-//				else
-//					logger.info("Using....");					
-				this.names = nameMap.getNames();
-				this.map = nameMap.getMap();
+				return nameMap;
 			}
-			isClosed = true;
 		}
+		
 
 		@Override
 		public boolean isEmpty() {
@@ -157,7 +165,7 @@ class NumericMeasurementList {
 			// Read from map, if possible
 			if (map != null) {
 				Integer ind = map.get(name);
-				return ind == null ? -1 : ind;
+				return ind == null ? -1 : ind.intValue();
 			}
 			return names.indexOf(name);
 		}
@@ -175,7 +183,20 @@ class NumericMeasurementList {
 
 		@Override
 		public synchronized List<String> getMeasurementNames() {
-			return Collections.unmodifiableList(names);
+			if (names.isEmpty())
+				return Collections.emptyList();
+			// Try to return the same unmodifiable list of names if we can - this speeds up comparisons
+			if (isClosed()) {
+				if (namesUnmodifiable == null) {
+					var nameMap = getNameMap();
+					namesUnmodifiable = nameMap.getUnmodifiableNames();
+				}
+			}
+			if (namesUnmodifiable == null)
+				namesUnmodifiable = Collections.unmodifiableList(names);
+			else
+				assert names.size() == namesUnmodifiable.size();
+			return namesUnmodifiable;
 		}
 		
 		@Override
@@ -199,6 +220,7 @@ class NumericMeasurementList {
 		public void clear() {
 			ensureListOpen();
 			names.clear();
+			namesUnmodifiable = null;
 			compactStorage();
 		}
 		
@@ -206,7 +228,8 @@ class NumericMeasurementList {
 			if (isClosed()) {
 				isClosed = false;
 				map = null;
-				names = new ArrayList<>(names);				
+				names = new ArrayList<>(names);	
+				namesUnmodifiable = null;
 			}
 		}
 		
@@ -275,37 +298,6 @@ class NumericMeasurementList {
 			sb.append("]");
 			return sb.toString();
 		}
-
-		
-		private class MeasurementIterator implements Iterator<Measurement> {
-			
-	        /**
-	         * Index of element to be returned by subsequent call to next.
-	         */
-	        private int cursor = 0;
-
-	        @Override
-			public boolean hasNext() {
-	            return cursor != size();
-	        }
-
-	        @Override
-			public Measurement next() {
-	            try {
-	            	Measurement next = MeasurementFactory.createMeasurement(names.get(cursor), getMeasurementValue(cursor));
-	                cursor++;
-	                return next;
-	            } catch (IndexOutOfBoundsException e) {
-	                throw new NoSuchElementException();
-	            }
-	        }
-
-	        @Override
-			public void remove() {
-	        	throw new UnsupportedOperationException("Measurements cannot be removed from this MeasurementList using an iterator");
-	        }
-	        	        
-	    }		
 		
 	}
 

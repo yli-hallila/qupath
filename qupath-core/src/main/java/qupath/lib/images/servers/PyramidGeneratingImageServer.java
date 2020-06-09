@@ -1,11 +1,36 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.images.servers;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Collection;
+import java.util.Collections;
+
 import qupath.lib.awt.common.BufferedImageTools;
 import qupath.lib.images.servers.ImageServerBuilder.ServerBuilder;
+import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectReader;
 import qupath.lib.regions.RegionRequest;
 
 /**
@@ -15,7 +40,7 @@ import qupath.lib.regions.RegionRequest;
  * 
  * @author Pete Bankhead
  */
-class PyramidGeneratingImageServer extends AbstractTileableImageServer {
+class PyramidGeneratingImageServer extends AbstractTileableImageServer implements PathObjectReader {
 	
 	private ImageServer<BufferedImage> server;
 	private ImageServerMetadata metadata;
@@ -59,11 +84,10 @@ class PyramidGeneratingImageServer extends AbstractTileableImageServer {
 		int level = ServerTools.getPreferredResolutionLevel(this, downsample);
 		double closestOriginalDownsample = ServerTools.getPreferredDownsampleFactor(server, downsample);
 		if (level == 0 || closestOriginalDownsample >= getDownsampleForResolution(level - 1))
-			return server.readBufferedImage(RegionRequest.createInstance(server.getPath(), request.getDownsample(), request));
+			return server.readBufferedImage(request.updatePath(server.getPath()));
 		
 		// Read image from the 'previous' resolution
-		RegionRequest request2 = RegionRequest.createInstance(request.getPath(), getDownsampleForResolution(level - 1),
-				request.getX(), request.getY(), request.getWidth(), request.getHeight(), request.getZ(), request.getT());
+		RegionRequest request2 = request.updateDownsample(getDownsampleForResolution(level - 1));
 		
 		// If we have an empty tile, we should also return an empty tile
 		BufferedImage img = readBufferedImage(request2);
@@ -101,6 +125,13 @@ class PyramidGeneratingImageServer extends AbstractTileableImageServer {
 	@Override
 	protected String createID() {
 		return getClass().getSimpleName() + ":" + server.getPath();
+	}
+
+	@Override
+	public Collection<PathObject> readPathObjects() throws IOException {
+		if (server instanceof PathObjectReader)
+			return ((PathObjectReader)server).readPathObjects();
+		return Collections.emptyList();
 	}
 
 }

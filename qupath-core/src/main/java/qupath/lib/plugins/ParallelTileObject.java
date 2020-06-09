@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -67,7 +67,22 @@ public class ParallelTileObject extends PathTileObject implements TemporaryObjec
 
 	final private static Logger logger = LoggerFactory.getLogger(ParallelTileObject.class);
 	
-	public static enum Status { PENDING, PROCESSING, DONE }
+	/**
+	 * Current processing status for the tile.
+	 */
+	public static enum Status {
+		/**
+		 * Tile waiting to be processed
+		 */
+		PENDING,
+		/**
+		 * Tile currently being processed
+		 */
+		PROCESSING,
+		/**
+		 * Tile processing complete
+		 */
+		DONE }
 	
 	private static PathClass pathClassPending = PathClassFactory.getPathClass(
 			"Tile-Pending", ColorTools.makeRGB(50, 50, 200));
@@ -101,6 +116,7 @@ public class ParallelTileObject extends PathTileObject implements TemporaryObjec
 	/**
 	 * Register a neighboring tile, if it intersects with the bounds of this one
 	 * @param pto
+	 * @return 
 	 */
 	public synchronized boolean suggestNeighbor(final ParallelTileObject pto) {
 		if (bounds.intersects(pto.bounds)) {
@@ -167,6 +183,7 @@ public class ParallelTileObject extends PathTileObject implements TemporaryObjec
 	 * 
 	 * This both changes its display color, and triggers a check to see if overlaps with
 	 * detections made in adjacent tiles can be resolved.
+	 * @param wasCancelled 
 	 */
 	public synchronized void setComplete(boolean wasCancelled) {
 		// Flag that the processing is complete
@@ -256,11 +273,18 @@ public class ParallelTileObject extends PathTileObject implements TemporaryObjec
 						cache.put(secondROI, secondGeometry);
 					}
 
-					// Get the intersection
-					if (!firstGeometry.intersects(secondGeometry))
+					Geometry intersection;
+					try {
+						// Get the intersection
+						if (!firstGeometry.intersects(secondGeometry))
+							continue;
+
+						intersection = firstGeometry.intersection(secondGeometry);
+					} catch (Exception e) {
+						logger.warn("Error resolving overlaps: {}", e.getLocalizedMessage());
+						logger.debug(e.getLocalizedMessage(), e);
 						continue;
-					
-					Geometry intersection = firstGeometry.intersection(secondGeometry);
+					}
 					if (intersection.isEmpty())
 						continue;
 					

@@ -1,12 +1,36 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.images.servers;
 
 import java.io.IOException;
 import java.net.URI;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 import com.google.gson.annotations.JsonAdapter;
 
+import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectReader;
 import qupath.lib.regions.RegionRequest;
 
 /**
@@ -19,7 +43,7 @@ import qupath.lib.regions.RegionRequest;
  * @param <T>
  */
 @Deprecated
-class SimpleWrappedImageServer<T> implements ImageServer<T> {
+class SimpleWrappedImageServer<T> implements ImageServer<T>, PathObjectReader {
 	
 	@JsonAdapter(ImageServers.ImageServerTypeAdapter.class)
 	private ImageServer<T> server;
@@ -165,6 +189,13 @@ class SimpleWrappedImageServer<T> implements ImageServer<T> {
 	@Override
 	public Class<T> getImageClass() {
 		return server.getImageClass();
+	}
+
+	@Override
+	public Collection<PathObject> readPathObjects() throws IOException {
+		if (server instanceof PathObjectReader)
+			return ((PathObjectReader)server).readPathObjects();
+		return Collections.emptyList();
 	}
 
 }

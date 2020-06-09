@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.images.writers;
 
 import java.awt.image.BufferedImage;
@@ -45,7 +66,7 @@ public class ImageWriterTools {
 		if (server == null)
 			return getCompatibleWriters((Class<T>)null, ext);
 		var writers = getCompatibleWriters(server.getImageClass(), ext);
-		return writers.stream().filter(w -> w.suportsImageType(server)).collect(Collectors.toList());
+		return writers.stream().filter(w -> w.supportsImageType(server)).collect(Collectors.toList());
 	}
 	
 	/**
@@ -69,10 +90,12 @@ public class ImageWriterTools {
 			ext2 = ext2.startsWith(".") ? ext2.substring(1) : ext2;
 		}
 		List<ImageWriter<T>> writers = new ArrayList<>();
-		for (ImageWriter<T> writer : serviceLoader) {
-			if (imageClass == null || imageClass.equals(writer.getImageClass())) {
-				if (ext2 == null || writer.getExtensions().contains(ext2))
-					writers.add(writer);				
+		synchronized(serviceLoader) {
+			for (ImageWriter<T> writer : serviceLoader) {
+				if (imageClass == null || imageClass.equals(writer.getImageClass())) {
+					if (ext2 == null || writer.getExtensions().contains(ext2))
+						writers.add(writer);				
+				}
 			}
 		}
 		Collections.sort(writers, COMPARATOR);

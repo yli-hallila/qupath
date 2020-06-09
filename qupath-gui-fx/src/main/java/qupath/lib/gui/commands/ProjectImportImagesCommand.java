@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -29,7 +29,16 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.Scanner;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -42,26 +51,42 @@ import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javafx.beans.property.BooleanProperty;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
+import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TitledPane;
 import javafx.scene.input.Clipboard;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.common.RemoteOpenslide;
+import qupath.lib.common.ThreadTools;
 import qupath.lib.display.ChannelDisplayInfo;
 import qupath.lib.display.ImageDisplay;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.commands.interfaces.PathCommand;
-import qupath.lib.gui.helpers.DisplayHelpers;
-import qupath.lib.gui.helpers.PaneToolsFX;
-import qupath.lib.gui.panels.ProjectBrowser;
+import qupath.lib.gui.dialogs.Dialogs;
+import qupath.lib.gui.panes.ProjectBrowser;
 import qupath.lib.gui.prefs.PathPrefs;
+import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.ImageData.ImageType;
 import qupath.lib.images.servers.WrappedBufferedImageServer;
+import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectReader;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerBuilder;
 import qupath.lib.images.servers.ImageServerBuilder.ServerBuilder;
@@ -72,6 +97,7 @@ import qupath.lib.images.servers.RotatedImageServer;
 import qupath.lib.images.servers.RotatedImageServer.Rotation;
 import qupath.lib.images.servers.ServerTools;
 import qupath.lib.projects.Project;
+import qupath.lib.projects.ProjectIO;
 import qupath.lib.projects.ProjectImageEntry;
 
 /**
@@ -79,34 +105,29 @@ import qupath.lib.projects.ProjectImageEntry;
  * 
  * @author Pete Bankhead
  */
-public class ProjectImportImagesCommand implements PathCommand {
+class ProjectImportImagesCommand {
 	
 	private final static Logger logger = LoggerFactory.getLogger(ProjectImportImagesCommand.class);
-	
-	private static final String commandName = "Project: Import images";
 
-	private QuPathGUI qupath;
-	
-	public ProjectImportImagesCommand(final QuPathGUI qupath) {
-		this.qupath = qupath;
-	}
-	
-	@Override
-	public void run() {
-		promptToImportImages(qupath);
-	}
+	private final static String commandName = "Import images";
 
+	private final static BooleanProperty pyramidalizeProperty = PathPrefs.createPersistentPreference("projectImportPyramidalize", true);
+	private final static BooleanProperty importObjectsProperty = PathPrefs.createPersistentPreference("projectImportObjects", false);
+
+	
 	public static List<ProjectImageEntry<BufferedImage>> promptToImportImages(QuPathGUI qupath, String... defaultPaths) {
-		if (qupath.getProject() == null) {
-			DisplayHelpers.showErrorMessage(commandName, "No project open!");
+		var project = qupath.getProject();
+		if (project == null) {
+			Dialogs.showNoProjectError(commandName);
 			return Collections.emptyList();
 		}
 		
-		
 		ListView<String> listView = new ListView<>();
-		listView.setPrefSize(480, 480);
+		listView.setPrefWidth(480);
+		listView.setMinHeight(100);
 		listView.getItems().addAll(defaultPaths);
-
+		listView.setPlaceholder(new Label("Drag & drop image or project files for import, \nor choose from the options below"));
+		
 		Button btnFile = new Button("Choose files");
 		btnFile.setOnAction(e -> loadFromFileChooser(listView.getItems()));
 
@@ -121,7 +142,7 @@ public class ProjectImportImagesCommand implements PathCommand {
 
 		Button btnExternalSlide = new Button("External slide");
 		btnExternalSlide.setOnAction(e -> loadFromServer(listView.getItems()));
-		
+
 		TitledPane paneList = new TitledPane("Image paths", listView);
 		paneList.setCollapsible(false);
 		
@@ -153,40 +174,47 @@ public class ProjectImportImagesCommand implements PathCommand {
 		comboBuilder.getSelectionModel().selectFirst();
 		Label labelBuilder = new Label("Image provider");
 		labelBuilder.setLabelFor(comboBuilder);
+		labelBuilder.setMinWidth(Label.USE_PREF_SIZE);
 
 		ComboBox<ImageType> comboType = new ComboBox<>();
 		comboType.getItems().setAll(ImageType.values());
 		Label labelType = new Label("Set image type");
 		labelType.setLabelFor(comboType);
+		labelType.setMinWidth(Label.USE_PREF_SIZE);
 
 		ComboBox<Rotation> comboRotate = new ComboBox<>();
 		comboRotate.getItems().setAll(Rotation.values());
 		Label labelRotate = new Label("Rotate image");
 		labelRotate.setLabelFor(comboRotate);
+		labelRotate.setMinWidth(Label.USE_PREF_SIZE);
 
-		CheckBox cbPyramidize = new CheckBox("Auto-generate pyramids");
-		cbPyramidize.setSelected(true);
+		CheckBox cbPyramidalize = new CheckBox("Auto-generate pyramids");
+		cbPyramidalize.setSelected(pyramidalizeProperty.get());
 
-		PaneToolsFX.setMaxWidth(Double.MAX_VALUE, comboBuilder, comboType, comboRotate, cbPyramidize);
-		PaneToolsFX.setFillWidth(Boolean.TRUE, comboBuilder, comboType, comboRotate, cbPyramidize);
-		PaneToolsFX.setHGrowPriority(Priority.ALWAYS, comboBuilder, comboType, comboRotate, cbPyramidize);
+		CheckBox cbImportObjects = new CheckBox("Import objects");
+		cbImportObjects.setSelected(importObjectsProperty.get());
+
+		PaneTools.setMaxWidth(Double.MAX_VALUE, comboBuilder, comboType, comboRotate, cbPyramidalize, cbImportObjects);
+		PaneTools.setFillWidth(Boolean.TRUE, comboBuilder, comboType, comboRotate, cbPyramidalize, cbImportObjects);
+		PaneTools.setHGrowPriority(Priority.ALWAYS, comboBuilder, comboType, comboRotate, cbPyramidalize, cbImportObjects);
 
 		GridPane paneType = new GridPane();
 		paneType.setPadding(new Insets(5));
 		paneType.setHgap(5);
 		paneType.setVgap(5);
 		int row = 0;
-		PaneToolsFX.addGridRow(paneType, row++, 0, "Specify the library used to open images", labelBuilder, comboBuilder);
-		PaneToolsFX.addGridRow(paneType, row++, 0, "Specify the default image type for all images being imported (required for analysis, can be changed later under the 'Image' tab)", labelType, comboType);
-		PaneToolsFX.addGridRow(paneType, row++, 0, "Optionally rotate images on import", labelRotate, comboRotate);
-		PaneToolsFX.addGridRow(paneType, row++, 0, "Dynamically create image pyramids for large, single-resolution images", cbPyramidize, cbPyramidize);
+		PaneTools.addGridRow(paneType, row++, 0, "Specify the library used to open images", labelBuilder, comboBuilder);
+		PaneTools.addGridRow(paneType, row++, 0, "Specify the default image type for all images being imported (required for analysis, can be changed later under the 'Image' tab)", labelType, comboType);
+		PaneTools.addGridRow(paneType, row++, 0, "Optionally rotate images on import", labelRotate, comboRotate);
+		PaneTools.addGridRow(paneType, row++, 0, "Dynamically create image pyramids for large, single-resolution images", cbPyramidalize, cbPyramidalize);
+		PaneTools.addGridRow(paneType, row++, 0, "Read and import objects (e.g. annotations) from the image file, if possible", cbImportObjects, cbImportObjects);
 
 		paneImages.setCenter(paneList);
 		paneImages.setBottom(paneType);
 
 //		TilePane paneButtons = new TilePane();
 //		paneButtons.getChildren().addAll(btnFile, btnURL, btnClipboard, btnFileList);
-		GridPane paneButtons = PaneToolsFX.createColumnGridControls(btnFile, btnURL, btnClipboard, btnFileList, btnExternalSlide);
+		GridPane paneButtons = PaneTools.createColumnGridControls(btnFile, btnURL, btnClipboard, btnFileList, btnExternalSlide);
 		paneButtons.setHgap(5);
 		paneButtons.setPadding(new Insets(5));
 		
@@ -194,12 +222,43 @@ public class ProjectImportImagesCommand implements PathCommand {
 		pane.setCenter(paneImages);
 		pane.setBottom(paneButtons);
 		
-		
+		// Support drag & drop for files
+		pane.setOnDragOver(e -> {
+			e.acceptTransferModes(TransferMode.COPY);
+            e.consume();
+        });
+		pane.setOnDragDropped(e -> {
+			Dragboard dragboard = e.getDragboard();
+			if (dragboard.hasFiles()) {
+		        logger.trace("Files dragged onto project import dialog");
+				try {
+					var paths = dragboard.getFiles()
+							.stream()
+							.filter(f -> f.isFile() && !f.isHidden())
+							.map(f -> f.getAbsolutePath())
+							.collect(Collectors.toList());
+					paths.removeAll(listView.getItems());
+					if (!paths.isEmpty())
+						listView.getItems().addAll(paths);
+				} catch (Exception ex) {
+					Dialogs.showErrorMessage("Drag & Drop", ex);
+				}
+			}
+			e.setDropCompleted(true);
+			e.consume();
+        });
+
+
+
 		Dialog<ButtonType> dialog = new Dialog<>();
+		dialog.setResizable(true);
 		dialog.setTitle("Import images to project");
 		ButtonType typeImport = new ButtonType("Import", ButtonData.OK_DONE);
 		dialog.getDialogPane().getButtonTypes().addAll(typeImport, ButtonType.CANCEL);
-		dialog.getDialogPane().setContent(pane);
+		ScrollPane scroll = new ScrollPane(pane);
+		scroll.setFitToHeight(true);
+		scroll.setFitToWidth(true);
+		dialog.getDialogPane().setContent(scroll);
 		
 		Optional<ButtonType> result = dialog.showAndWait();
 		if (!result.isPresent() || result.get() != typeImport)
@@ -214,72 +273,130 @@ public class ProjectImportImagesCommand implements PathCommand {
 //			else
 //				pathFailed.add(path);
 //		}
-		
+
 		ImageType type = comboType.getValue();
 		Rotation rotation = comboRotate.getValue();
-		boolean pyramidize = cbPyramidize.isSelected();
+		boolean pyramidalize = cbPyramidalize.isSelected();
+		boolean importObjects = cbImportObjects.isSelected();
+		pyramidalizeProperty.set(pyramidalize);
+		importObjectsProperty.set(importObjects);
 
 		ImageServerBuilder<BufferedImage> requestedBuilder = comboBuilder.getSelectionModel().getSelectedItem();
 
 		List<String> pathSucceeded = new ArrayList<>();
 		List<String> pathFailed = new ArrayList<>();
-		var project = qupath.getProject();
 		List<ProjectImageEntry<BufferedImage>> entries = new ArrayList<>();
 		Task<Collection<ProjectImageEntry<BufferedImage>>> worker = new Task<>() {
 			@Override
 			protected Collection<ProjectImageEntry<BufferedImage>> call() throws Exception {
 				AtomicLong counter = new AtomicLong(0L);
 
-				// TODO: The parallel stream is bringing nothing here... refactor to return entries then add, or else add then sort later
-				updateMessage("Identifying images...");
+				List<String> items = new ArrayList<>(listView.getItems());
 
-				// Get all the relevant builders
-				List<ServerBuilder<BufferedImage>> builders = listView.getItems().parallelStream().map(p -> {
-					try {
-						UriImageSupport<BufferedImage> support;
-						if (requestedBuilder == null)
-							support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, p);
-						else
-							support = requestedBuilder.checkImageSupport(GeneralTools.toURI(p));
-						if (support != null)
-							return support.getBuilders();
-					} catch (Exception e) {
-						logger.error("Unable to add {} ({})", p, e.getLocalizedMessage());
+				updateMessage("Checking for compatible image readers...");
+
+				// Limit the size of the thread pool
+				// The previous use of a cached thread pool caused trouble when importing may large, non-pyramidal images
+				var pool = Executors.newFixedThreadPool(PathPrefs.numCommandThreadsProperty().get(), ThreadTools.createThreadFactory("project-import", true));
+//				var pool = Executors.newCachedThreadPool(ThreadTools.createThreadFactory("project-import", true));
+				List<Future<List<ServerBuilder<BufferedImage>>>> results = new ArrayList<>();
+				List<ProjectImageEntry<BufferedImage>> projectImages = new ArrayList<>();
+				for (var item : items) {
+					// Try to load items from a project if possible
+					if (item.toLowerCase().endsWith(ProjectIO.DEFAULT_PROJECT_EXTENSION)) {
+						try {
+							var tempProject = ProjectIO.loadProject(GeneralTools.toURI(item), BufferedImage.class);
+							projectImages.addAll(tempProject.getImageList());
+						} catch (Exception e) {
+							logger.error("Unable to add images from {} ({})", item, e.getLocalizedMessage());
+						}
+						continue;
 					}
-					return new ArrayList<ServerBuilder<BufferedImage>>();
-				}).flatMap(List::stream).collect(Collectors.toList());
-
-				long max = builders.size();
-
-				updateMessage("Adding " + max + " images to project");
-
-				// Add everything in order first
-				List<ProjectImageEntry<BufferedImage>> entries = new ArrayList<>();
-				for (var builder : builders) {
-					if (rotation == null || rotation == Rotation.ROTATE_NONE)
-						entries.add(project.addImage(builder));
-					else
-						entries.add(project.addImage(RotatedImageServer.getRotatedBuilder(builder, rotation)));
+					results.add(pool.submit(() -> {
+						try {
+							UriImageSupport<BufferedImage> support;
+							if (requestedBuilder == null)
+								support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, item);
+							else
+								support = requestedBuilder.checkImageSupport(GeneralTools.toURI(item));
+							if (support != null)
+								return support.getBuilders();
+						} catch (Exception e) {
+							logger.error("Unable to add {} ({})", item, e.getLocalizedMessage());
+						}
+						return new ArrayList<ServerBuilder<BufferedImage>>();
+					}));
 				}
 
-				// Initialize (the slow bit)
-				int n = builders.size();
 				List<ProjectImageEntry<BufferedImage>> failures = Collections.synchronizedList(new ArrayList<>());
-				entries.parallelStream().forEach(entry -> {
-					try {
-						initializeEntry(entry, type, pyramidize);
-					} catch (Exception e) {
-						failures.add(entry);
-						logger.warn("Exception adding " + entry, e);
-					} finally {
-						long i = counter.incrementAndGet();
-						updateProgress(i, max);
-						String name = entry.getImageName();
-						if (name != null) {
-							updateMessage("Added " + i + "/" + n + " - "+ name);
+
+				// If we have projects, try adding images from these first
+				if (!projectImages.isEmpty()) {
+					if (projectImages.size() == 1)
+						updateMessage("Importing 1 image from existing projects");
+					else
+						updateMessage("Importing " + projectImages.size() + " images from existing projects");
+					for (var temp : projectImages) {
+						try {
+							project.addDuplicate(temp, true);
+						} catch (Exception e) {
+							failures.add(temp);
 						}
 					}
-				});
+				}
+
+				// If we have 'standard' image paths, use these next
+				List<ServerBuilder<BufferedImage>> builders = new ArrayList<>();
+				for (var result : results) {
+					try {
+						builders.addAll(result.get());
+					} catch (ExecutionException e) {
+						logger.error("Execution exception importing image", e);
+					}
+				}
+
+				long max = builders.size();
+				if (!builders.isEmpty()) {
+					if (max == 1)
+						updateMessage("Adding 1 image to project");
+					else
+						updateMessage("Adding " + max + " images to project");
+
+					// Add everything in order first
+					List<ProjectImageEntry<BufferedImage>> entries = new ArrayList<>();
+					for (var builder : builders) {
+						if (rotation == null || rotation == Rotation.ROTATE_NONE)
+							entries.add(project.addImage(builder));
+						else
+							entries.add(project.addImage(RotatedImageServer.getRotatedBuilder(builder, rotation)));
+					}
+
+					// Initialize (the slow bit)
+					int n = builders.size();
+					for (var entry : entries) {
+						pool.submit(() -> {
+							try {
+								initializeEntry(entry, type, pyramidalize, importObjects);
+							} catch (Exception e) {
+								failures.add(entry);
+								logger.warn("Exception adding " + entry, e);
+							} finally {
+								long i = counter.incrementAndGet();
+								updateProgress(i, max);
+								String name = entry.getImageName();
+								if (name != null) {
+									updateMessage("Added " + i + "/" + n + " - "+ name);
+								}
+							}
+						});
+					}
+				}
+				pool.shutdown();
+				try {
+					pool.awaitTermination(60, TimeUnit.MINUTES);
+				} catch (Exception e) {
+					logger.error("Exception waiting for project import to complete: " + e.getLocalizedMessage(), e);
+				}
 
 				if (!failures.isEmpty()) {
 					String message;
@@ -289,8 +406,10 @@ public class ProjectImportImagesCommand implements PathCommand {
 						message = "Failed to load " + failures.size() + " images.";
 					if (requestedBuilder != null)
 						message += "\nThe image type might not be supported by '" + requestedBuilder.getName() + "'";
-					DisplayHelpers.showErrorMessage("Import images", message);
-					project.removeAllImages(failures, true);
+					Dialogs.showErrorMessage("Import images", message);
+
+					var toRemove = failures.stream().filter(p -> project.getImageList().contains(p)).collect(Collectors.toList());
+					project.removeAllImages(toRemove, true);
 				}
 
 				// Now save changes
@@ -320,7 +439,7 @@ public class ProjectImportImagesCommand implements PathCommand {
 		try {
 			project.syncChanges();
 		} catch (IOException e1) {
-			DisplayHelpers.showErrorMessage("Sync project", e1);
+			Dialogs.showErrorMessage("Sync project", e1);
 		}
 		qupath.refreshProject();
 
@@ -338,29 +457,41 @@ public class ProjectImportImagesCommand implements PathCommand {
 			for (String path : pathFailed)
 				sb.append("\t" + path + "\n");
 			sb.append("\n");
-		}
-		if (!pathFailed.isEmpty()) {
+
 			TextArea textArea = new TextArea();
 			textArea.setText(sb.toString());
 			if (pathSucceeded.isEmpty())
-				DisplayHelpers.showErrorMessage(commandName, textArea);
+				Dialogs.showErrorMessage(commandName, textArea);
 			else
-				DisplayHelpers.showMessageDialog(commandName, textArea);
+				Dialogs.showMessageDialog(commandName, textArea);
 		}
-		logger.info(sb.toString());
+		// TODO: Add failed and successful paths to pathFailed/pathSucceeded, so the line below prints something
+		if (sb.length() > 0)
+			logger.info(sb.toString());
 		return entries;
+	}
+
+
+
+	public static ProjectImageEntry<BufferedImage> addSingleImageToProject(Project<BufferedImage> project, ImageServer<BufferedImage> server, ImageType type) {
+		try {
+			var entry = project.addImage(server.getBuilder());
+			initializeEntry(entry, type, false, false);
+			return entry;
+		} catch (Exception e) {
+			return null;
+		}
 	}
 	
 	
-
 	static boolean loadFromFileChooser(final List<String> list) {
-		List<File> files = QuPathGUI.getSharedDialogHelper().promptForMultipleFiles(commandName, null, null);
+		List<File> files = Dialogs.promptForMultipleFiles(commandName, null, null);
 		if (files == null)
 			return false;
 		boolean changes = false;
 		for (File fileNew : files) {
 			if (list.contains(fileNew.getAbsolutePath())) {
-				DisplayHelpers.showErrorMessage(commandName, "List already contains " + fileNew.getName());
+				Dialogs.showErrorMessage(commandName, "List already contains " + fileNew.getName());
 				continue;
 			}
 			list.add(fileNew.getAbsolutePath());
@@ -371,11 +502,11 @@ public class ProjectImportImagesCommand implements PathCommand {
 	
 	
 	static boolean loadFromSingleURL(final List<String> list) {
-		String path = QuPathGUI.getSharedDialogHelper().promptForFilePathOrURL("Choose image path", null, null, null);
+		String path = Dialogs.promptForFilePathOrURL("Choose image path", null, null, null);
 		if (path == null)
 			return false;
 		if (list.contains(path)) {
-			DisplayHelpers.showErrorMessage(commandName, "List already contains " + path);
+			Dialogs.showErrorMessage(commandName, "List already contains " + path);
 			return false;
 		}
 		list.add(path);
@@ -384,11 +515,11 @@ public class ProjectImportImagesCommand implements PathCommand {
 	
 
 	static int loadFromTextFile(final List<String> list) {
-		File file = QuPathGUI.getSharedDialogHelper().promptForFile(commandName, null, "Text file", new String[]{"txt", "csv"});
+		File file = Dialogs.promptForFile(commandName, null, "Text file", new String[]{"txt", "csv"});
 		if (file == null)
 			return 0;
 		if (file.length() / 1024 / 1024 > 5) {
-			DisplayHelpers.showErrorMessage(commandName, String.format("%s is too large (%.2f MB) - \n"
+			Dialogs.showErrorMessage(commandName, String.format("%s is too large (%.2f MB) - \n"
 					+ "please choose a text file containing only file paths or select another import option", file.getName(), file.length() / 1024.0 / 1024.0));
 			return 0;
 		}
@@ -409,7 +540,7 @@ public class ProjectImportImagesCommand implements PathCommand {
 				}
 			}
 		} catch (FileNotFoundException e) {
-			DisplayHelpers.showErrorMessage(commandName, "File " + file.getName() + " not found!");
+			Dialogs.showErrorMessage(commandName, "File " + file.getName() + " not found!");
 			return 0;
 		} finally {
 			if (scanner != null)
@@ -447,13 +578,19 @@ public class ProjectImportImagesCommand implements PathCommand {
 			}
 		}
 		if (possiblePaths.isEmpty()) {
-			DisplayHelpers.showErrorMessage(commandName, "Could not find any valid paths on the clipboard!");
+			Dialogs.showErrorMessage(commandName, "Could not find any valid paths on the clipboard!");
 			return 0;
 		}
 		possiblePaths.removeAll(list);
 		list.addAll(possiblePaths);
 		return possiblePaths.size();
 	}
+	
+	/**
+	 * Checks is a path relates to an existing file, or a URI with a different scheme.
+	 * @param list
+	 * @return
+	 */
 
 	static int loadFromServer(final List<String> list) {
 		TextField filterTextField = new TextField();
@@ -514,7 +651,7 @@ public class ProjectImportImagesCommand implements PathCommand {
 
 		return listView.getSelectionModel().getSelectedItems().size();
 	}
-	
+
 	/**
 	 * Checks is a path relates to an existing file, or a URI with a different scheme.
 	 * @param path
@@ -522,23 +659,12 @@ public class ProjectImportImagesCommand implements PathCommand {
 	 */
 	static boolean isPossiblePath(final String path) {
 		try {
-			var uri = GeneralTools.toURI(path);
+			var uri = GeneralTools.toEncodedURI(path);
 			if ("file".equals(uri.getScheme()))
 				return GeneralTools.toPath(uri).toFile().exists();
 			return true;
 		} catch (Exception e) {
 			return false;
-		}
-	}
-
-
-	public static ProjectImageEntry<BufferedImage> addSingleImageToProject(Project<BufferedImage> project, ImageServer<BufferedImage> server, ImageType type) {
-		try {
-			var entry = project.addImage(server.getBuilder());
-			initializeEntry(entry, type, false);
-			return entry;
-		} catch (Exception e) {
-			return null;
 		}
 	}
 
@@ -549,11 +675,12 @@ public class ProjectImportImagesCommand implements PathCommand {
 	 *
 	 * @param entry the entry that should be initialized
 	 * @param type the ImageType that should be set for each entry being added
-	 * @param pyramidizeSingleResolution if true, attempt to pyramidalize single-resolution image servers
+	 * @param pyramidalizeSingleResolution if true, attempt to pyramidalize single-resolution image servers
+	 * @param importObjects if true, read objects from the server - if available
 	 * @return
 	 * @throws Exception
 	 */
-	static ProjectImageEntry<BufferedImage> initializeEntry(ProjectImageEntry<BufferedImage> entry, ImageType type, boolean pyramidizeSingleResolution) throws Exception {
+	static ProjectImageEntry<BufferedImage> initializeEntry(ProjectImageEntry<BufferedImage> entry, ImageType type, boolean pyramidalizeSingleResolution, boolean importObjects) throws Exception {
 		try (ImageServer<BufferedImage> server = entry.getServerBuilder().build()) {
 			var img = getThumbnailRGB(server, null);
 			// Set the image name
@@ -563,9 +690,10 @@ public class ProjectImportImagesCommand implements PathCommand {
 			entry.setThumbnail(img);
 
 			// Pyramidalize this if we need to
+			@SuppressWarnings("resource")
 			ImageServer<BufferedImage> server2 = server;
-			int minPyramidDimension = PathPrefs.getMinPyramidDimension();
-			if (pyramidizeSingleResolution && server.nResolutions() == 1 && Math.max(server.getWidth(), server.getHeight()) > minPyramidDimension) {
+			int minPyramidDimension = PathPrefs.minPyramidDimensionProperty().get();
+			if (pyramidalizeSingleResolution && server.nResolutions() == 1 && Math.max(server.getWidth(), server.getHeight()) > minPyramidDimension) {
 				var serverTemp = ImageServers.pyramidalize(server);
 				if (serverTemp.nResolutions() > 1) {
 					logger.debug("Auto-generating image pyramid for " + name);
@@ -575,8 +703,11 @@ public class ProjectImportImagesCommand implements PathCommand {
 			}
 
 			// Initialize an ImageData object with a type, if required
-			if (type != null || server != server2) {
+			Collection<PathObject> pathObjects = importObjects && server2 instanceof PathObjectReader ? ((PathObjectReader)server2).readPathObjects() : Collections.emptyList();
+			if (type != null || server != server2 || !pathObjects.isEmpty()) {
 				var imageData = new ImageData<>(server2, type);
+				if (!pathObjects.isEmpty())
+					imageData.getHierarchy().addPathObjects(pathObjects);
 				entry.saveImageData(imageData);
 			}
 			if (server != server2)
@@ -665,6 +796,6 @@ public class ProjectImportImagesCommand implements PathCommand {
 		return imgThumbnail2;
 	}
 
-
+	
 	
 }

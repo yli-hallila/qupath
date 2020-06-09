@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -25,6 +25,9 @@ package qupath.lib.gui.commands;
 
 import java.io.File;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
@@ -40,6 +43,7 @@ import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyCode;
@@ -47,11 +51,13 @@ import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
-
+import qupath.lib.gui.ActionTools;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.commands.interfaces.PathCommand;
-import qupath.lib.gui.logging.LoggingAppender;
-import qupath.lib.gui.logging.TextAppendable;
+import qupath.lib.gui.SelectableItem;
+import qupath.lib.gui.dialogs.Dialogs;
+import qupath.lib.gui.logging.LogManager;
+import qupath.lib.gui.logging.LogManager.LogLevel;
+import qupath.lib.gui.prefs.PathPrefs;
 
 /**
  * Basic log display functionality.
@@ -62,7 +68,7 @@ import qupath.lib.gui.logging.TextAppendable;
  * @author Pete Bankhead
  *
  */
-public class LogViewerCommand implements PathCommand {
+public class LogViewerCommand implements Runnable {
 	
 	final private static Logger logger = LoggerFactory.getLogger(LogViewerCommand.class);
 	
@@ -70,15 +76,21 @@ public class LogViewerCommand implements PathCommand {
 	private Stage dialog = null;
 	private TextArea textPane = new TextArea();
 	
+	private static List<Action> actionLogLevels = Arrays.asList(
+			createLogLevelAction(LogLevel.ERROR),
+			createLogLevelAction(LogLevel.WARN),
+			createLogLevelAction(LogLevel.INFO),
+			createLogLevelAction(LogLevel.DEBUG),
+			createLogLevelAction(LogLevel.TRACE)
+			);
+	
+	/**
+	 * Constructor.
+	 * @param qupath the current QuPath instance
+	 */
 	public LogViewerCommand(final QuPathGUI qupath) {
 		this.qupath = qupath;
-		TextAppendable appendable = new TextAppendable() {
-			@Override
-			public void appendText(String text) {
-				textPane.appendText(text);
-			}
-		};
-		LoggingAppender.getInstance().addTextComponent(appendable);
+		LogManager.addTextAppendableFX(text -> textPane.appendText(text));
 	}
 
 	@Override
@@ -91,6 +103,17 @@ public class LogViewerCommand implements PathCommand {
 			createDialog();
 		dialog.show();
 	}
+	
+	
+	private static Action createLogLevelAction(LogLevel level) {
+		var command = new SelectableItem<>(LogManager.rootLogLevelProperty(), level);
+		return ActionTools.actionBuilder(e -> command.setSelected(true))
+			.text(level.toString())
+			.selectable(true)
+			.selected(command.selectedProperty())
+			.build();
+	}
+	
 	
 	private void createDialog() {
 		dialog = new Stage();
@@ -126,17 +149,20 @@ public class LogViewerCommand implements PathCommand {
 		menu.getItems().add(ActionUtils.createMenuItem(actionClear));
 		menu.getItems().add(miLockScroll);
 		
+		menu.getItems().add(createLogLevelMenu());
+		
+		
 		// Add actual menubar
 		MenuBar menubar = new MenuBar();
 		Menu menuFile = new Menu("File");
 		MenuItem miSave = new MenuItem("Save log");
 		miSave.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCodeCombination.SHORTCUT_DOWN));
 		miSave.setOnAction(e -> {
-			File fileOutput = QuPathGUI.getDialogHelper(dialog).promptToSaveFile("Save log", null, "log.txt", "Log files", ".txt");
+			File fileOutput = Dialogs.getChooser(dialog).promptToSaveFile("Save log", null, "log.txt", "Log files", ".txt");
 			if (fileOutput == null)
 				return;
 			try {
-				PrintWriter writer = new PrintWriter(fileOutput);
+				PrintWriter writer = new PrintWriter(fileOutput, StandardCharsets.UTF_8);
 				writer.print(textPane.getText());
 				writer.close();
 			} catch (Exception ex) {
@@ -152,11 +178,13 @@ public class LogViewerCommand implements PathCommand {
 		Menu menuEdit = new Menu("Edit");
 		menuEdit.getItems().addAll(
 				ActionUtils.createMenuItem(actionCopy),
-				ActionUtils.createMenuItem(actionClear)
+				ActionUtils.createMenuItem(actionClear),
+				createLogLevelMenu()
 				);
 		menubar.getMenus().addAll(menuFile, menuEdit);
 		pane.setTop(menubar);
-		menubar.setUseSystemMenuBar(true);
+//		menubar.setUseSystemMenuBar(true);
+		menubar.useSystemMenuBarProperty().bindBidirectional(PathPrefs.useSystemMenubarProperty());
 		
 		Scene scene = new Scene(pane, 400, 300);
 		dialog.setScene(scene);
@@ -173,6 +201,16 @@ public class LogViewerCommand implements PathCommand {
 		dialog.initModality(Modality.NONE);
 		dialog.initOwner(qupath.getStage());
 		dialog.setResizable(true);
+	}
+	
+	
+	private static Menu createLogLevelMenu() {
+		var menu = new Menu("Set log level");
+		var group = new ToggleGroup();
+		for (var action : actionLogLevels) {
+			menu.getItems().add(ActionTools.createCheckMenuItem(action, group));
+		}
+		return menu;
 	}
 
 }

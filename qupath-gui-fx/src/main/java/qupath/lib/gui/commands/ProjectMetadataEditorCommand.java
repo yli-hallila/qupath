@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -57,38 +57,30 @@ import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.commands.interfaces.PathCommand;
-import qupath.lib.gui.helpers.DisplayHelpers;
-import qupath.lib.gui.panels.ProjectBrowser;
+import qupath.lib.gui.dialogs.Dialogs;
+import qupath.lib.gui.panes.ProjectBrowser;
+import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
 
 /**
  * Command to enable editing of project metadata.
- * 
+ * <p>
  * TODO: Support copying and pasting tables, to allow better editing within a spreadsheet application.
- * 
+ * <p>
  * TODO: Support adding/removing metadata columns.
  * 
  * @author Pete Bankhead
  *
  */
-public class ProjectMetadataEditorCommand implements PathCommand {
+class ProjectMetadataEditorCommand {
 	
 	private final static Logger logger = LoggerFactory.getLogger(ProjectMetadataEditorCommand.class);
 
 	private final static String IMAGE_NAME = "Image name";
+
 	
-	private QuPathGUI qupath;
-	
-	public ProjectMetadataEditorCommand(final QuPathGUI qupath) {
-		this.qupath = qupath;
-	}
-	
-	@Override
-	public void run() {
-		
-		Project<?> project = qupath.getProject();
+	public static void showProjectMetadataEditor(Project<?> project) {
 		if (project == null) {
 			logger.warn("No project available!");
 			return;
@@ -132,14 +124,14 @@ public class ProjectMetadataEditorCommand implements PathCommand {
 		// Handle deleting entries
 		table.addEventHandler(KeyEvent.KEY_RELEASED, e -> {
 			if (e.getCode() == KeyCode.BACK_SPACE || e.getCode() == KeyCode.DELETE) {
-				List<TablePosition> positions = table.getSelectionModel().getSelectedCells().stream().filter(
+				var positions = table.getSelectionModel().getSelectedCells().stream().filter(
 						p -> !IMAGE_NAME.equals(p.getTableColumn().getText())).collect(Collectors.toList());
 				if (positions.isEmpty())
 					return;
 				if (positions.size() == 1) {
 					setTextForSelectedCells(positions, null);
 				} else {
-					if (DisplayHelpers.showConfirmDialog("Project metadata", "Clear metadata for " + positions.size() + " selected cells?")) {
+					if (Dialogs.showConfirmDialog("Project metadata", "Clear metadata for " + positions.size() + " selected cells?")) {
 						setTextForSelectedCells(positions, null);
 					}
 				}
@@ -170,7 +162,7 @@ public class ProjectMetadataEditorCommand implements PathCommand {
 		MenuItem miSet = new MenuItem("Set cell contents");
 		miSet.disableProperty().bind(selectedCells);
 		miSet.setOnAction(e -> {
-			String input = DisplayHelpers.showInputDialog("Set metadata cells", "Metadata text", "");
+			String input = Dialogs.showInputDialog("Set metadata cells", "Metadata text", "");
 			if (input == null)
 				return;
 			setTextForSelectedCells(table.getSelectionModel().getSelectedCells(), input);
@@ -183,11 +175,13 @@ public class ProjectMetadataEditorCommand implements PathCommand {
 		BorderPane pane = new BorderPane();
 		pane.setTop(menubar);
 		pane.setCenter(table);
-		menubar.setUseSystemMenuBar(true);
-		
+//		menubar.setUseSystemMenuBar(true);
+		menubar.useSystemMenuBarProperty().bindBidirectional(PathPrefs.useSystemMenubarProperty());		
 		
 		Dialog<ButtonType> dialog = new Dialog<>();
-		dialog.initOwner(qupath.getStage());
+		var qupath = QuPathGUI.getInstance();
+		if (qupath != null)
+			dialog.initOwner(qupath.getStage());
 		dialog.setTitle("Project metadata");
 		dialog.setHeaderText(null);
 		dialog.setResizable(true);
@@ -225,10 +219,10 @@ public class ProjectMetadataEditorCommand implements PathCommand {
 	 * an entire row or column.
 	 * 
 	 * @param table
-	 * @param warnIfDiscontinuous If true, a warning is shown if a discontinous selection is made.
+	 * @param warnIfDiscontinuous If true, a warning is shown if a discontinuous selection is made.
 	 */
 	private static void copySelectedCellsToClipboard(final TableView<?> table, final boolean warnIfDiscontinuous) {
-		List<TablePosition> positions = table.getSelectionModel().getSelectedCells();
+		var positions = table.getSelectionModel().getSelectedCells();
 		if (positions.isEmpty())
 			return;
 		
@@ -237,7 +231,7 @@ public class ProjectMetadataEditorCommand implements PathCommand {
 		boolean isContinuous = (rows[rows.length-1] - rows[0] + 1) * (cols[cols.length-1] - cols[0] + 1) == positions.size();
 		if (!isContinuous) {
 			if (warnIfDiscontinuous)
-				DisplayHelpers.showWarningNotification("Copy table selection", "Cannot copy discontinous selection, sorry");
+				Dialogs.showWarningNotification("Copy table selection", "Cannot copy discontinuous selection, sorry");
 			return;
 		}
 		
@@ -253,7 +247,7 @@ public class ProjectMetadataEditorCommand implements PathCommand {
 	 * 
 	 * @param table
 	 */
-	private static void copyEntireTableToClipboard(final TableView<?> table) {
+	private static <T> void copyEntireTableToClipboard(final TableView<T> table) {
 		List<TablePosition> positions = new ArrayList<>();
 		for (TableColumn<?, ?> column : table.getColumns()) {
 			for (int row = 0; row < table.getItems().size(); row++) {
@@ -302,14 +296,14 @@ public class ProjectMetadataEditorCommand implements PathCommand {
 			return;
 		}
 		
-		List<TablePosition> positions = table.getSelectionModel().getSelectedCells();
+		var positions = table.getSelectionModel().getSelectedCells();
 		if (positions.isEmpty()) {
 			logger.warn("No table cells selected");
 			return;
 		}
 		
 		if (s.contains("\n") || s.contains("\t")) {
-			DisplayHelpers.showWarningNotification("Paste contents", "Cannot paste clipboard contents - only simple, single-cell text supported");
+			Dialogs.showWarningNotification("Paste contents", "Cannot paste clipboard contents - only simple, single-cell text supported");
 			return;
 		}
 		
@@ -333,7 +327,7 @@ public class ProjectMetadataEditorCommand implements PathCommand {
 				wrapper.putMetadataValue(key, text);
 		}
 		if (containsImageNameColumns) {
-			DisplayHelpers.showWarningNotification("Project metadata table", "The image name cannot be changed");
+			Dialogs.showWarningNotification("Project metadata table", "The image name cannot be changed");
 		}
 	}
 	

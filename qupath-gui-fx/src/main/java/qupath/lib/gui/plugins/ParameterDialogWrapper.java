@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -42,9 +42,9 @@ import javafx.scene.text.TextAlignment;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.commands.scriptable.SelectObjectsByClassCommand;
-import qupath.lib.gui.helpers.DisplayHelpers;
-import qupath.lib.gui.helpers.dialogs.ParameterPanelFX;
+import qupath.lib.gui.commands.Commands;
+import qupath.lib.gui.dialogs.Dialogs;
+import qupath.lib.gui.dialogs.ParameterPanelFX;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjectTools;
@@ -68,14 +68,23 @@ public class ParameterDialogWrapper<T> {
 
 	final private static String KEY_REGIONS = "processRegions";
 
-	Stage dialog;
+	private Stage dialog;
 	private ParameterPanelFX panel;
 	private WorkflowStep lastWorkflowStep;
 
+	/**
+	 * Constructor.
+	 * @param plugin plugin for which this dialog should be shown
+	 * @param params parameters to display
+	 * @param pluginRunner the {@link PluginRunner} that may be used to run this plugin if necessary
+	 */
 	public ParameterDialogWrapper(final PathInteractivePlugin<T> plugin, final ParameterList params, final PluginRunner<T> pluginRunner) {
 		dialog = createDialog(plugin, params, pluginRunner);
 	}
 
+	/**
+	 * Show the dialog. This method returns immediately, allow the dialog to remain open without blocking.
+	 */
 	public void showDialog() {
 		// If we have no parameters, there is nothing to show... yet somehow we need to trigger the run button
 		// (I realize this is exceedingly awkward...)
@@ -102,12 +111,12 @@ public class ParameterDialogWrapper<T> {
 		Platform.runLater(() -> dialog.requestFocus());
 	}
 
+	/**
+	 * Get the {@link ParameterList} corresponding to the displayed parameters.
+	 * @return
+	 */
 	public ParameterList getParameterList() {
 		return panel.getParameters();
-	}
-	
-	public Stage getDialog() {
-		return dialog;
 	}
 
 	private Stage createDialog(final PathInteractivePlugin<T> plugin, final ParameterList params, final PluginRunner<T> pluginRunner) {
@@ -189,10 +198,10 @@ public class ParameterDialogWrapper<T> {
 						else
 							lastWorkflowStep = null;
 					} catch (Exception e) {
-						DisplayHelpers.showErrorMessage("Plugin error", e);
+						Dialogs.showErrorMessage("Plugin error", e);
 					} catch (OutOfMemoryError e) {
 						// This doesn't actually work...
-						DisplayHelpers.showErrorMessage("Out of memory error", "Out of memory - try to close other applications, or decrease the number of parallel processors in the QuPath preferences");
+						Dialogs.showErrorMessage("Out of memory error", "Out of memory - try to close other applications, or decrease the number of parallel processors in the QuPath preferences");
 					} finally {
 						Platform.runLater(() -> {
 							dialog.getScene().setCursor(Cursor.DEFAULT);
@@ -209,16 +218,10 @@ public class ParameterDialogWrapper<T> {
 
 		BorderPane pane = new BorderPane();
 		ScrollPane scrollPane = new ScrollPane();
-		BorderPane paneCenter = new BorderPane();
-		paneCenter.setCenter(panel.getPane());
-		paneCenter.setBottom(label);
 		label.setMaxWidth(Double.MAX_VALUE);
-//		scrollPane.setStyle("-fx-background-color:transparent;");
 		scrollPane.setContent(panel.getPane());
 		scrollPane.setFitToWidth(true);
 		pane.setCenter(scrollPane);
-//		pane.setCenter(panel.getPane());
-		paneCenter.setPadding(new Insets(5, 5, 5, 5));
 
 		btnRun.setMaxWidth(Double.MAX_VALUE);
 		btnRun.setPadding(new Insets(5, 5, 5, 5));
@@ -324,7 +327,7 @@ public class ParameterDialogWrapper<T> {
 				String message = name + " requires parent objects of one of the following types:";
 				for (Class<? extends PathObject> cls : supportedParents)
 					message += ("\n" + PathObjectTools.getSuitableName(cls, false));
-				DisplayHelpers.showErrorMessage(name + " error", message);
+				Dialogs.showErrorMessage(name + " error", message);
 				return false;
 			}
 		}
@@ -333,13 +336,13 @@ public class ParameterDialogWrapper<T> {
 		ParameterList paramsParents = new ParameterList();
 		paramsParents.addChoiceParameter(KEY_REGIONS, "Process all", choiceList.get(0), choiceList);
 
-		if (!DisplayHelpers.showParameterDialog("Process regions", paramsParents))
+		if (!Dialogs.showParameterDialog("Process regions", paramsParents))
 			return false;
 
 		
 		String choiceString = (String)paramsParents.getChoiceParameterValue(KEY_REGIONS);
 		if (!"Selected objects".equals(choiceString))
-			SelectObjectsByClassCommand.selectObjectsByClass(imageData, choices.get(choiceString));
+			Commands.selectObjectsByClass(imageData, choices.get(choiceString));
 		//			QP.selectObjectsByClass(hierarchy, choices.get(paramsParents.getChoiceParameterValue(InteractivePluginTools.KEY_REGIONS)));
 
 		// Success!  Probably...

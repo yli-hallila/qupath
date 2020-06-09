@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -33,7 +33,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -57,7 +56,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
-import qupath.lib.classifiers.PathObjectClassifier;
+import qupath.lib.classifiers.object.ObjectClassifier;
 import qupath.lib.classifiers.pixel.PixelClassifier;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.common.RemoteOpenslide;
@@ -177,8 +176,8 @@ class DefaultProject implements Project<BufferedImage> {
 		project.loadProject();
 		return project;
 	}
-	
-	
+
+
 	/**
 	 * Get an unmodifiable list representing the <code>PathClass</code>es associated with this project.
 	 * @return
@@ -303,6 +302,23 @@ class DefaultProject implements Project<BufferedImage> {
 	}
 	
 	@Override
+	public ProjectImageEntry<BufferedImage> addDuplicate(final ProjectImageEntry<BufferedImage> entry, boolean copyData) throws IOException {
+		var entryNew = new DefaultProjectImageEntry(entry.getServerBuilder(), null, entry.getImageName(), entry.getDescription(), entry.getMetadataMap());
+		if (addImage(entryNew)) {
+			if (copyData)
+				entryNew.copyDataFromEntry(entry);
+			else {
+				var img = entry.getThumbnail();
+				if (img != null)
+					entryNew.setThumbnail(img);
+			}
+			return entryNew;
+		}
+		throw new IOException("Unable to add duplicate of " + entry);
+	}
+
+
+	@Override
 	public ProjectImageEntry<BufferedImage> getEntry(final ImageData<BufferedImage> imageData) {
 		Object id = imageData.getProperty(IMAGE_ID);
 //		String id = imageData.getServer().getPath();
@@ -317,9 +333,10 @@ class DefaultProject implements Project<BufferedImage> {
 
 	@Override
 	public void removeImage(final ProjectImageEntry<?> entry, boolean removeAllData) {
-		images.remove(entry);
+		boolean couldRemove = images.remove(entry);
 //		images.remove(entry.getServerPath());
-		if (removeAllData && entry instanceof DefaultProjectImageEntry) {
+		// Need to make sure we only delete data if it's really inside this project!
+		if (couldRemove && removeAllData && entry instanceof DefaultProjectImageEntry) {
 			((DefaultProjectImageEntry)entry).moveDataToTrash();
 		}
 	}
@@ -466,7 +483,7 @@ class DefaultProject implements Project<BufferedImage> {
 	
 	public void saveScript(String name, String script) throws IOException {
 		var path = Paths.get(ensureDirectoryExists(getScriptsPath()).toString(), name + EXT_SCRIPT);
-		Files.writeString(path, script, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+		Files.writeString(path, script);
 	}
 	
 	private AtomicLong counter = new AtomicLong(0L);
@@ -544,6 +561,50 @@ class DefaultProject implements Project<BufferedImage> {
 			this.metadata = entry.metadata;
 		}
 		
+		/**
+		 * Copy the name, description and metadata from another entry.
+		 * @param entry
+		 * @throws IOException
+		 */
+		void copyPropertiesFromEntry(final ProjectImageEntry<BufferedImage> entry) throws IOException {
+			setImageName(entry.getImageName());
+			setDescription(entry.getDescription());
+			for (String key : entry.getMetadataKeys())
+				putMetadataValue(key, entry.getMetadataValue(key));
+		}
+
+		/**
+		 * Copy the image data from another entry.
+		 * If the current entry does not have a thumbnail then this will also be copied.
+		 *
+		 * @param entry
+		 * @throws IOException
+		 */
+		void copyDataFromEntry(final ProjectImageEntry<BufferedImage> entry) throws IOException {
+			if (entry instanceof DefaultProjectImageEntry)
+				copyDataFromEntry((DefaultProjectImageEntry)entry);
+			else {
+				if (entry.hasImageData())
+					saveImageData(entry.readImageData());
+				if (getThumbnail() == null) {
+					var imgThumbnail = entry.getThumbnail();
+					if (imgThumbnail != null)
+						setThumbnail(imgThumbnail);
+				}
+			}
+		}
+
+		void copyDataFromEntry(final DefaultProjectImageEntry entry) throws IOException {
+			// Ensure we have the necessary directory
+			getEntryPath(true);
+			if (Files.exists(entry.getImageDataPath()))
+				Files.copy(entry.getImageDataPath(), getImageDataPath(), StandardCopyOption.REPLACE_EXISTING);
+			if (Files.exists(entry.getDataSummaryPath()))
+				Files.copy(entry.getDataSummaryPath(), getDataSummaryPath(), StandardCopyOption.REPLACE_EXISTING);
+			if (getThumbnail() == null && Files.exists(entry.getThumbnailPath()))
+				Files.copy(entry.getThumbnailPath(), getThumbnailPath(), StandardCopyOption.REPLACE_EXISTING);
+		}
+
 		private transient ImageResourceManager<BufferedImage> imageManager = null;
 		
 		@Override
@@ -683,6 +744,10 @@ class DefaultProject implements Project<BufferedImage> {
 			return Paths.get(getEntryPath().toString(), "summary.json");
 		}
 		
+		private Path getServerPath() {
+			return Paths.get(getEntryPath().toString(), "server.json");
+		}
+
 		private Path getThumbnailPath() {
 			return Paths.get(getEntryPath().toString(), "thumbnail.jpg");
 		}
@@ -730,6 +795,7 @@ class DefaultProject implements Project<BufferedImage> {
 			// Write to a temp file first
 			long timestamp = 0L;
 			try (var stream = Files.newOutputStream(pathData)) {
+				logger.debug("Saving image data to {}", pathData);
 				PathIO.writeImageData(stream, imageData);
 				imageData.setLastSavedPath(pathData.toString(), true);
 				timestamp = Files.getLastModifiedTime(pathData).toMillis();
@@ -738,7 +804,10 @@ class DefaultProject implements Project<BufferedImage> {
 					Files.delete(pathBackup);
 			} catch (IOException e) {
 				// Try to restore the backup
-				Files.move(pathBackup, pathData, StandardCopyOption.REPLACE_EXISTING);				
+				if (Files.exists(pathBackup)) {
+					logger.warn("Exception writing image file - attempting to restore {} from backup", pathData);
+					Files.move(pathBackup, pathData, StandardCopyOption.REPLACE_EXISTING);
+				}
 				throw e;
 			}
 			
@@ -746,11 +815,19 @@ class DefaultProject implements Project<BufferedImage> {
 			var currentServerBuilder = imageData.getServer().getBuilder();
 			if (currentServerBuilder != null && !currentServerBuilder.equals(this.serverBuilder)) {
 				this.serverBuilder = currentServerBuilder;
+				// Write the server - it isn't used, but it may enable us to rebuild the server from the data directory if the project is lost
+				var pathServer = getServerPath();
+				try (var out = Files.newBufferedWriter(pathServer, StandardCharsets.UTF_8)) {
+					GsonTools.getInstance().toJson(serverBuilder, out);
+				} catch (Exception e) {
+					logger.warn("Unable to write server to {}", pathServer);
+					Files.deleteIfExists(pathServer);
+				}
 //				syncChanges();
 			}
 			
 			var pathSummary = getDataSummaryPath();
-			try (var out = Files.newBufferedWriter(pathSummary, StandardCharsets.UTF_8, StandardOpenOption.CREATE)) {
+			try (var out = Files.newBufferedWriter(pathSummary, StandardCharsets.UTF_8)) {
 				GsonTools.getInstance().toJson(new ImageDataSummary(imageData, timestamp), out);
 			}			
 
@@ -776,7 +853,8 @@ class DefaultProject implements Project<BufferedImage> {
 		@Override
 		public String getSummary() {
 			StringBuilder sb = new StringBuilder();
-			sb.append(getImageName()).append("\n\n");
+			sb.append(getImageName()).append("\n");
+			sb.append("ID:\t").append(getID()).append("\n\n");
 			if (!getMetadataMap().isEmpty()) {
 				for (Entry<String, String> mapEntry : getMetadataMap().entrySet()) {
 					sb.append(mapEntry.getKey()).append(":\t").append(mapEntry.getValue()).append("\n");
@@ -943,17 +1021,48 @@ class DefaultProject implements Project<BufferedImage> {
 		builder.add("images", gson.toJsonTree(images));
 		
 
+		// Write project to a new file
+		var pathProject = fileProject.toPath();
+		var pathTempNew = new File(fileProject.getAbsolutePath() + ".tmp").toPath();
+		logger.debug("Writing project to {}", pathTempNew);
+		try (var writer = Files.newBufferedWriter(pathTempNew, StandardCharsets.UTF_8)) {
+			gson.toJson(builder, writer);
+		}
+//		// In Java 12 we could check if there is a mismatch - to avoid writing unnecessarily (and reducing the usefulness of any backup)
+//		if (Files.mismatch(pathTempNew, pathProject) == -1) {
+//			logger.debug("Project contents are unchanged - no need to overwrite file");
+//			return;
+//		}
+
 		// If we already have a project, back it up
 		if (fileProject.exists()) {
-			File fileBackup = new File(fileProject.getAbsolutePath() + ".backup");
-			if (fileProject.renameTo(fileBackup))
-				logger.debug("Existing project file backed up at {}", fileBackup.getAbsolutePath());
+			var pathBackup = new File(fileProject.getAbsolutePath() + ".backup").toPath();
+			logger.debug("Backing up existing project to {}", pathBackup);
+			Files.move(pathProject, pathBackup, StandardCopyOption.REPLACE_EXISTING);
 		}
 
-		// Write project
-		try (PrintWriter writer = new PrintWriter(fileProject, StandardCharsets.UTF_8)) {
-			writer.write(gson.toJson(builder));
-		}
+		// If this succeeded, rename files
+		logger.debug("Renaming project to {}", pathProject);
+		Files.move(pathTempNew, pathProject, StandardCopyOption.REPLACE_EXISTING);
+
+
+//		// TODO: Consider the (admittedly unexpected) case where the JSON is too long for a String
+//		var jsonString = gson.toJson(builder);
+//
+//		// If we already have a project, back it up
+//		if (fileProject.exists()) {
+//			File fileBackup = new File(fileProject.getAbsolutePath() + ".backup");
+//			if (fileProject.renameTo(fileBackup))
+//				logger.debug("Existing project file backed up at {}", fileBackup.getAbsolutePath());
+//			else
+//				logger.debug("Unable to backup existing project to {}", fileBackup.getAbsolutePath());
+//		}
+//
+//		// Write project
+//		logger.info("Writing project to {}", fileProject.getAbsolutePath());
+//		try (PrintWriter writer = new PrintWriter(fileProject, StandardCharsets.UTF_8)) {
+//			writer.write(jsonString);
+//		}
 	}
 	
 	
@@ -1070,8 +1179,8 @@ class DefaultProject implements Project<BufferedImage> {
 
 
 	@Override
-	public Manager<PathObjectClassifier> getObjectClassifiers() {
-		return new ResourceManager.SerializableFileResourceManager(getObjectClassifiersPath(), PathObjectClassifier.class);
+	public Manager<ObjectClassifier<BufferedImage>> getObjectClassifiers() {
+		return new ResourceManager.JsonFileResourceManager(getObjectClassifiersPath(), ObjectClassifier.class);
 	}
 
 

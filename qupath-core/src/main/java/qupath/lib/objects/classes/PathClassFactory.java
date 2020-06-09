@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -79,7 +79,15 @@ public class PathClassFactory {
 		 * annotations.  Consequently it is good to heavily annotated regions, or possibly detected tissue 
 		 * containing further annotations inside.
 		 */
-		REGION;
+		REGION,
+		/**
+		 * General class to represent something 'positive'
+		 */
+		POSITIVE,
+		/**
+		 * General class to represent something 'negative'
+		 */
+		NEGATIVE;
 		
 		
 		PathClass getPathClass() {
@@ -100,6 +108,10 @@ public class PathClassFactory {
 				return PathClassFactory.getPathClass("Stroma", ColorTools.makeRGB(150, 200, 150));
 			case TUMOR:
 				return PathClassFactory.getPathClass("Tumor", ColorTools.makeRGB(200, 0, 0));
+			case POSITIVE:
+				return PathClassFactory.getPositive(null);
+			case NEGATIVE:
+				return PathClassFactory.getNegative(null);
 			default:
 				throw new IllegalArgumentException("Unknown value!");
 			}
@@ -198,19 +210,40 @@ public class PathClassFactory {
 			return pathClass;
 		}
 	}
-	
 	/**
-	 * Get the PathClass object associated with a specific name, using the default color.  
-	 * Note that this name must not contain newline or colon characters; doing so will 
-	 * result in an IllegalArgumentException being thrown.
+	 * Get a derived {@link PathClass} object representing all the provided names, 
+	 * using default colors.
+	 * <p>
+	 * Note that names must not contain newline or colon characters; if they do an 
+	 * {@link IllegalArgumentException} will be thrown.
 	 * 
-	 * @param name
-	 * @return
+	 * @param baseName name of the base classification
+	 * @param names array of names for each constituent part of the classification.
+	 * 				For each name, a new class will be derived, starting from the base.
+	 * @return a {@link PathClass}, as defined above
 	 * 
 	 * @see #getPathClass(String, Integer)
 	 */
-	public static PathClass getPathClass(String name) {
-		return getPathClass(name, (Integer)null);
+	public static PathClass getPathClass(String baseName, String... names) {
+		var pathClass = getPathClass(baseName, (Integer)null);
+		for (String n : names)
+			pathClass = getDerivedPathClass(pathClass, n, null);
+		return pathClass;
+	}
+	
+	/**
+	 * Get a PathClass object representing all the provided names.
+	 * The first entry in the list corresponds to the base name.
+	 * 
+	 * @param names list of names for each constituent part of the classification.
+	 * @return a {@link PathClass} containing all names
+	 * 
+	 * @see #getPathClass(String, String...)
+	 */
+	public static PathClass getPathClass(List<String> names) {
+		if (names.isEmpty())
+			return null;//getPathClassUnclassified();
+		return getPathClass(names.get(0), names.subList(1, names.size()).toArray(String[]::new));
 	}
 	
 	
@@ -240,31 +273,33 @@ public class PathClassFactory {
 			return getPathClass(name, rgb);
 		String nameNew = PathClass.derivedClassToString(parentClass, name);
 //		mapPathDerivedClasses.clear();
-		PathClass pathClass = mapPathClasses.get(nameNew);
-		if (pathClass == null) {
-			if (rgb == null) {
-				boolean isTumor = getPathClass(StandardPathClasses.TUMOR) == parentClass;
-				int parentRGB = parentClass.getColor();
-				if (name.equals(ONE_PLUS)) {
-					rgb = isTumor ? COLOR_ONE_PLUS : ColorTools.makeScaledRGB(parentRGB, 0.9);
-				} else if (name.equals(TWO_PLUS)) {
-					rgb = isTumor ? COLOR_TWO_PLUS : ColorTools.makeScaledRGB(parentRGB, 0.6);
-				} else if (name.equals(THREE_PLUS))
-					rgb = isTumor ? COLOR_THREE_PLUS : ColorTools.makeScaledRGB(parentRGB, 0.4);
-				else if (name.equals(POSITIVE)) {
-					rgb = isTumor ? COLOR_POSITIVE : ColorTools.makeScaledRGB(parentRGB, 0.75);
-				} else if (name.equals(NEGATIVE)) {
-					rgb = isTumor ? COLOR_NEGATIVE : ColorTools.makeScaledRGB(parentRGB, 1.25);
-				} else {
-					double scale = 1.5;
-					rgb = ColorTools.makeScaledRGB(parentRGB, scale);
+		synchronized (mapPathClasses) {
+			PathClass pathClass = mapPathClasses.get(nameNew);
+			if (pathClass == null) {
+				if (rgb == null) {
+					boolean isTumor = getPathClass(StandardPathClasses.TUMOR) == parentClass;
+					int parentRGB = parentClass.getColor();
+					if (name.equals(ONE_PLUS)) {
+						rgb = isTumor ? COLOR_ONE_PLUS : ColorTools.makeScaledRGB(parentRGB, 0.9);
+					} else if (name.equals(TWO_PLUS)) {
+						rgb = isTumor ? COLOR_TWO_PLUS : ColorTools.makeScaledRGB(parentRGB, 0.6);
+					} else if (name.equals(THREE_PLUS))
+						rgb = isTumor ? COLOR_THREE_PLUS : ColorTools.makeScaledRGB(parentRGB, 0.4);
+					else if (name.equals(POSITIVE)) {
+						rgb = isTumor ? COLOR_POSITIVE : ColorTools.makeScaledRGB(parentRGB, 0.75);
+					} else if (name.equals(NEGATIVE)) {
+						rgb = isTumor ? COLOR_NEGATIVE : ColorTools.makeScaledRGB(parentRGB, 1.25);
+					} else {
+						double scale = 1.5;
+						rgb = ColorTools.makeScaledRGB(parentRGB, scale);
+					}
 				}
+	//				rgb = new Color(parentClass.getColor()).brighter().getRGB();
+				pathClass = new PathClass(parentClass, name, rgb);
+				mapPathClasses.put(pathClass.toString(), pathClass);
 			}
-//				rgb = new Color(parentClass.getColor()).brighter().getRGB();
-			pathClass = new PathClass(parentClass, name, rgb);
-			mapPathClasses.put(pathClass.toString(), pathClass);
+			return pathClass;
 		}
-		return pathClass;
 	}
 	
 	/**

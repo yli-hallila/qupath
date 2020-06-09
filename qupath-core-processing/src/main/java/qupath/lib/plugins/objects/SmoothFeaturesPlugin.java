@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -76,7 +76,7 @@ public class SmoothFeaturesPlugin<T> extends AbstractInteractivePlugin<T> {
 				.addDoubleParameter("fwhmMicrons", "Radius (FWHM)", 25, GeneralTools.micrometerSymbol(), "Smoothing filter size - higher values indicate more smoothing")
 				.addDoubleParameter("fwhmPixels", "Radius (FWHM)", 100, "pixels", "Smoothing filter size - higher values indicate more smoothing")
 				.addBooleanParameter("smoothWithinClasses", "Smooth within classes", false, "Restrict smoothing to only be applied within objects with the same base classification")
-				.addBooleanParameter("useLegacyNames", "Use legacy feature names", false, "Use previous naming strategy for smoothed features - only retained here for backwards compatibility")
+//				.addBooleanParameter("useLegacyNames", "Use legacy feature names", false, "Use previous naming strategy for smoothed features - only retained here for backwards compatibility")
 				;
 	}
 	
@@ -128,7 +128,7 @@ public class SmoothFeaturesPlugin<T> extends AbstractInteractivePlugin<T> {
 		final String fwhmString = fwhmStringTemp;
 		final double fwhmPixels = fwhm;
 		final boolean withinClass = params.getBooleanParameterValue("smoothWithinClasses");
-		final boolean useLegacyNames = Boolean.TRUE.equals(params.getBooleanParameterValue("useLegacyNames"));
+		final boolean useLegacyNames = params.containsKey("useLegacyNames") && Boolean.TRUE.equals(params.getBooleanParameterValue("useLegacyNames"));
 		tasks.add(new Runnable() {
 
 			@Override

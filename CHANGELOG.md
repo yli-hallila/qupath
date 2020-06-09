@@ -1,3 +1,236 @@
+## Version 0.2.0
+
+Welcome to QuPath v0.2.0!
+A *lot* has changed since the last stable release, v0.1.2.
+For more details, see the documentation at http://qupath.readthedocs.io
+
+See also the changelogs for the past 12 milestone versions to watch the evolution of the software over the past 2 years.
+This release contains the following (minor) changes since v0.2.0-m12:
+* Change (debug).exe to (console).exe on Windows
+  * Required also for running from the command line
+* Added more prefilter options to 'Create thresholder'
+* Added threshold lines to histograms for single measurement/cell intensity classification
+* Bug fixes:
+  * Unable to set max memory on Windows (https://github.com/qupath/qupath/issues/490)
+    * Note this may still fail due to insufficient permissions (e.g. on macOS)
+  * Fail with a more meaningful error if an incompatible extension is found (https://github.com/qupath/qupath/issues/497)
+  * Selected images remained with 'Run for project' even when the project changed (https://github.com/qupath/qupath/issues/501)
+  * Command bar sometimes overlapped the z-slice/timepoint sliders
+  * writeImage did not do all z-slices/timepoints for an OME-TIFF
+  * 'Show TMA measurements' showed detection measurements instead
+  * Fixed many typos (thanks to Cameron Lloyd)
+
+
+## Version 0.2.0-m12
+
+This is the *release candidate* for v0.2.0 (i.e. the proposed stable version).
+
+* Many improvements to pixel & object classification
+  * Train classifiers across all images currently open
+  * Train classifiers using annotations from unopened images in the same project ('Load training' button)
+  * Better standardization of classifier training dialogs
+  * Random Trees classifiers now have seeds set properly
+  * Classifier names are case-insensitive (to reduce issues if potentially overwriting files)
+* Many other pixel classifier improvements
+  * Finally scriptable! Scripting commands automatically recorded - requires that the classifier is saved in a project
+  * New 'Measure' button to store measurements after the classifier is closed, for any object type (including detections)
+  * More control over how objects are created
+  * More control over the regions where the classifier is applied in 'live' preview mode
+  * Default classifier is now ANN (often better & much faster than Random Trees)
+* 'Classify -> Object classification -> Set cell intensity classification' now works for all detections if no cells are present
+* Measurement lists are reset if an object's ROI is changed
+  * This guards against inadvertently producing invalid measurements by modifying an annotate after measuring
+* Viewer no longer centered on selected object when the selection changes or when typing 'Enter'
+  * Fixes some annoyances, especially when annotating across multiple viewers
+  * Center viewer by double-clicking objects in the 'Annotations' or 'Hierarchy' tab, or in a measurement table
+* Improved spatial measurements
+  * Optionally split multi-part classifications (e.g. "Class 1: Class 2") for distance calculations (https://github.com/qupath/qupath/issues/405)
+  * Major performance improvement for the 'Detect centroid distances 2D' command (by using a spatial cache)
+* LabeledImageServer improvements
+  * Supports more than 255 distinct labels
+  * New useUniqueLabels() option to support labelling by object, not only classification
+* Fixed bug/ambiguity in 'Fill holes' & 'Remove fragments and holes'
+  * Handle nested polygons/holes more reliably
+  * Changed behavior! Area thresholds now refer to total polygon/hole area ignoring any nested polygons or holes
+* Script editor improvements
+  * Display which script is currently running in the script editor
+  * Current project now accessible in scripts run outside of the script editor (e.g. from the command line)
+  * Intercept mouse clicks for main window while a script is running & show a warning
+  * Show a confirm prompt if trying to quit QuPath while a script is running
+  * Adapted "Show log in console" option gives better control of script output (turn off to see less console output)
+* Improved OMERO web API support
+  * Supports a wider range of URLs, including import for multiple images via one 'link' URL
+  * Intended primarily for brightfield whole slide images -- limited to RGB
+* New 'Import objects' option when adding images to a project
+  * Supports importing ROIs/overlays from ImageJ TIFF images and OMERO
+* New 'Add shape features' command (replaces old command with the same name)
+  * Easier to call in scripts
+  * Supports additional measurements (including max/min diameters, solidity)
+* New preference to optionally invert the orientation of the z-position slide for z-stacks
+* Improved 'Measurement manager' to remove some or all measurements from objects of any type
+* Show ID in tooltip for project entries (makes it easier to find the data directory)
+* Other bug fixes, including:
+  * Local normalization now applied before calculating other features (was applied after in m11)
+  * Show only 'Num detections' if there are detections anywhere in the image
+  * Fixed bug in 'Simplify shape' to handle polygons and rectangles properly
+  * Fixed bug in command bar display when toggling the analysis pane visibility
+  * Fixed bug where the RNG seed was not set before training classifiers
+  * Fixed bug in 'Create combined training image' that failed to handle unclassified annotations
+  * Projects are automatically saved after changing the image name (https://github.com/qupath/qupath/issues/465)
+* Bump dependencies ImageJ, Bio-Formats, JUnit, picocli
+
+
+## Version 0.2.0-m11
+
+This is a *milestone* (i.e. still in development) version made available to try out new features early.
+
+* Introduced 'ImageOp' and 'ImageDataOp' as a flexible way to chain processing steps
+* Rewrote most of the pixel classification
+  * Now much simpler and more maintainable (using Ops)
+  * Supports color deconvolution
+  * Faster (possibly)
+* New-style object classifiers support command logging/scripting
+* Added 'Import images from v0.1.2' command to recover data from old projects
+* Added groovy-xml as a dependency (https://github.com/qupath/qupath/issues/455)
+* Fixed bugs
+  * Save & Save As are swapped (https://github.com/qupath/qupath/issues/451)
+  * Reinstate adding images to projects via drag & drop (https://github.com/qupath/qupath/issues/450)
+  * Fixed specifying z-slices/timepoints with OME-TIFF export (https://github.com/qupath/qupath/issues/453)
+  * Improved user notification when loading a broken extension (https://github.com/qupath/qupath/issues/454)
+
+
+## Version 0.2.0-m10
+
+This is a *milestone* (i.e. still in development) version made available to try out new features early.
+
+* Updated to use Java 14
+  * Easier to build from source
+* Code *extensively* revised and cleaned up
+  * Commands are activated/deactivated according to status (e.g. if an image or project is opened)
+  * Help text available for most commands via the 'Command list'
+  * Lots more javadocs and a (somewhat) more logical arrangement
+* All-new command line interface
+  * Customize QuPath's launch, call scripts
+  * Convert images to OME-TIFF
+* Scripting improvements
+  * Updated to Groovy 3 - scripts now support more recent Java syntax (e.g. lambdas, try-with-resources)
+  * Pasting files results in them being converted to absolute paths
+  * New 'Paste & escape' command to automatically escape characters for Java Strings
+  * Set logging level with LogManager class
+* New 'Measure -> Export measurements' command to export measurements for multiple images within a project
+* Scriptable 'Select objects by classification' command
+* Optionally show/hide annotation names in the viewer (shortcut key 'N')
+* Updated methods to save/load points within the counting tool
+  * Use TSV files to improve portability
+  * Support including classifications and other annotation properties
+* Optionally sort project entries by URI (e.g. to group images read from the same file)
+* Improved support for profiling with VisualVM
+* Improved support for large, non-pyramidal images
+* 'Simplify shape' command can now be applied to all selected annotations
+* Bug fixes, including:
+  * Gap between tiles when calculating superpixels for large regions (https://github.com/qupath/qupath/issues/345)
+  * Cannot create objects when loading simple thresholding classifier (https://github.com/qupath/qupath/issues/403)
+  * Consistency in Measurement Map display (https://github.com/qupath/qupath/issues/295)
+  * Poor performance when working with many annotations (regression in m9)
+  * Freeze when launching ImageJ from Mac under some circumstances
+  * Use default channel names if Bio-Formats returns an empty String
+  * Log meaningful warning if pixel classifier uses duplicated channel names
+* Update dependencies: JavaFX, OpenCV, Bio-Formats, JFreeSVG, ImageJ, Guava, RichTextFX
+
+
+## Version 0.2.0-m9
+This is a *milestone* (i.e. still in development) version made available to try out new features early. Changes include:
+
+#### Multiplexed analysis & Object classification
+* Completely rewritten object classifier (currently flagged with 'New'! in the menus)
+  * Support for multi-class classification with composite classifiers
+  * New command to create single-measurement classifiers 
+  * New command to apply intensity (sub)classification
+  * JSON serialization for classifiers
+* New 'Centroids only' cell display mode to visualize cells with complex classifications
+* Improved Brightness/Contrast support
+  * Filter box to quickly find specific channels within long lists
+  * New scripting methods to set display range, e.g. setChannelDisplayRange(channel, min, max)
+
+#### Classes & annotations
+* Revised 'Annotations' tab
+  * New options to set the available class list (e.g. from existing objects, image channels)
+  * Change class visibility with spacebar (toggle), s (show) or h (hide)
+  * Select objects with specific classifications more easily
+  * More consistent annotation menus
+* Major changes to annotation ROI manipulation
+  * 'Duplicate annotations' applies to multiple selections
+  * 'Merge annotations' and 'Split annotations' work with point ROIs, not only areas
+  * 'Make inverse' uses ROIs from multiple annotations (within the same plane)
+  * More ROI manipulation commands are scriptable, update selections when complete
+* Counting tool improvements
+
+### Images & projects
+* Bio-Formats series selector (enables specific series to be accessed outside projects)
+* More project options
+  * Duplicate images, optionally with associated data files
+  * Fixed issue with 'Add images' pane, where the window could be too large for some screens
+  * 'Add images' pane now supports Drag & Drop
+  * 'Add images' pane now supports .qpproj files to import images & data from other projects
+* New SVG export options (made possible by JFreeSVG)
+
+### Other things
+* File -> Quit menu item added
+* Viewer no longer 'resets' location when opening the same image or reloading data
+* New preferences
+  * Select main font; default changed to Sans-Serif for macOS
+  * Turn on/off system menubar
+* Show accelerator within 'Command list' table
+* Improved attempt to parse channel names from slice labels in ImageJServer
+* More useful static methods, e.g. PathObjectTools.removeOverlaps()
+* Fixed bug in Jar classpath that prevented QuPath running from a command line
+* Update dependencies (Bio-Formats, ControlsFX, ImageJ, Guava, Groovy, RichTextFX)
+
+
+## Version 0.2.0-m8
+This is a *milestone* (i.e. still in development) version made available to try out new features early.
+* Fixed repainting bug that could cause existing annotations to temporarily shift when drawing new annotations
+* Fixed 'Zoom to fit' bug that meant command did not correctly resize and center the image in the viewer
+* Added 'Match viewer resolutions' command to help synchronize when using multiple viewers
+* Improved tile export within a script
+* Improved interactive transformations
+  * More options for 'Interactive image alignment', including support to specify affine transform manually
+  * Log affine transform when applying 'Rotate annotation'
+
+
+## Version 0.2.0-m7
+This is a *milestone* (i.e. still in development) version made available to try out new features early.
+* Fixed bug that could cause QuPath to freeze when selecting objects with a mini-viewer active, see https://github.com/qupath/qupath/issues/377
+* Improved performance converting shapes to geometries, see https://github.com/qupath/qupath/issues/378
+* Improved robustness when drawing complex shapes, see https://github.com/qupath/qupath/issues/376
+* Improved stability when script directories cannot be found, see https://github.com/qupath/qupath/issues/373
+* Prompt to save each image when closing a project with multiple viewers active
+* Updated 'Rotate annotation' command to use JTS
+
+
+## Version 0.2.0-m6
+This is a *milestone* (i.e. still in development) version made available to try out new features early.
+### Important bug fix!
+* Positive per mm^2 measurement fixed; this could be wrong in v0.2.0-m5 (other versions not affected)
+### Important behavior change!
+* Parent-child relationships are no longer automatically calculated between objects!
+For an explanation of the reasons behind this change & what it means, see the blog.
+### Other changes:
+* Pixel classifier shows live area measurements with 'Classification' output (in m5 this worked only with 'Probability' output)
+* New 'Detection centroid distances 2D' command (e.g. to find distances to cells with different classifications)
+* Smoother drawing, faster viewer repainting
+* Point annotation improvements
+  * Faster repainting
+  * Converting detections to points now uses nucleus ROIs when applied to cells, no longer requires deleting the detections
+* More shortcuts, e.g. Ctrl+Alt+A to select annotations, Ctrl+Alt+D to select detections
+* GeometryROI now replaces AreaROI and AWTAreaROI for improved performance and consistency
+* Fixed bug when converting ROIs with nested holes to JTS Geometries
+* Undo/Redo and tile cache size information added to Memory Monitor
+* Added support for ImageWriters to write to output streams
+* Updated build script to Gradle 6.0
+* Use bioformats_package.jar rather than separate dependences (easier to upgrade/downgrade if needed)
+
+
 ## Version 0.2.0-m5
 This is a *milestone* (i.e. still in development) version made available to try out new features early.
 Changes include:
@@ -55,11 +288,6 @@ Changes include:
   * Converting tile classifications to annotations (https://github.com/qupath/qupath/issues/359)
   * Calculating intensity features for RGB fluorescence (https://github.com/qupath/qupath/issues/365)
   * Setting stroke thickness, thanks to @jballanc (https://github.com/qupath/qupath/pull/362)
-  
-Known issues with the pixel classifier:
-* Not yet (easily) scriptable
-* Measurements depend on current overlay & which tiles have been cached
-* Some commands (e.g. converting classified to objects) can be slow & cause QuPath to freeze while calculating results
 
 
 ## Version 0.2.0-m4

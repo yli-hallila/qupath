@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -26,6 +26,7 @@ package qupath.lib.images.writers;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 
 import javax.imageio.ImageIO;
 
@@ -67,8 +68,13 @@ abstract class AbstractImageIOWriter implements ImageWriter<BufferedImage> {
 	}
 	
 	@Override
-	public boolean suportsImageType(ImageServer<BufferedImage> server) {
+	public boolean supportsImageType(ImageServer<BufferedImage> server) {
 		return server.isRGB() || (server.nChannels() == 1 && server.getPixelType() == PixelType.UINT8);
+	}
+	
+	@Override
+	public boolean supportsRGB() {
+		return true;
 	}
 
 	@Override
@@ -89,10 +95,23 @@ abstract class AbstractImageIOWriter implements ImageWriter<BufferedImage> {
 	public void writeImage(ImageServer<BufferedImage> server, String pathOutput) throws IOException {
 		writeImage(server, RegionRequest.createInstance(server), pathOutput);
 	}
+	
+	@Override
+	public void writeImage(ImageServer<BufferedImage> server, RegionRequest request, OutputStream stream) throws IOException {
+		BufferedImage img = server.readBufferedImage(request);
+		writeImage(img, stream);
+	}
 
 	@Override
-	public boolean supportsRGB() {
-		return true;
+	public void writeImage(BufferedImage img, OutputStream stream) throws IOException {
+		String ext = getDefaultExtension();
+		if (!ImageIO.write(img, ext, stream))
+			throw new IOException("Unable to write using ImageIO with extension " + ext);
+	}
+	
+	@Override
+	public void writeImage(ImageServer<BufferedImage> server, OutputStream stream) throws IOException {
+		writeImage(server, RegionRequest.createInstance(server), stream);
 	}
 	
 }

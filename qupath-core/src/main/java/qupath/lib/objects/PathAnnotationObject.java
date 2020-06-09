@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -26,6 +26,8 @@ package qupath.lib.objects;
 import qupath.lib.measurements.MeasurementList;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.roi.interfaces.ROI;
+
+import java.util.Objects;
 
 /**
  * An annotation PathObject.
@@ -44,7 +46,9 @@ public class PathAnnotationObject extends PathROIObject {
 	private static final long serialVersionUID = 1L;
 	
 	private final static String KEY_ANNOTATION_TEXT = "ANNOTATION_DESCRIPTION";
-	
+	private final static String KEY_FILL_TEXT = "ANNOTATION_FILL";
+
+
 	/**
 	 * Default constructor. Should not be used directly, instead use {@link PathObjects#createAnnotationObject(ROI)}.
 	 */
@@ -72,16 +76,29 @@ public class PathAnnotationObject extends PathROIObject {
 	public void setDescription(final String text) {
 		// Don't store unless we need to (which can also help avoid creating unnecessary metadata stores)
 		Object existing = retrieveMetadataValue(KEY_ANNOTATION_TEXT);
-		if (text == null && existing == null || text.equals(existing))
+		if (Objects.equals(text, existing))
 			return;
 		this.storeMetadataValue(KEY_ANNOTATION_TEXT, text);
 	}
 
 	/**
 	 * Get a free text description previously set for this annotation.
+	 * @return
 	 */
 	public String getDescription() {
 		return (String)retrieveMetadataValue(KEY_ANNOTATION_TEXT);
+	}
+
+	public void setFill(final boolean fill) {
+		this.storeMetadataValue(KEY_FILL_TEXT, String.valueOf(fill));
+	}
+
+	public boolean shouldFill() {
+		if (retrieveMetadataValue(KEY_FILL_TEXT) == null) {
+			return false;
+		}
+
+		return Boolean.parseBoolean((String) retrieveMetadataValue(KEY_FILL_TEXT));
 	}
 
 //	PathAnnotationObject(PathAnnotationObject pathObject, PathROI pathROI) {

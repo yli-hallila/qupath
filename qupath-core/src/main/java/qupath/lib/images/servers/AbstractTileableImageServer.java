@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.images.servers;
 
 import java.awt.Graphics2D;
@@ -42,6 +63,9 @@ public abstract class AbstractTileableImageServer extends AbstractImageServer<Bu
 	private transient Set<TileRequest> emptyTiles = new HashSet<>();
 	
 	private final static Long ZERO = Long.valueOf(0L);
+
+	// Maintain a record of tiles that could not be cached, so we warn for each only once
+	private transient Set<RegionRequest> failedCacheTiles = new HashSet<>();
 		
 	protected AbstractTileableImageServer() {
 		super(BufferedImage.class);
@@ -128,6 +152,7 @@ public abstract class AbstractTileableImageServer extends AbstractImageServer<Bu
 	 * 
 	 * @param tileRequest
 	 * @return
+	 * @throws IOException
 	 */
 	protected abstract BufferedImage readTile(final TileRequest tileRequest) throws IOException;
 	
@@ -138,6 +163,7 @@ public abstract class AbstractTileableImageServer extends AbstractImageServer<Bu
 	 * 
 	 * @param tileRequest
 	 * @return
+	 * @throws IOException
 	 */
 	protected BufferedImage getTile(final TileRequest tileRequest) throws IOException {
 		// Try to get tile from one of the caches
@@ -163,6 +189,9 @@ public abstract class AbstractTileableImageServer extends AbstractImageServer<Bu
 				emptyTiles.add(tileRequest);
 			} else if (cache != null) {
 				cache.put(request, imgCached);
+				// Check if we were able to cache the tile; sometimes we can't if it is too big
+				if (!cache.containsKey(request) && failedCacheTiles.add(request))
+					logger.warn("Unable to add {} to cache.\nYou might need to give QuPath more memory, or to increase the 'Percentage memory for tile caching' preference.", request);
 			}
 		}
 		return imgCached;
@@ -364,5 +393,5 @@ public abstract class AbstractTileableImageServer extends AbstractImageServer<Bu
 		return getMetadata().getChannelType() != ChannelType.CLASSIFICATION;
 	}
 	
-	
+
 }

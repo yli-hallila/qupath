@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -40,6 +40,7 @@ import java.util.ServiceLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import qupath.lib.common.GeneralTools;
 import qupath.lib.images.servers.ImageServerBuilder.UriImageSupport;
 import qupath.lib.regions.RegionRequest;
 
@@ -109,6 +110,8 @@ public class ImageServerProvider {
 	
 	/**
 	 * Request all available {@link ImageServerBuilder ImageServerBuilders} supporting a given image class.
+	 * @param imageClass 
+	 * @param <T> 
 	 * @return
 	 */
 	@SuppressWarnings("unchecked")
@@ -127,8 +130,11 @@ public class ImageServerProvider {
 	private static <T> List<UriImageSupport<T>> getServerBuilders(final Class<T> cls, final String path, String...args) throws IOException {
 		URI uriTemp;
 		try {
-			if (path.startsWith("file:") || path.startsWith("http")) {
+			if (path.startsWith("file:")) { 
 				uriTemp = new URI(path);
+			} else if (path.startsWith("http")) {
+				// URI class does not support "|", so we need to convert urlTemp to a valid URI
+				uriTemp = GeneralTools.toEncodedURI(path);
 			} else {
 				// Handle legacy file paths (optionally with Bio-Formats series names included)
 				String delimiter = "::";
@@ -143,6 +149,9 @@ public class ImageServerProvider {
 				if (seriesName != null) {
 					uriTemp = new URI(uriTemp.getScheme(), uriTemp.getAuthority(), uriTemp.getPath(), "name="+seriesName, null);
 				}
+			}
+			if ("file".equals(uriTemp.getScheme()) && !new File(uriTemp).exists()) {
+				throw new IOException(uriTemp.toString() + " does not exist!");
 			}
 		} catch (URISyntaxException e) {
 			throw new IOException(e.getLocalizedMessage());
@@ -173,7 +182,7 @@ public class ImageServerProvider {
 					if (support != null && support.getSupportLevel() > 0f)
 						supports.add(support);
 				} catch (Exception e) {
-					logger.error("Error testing provider " + provider, e);
+					logger.error("Error testing provider " + provider, e.getLocalizedMessage());
 				}
 			}
 		}
@@ -245,6 +254,7 @@ public class ImageServerProvider {
 			message = " (" + message + ")";
 		throw new IOException("Unable to build a whole slide server for " + path + message, firstException);
 	}
+	
 	
 	/**
 	 * Check server is either pyramidal or of a manageable size.

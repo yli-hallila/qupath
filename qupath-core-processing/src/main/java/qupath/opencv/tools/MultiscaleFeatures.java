@@ -1,15 +1,33 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.opencv.tools;
 
-import java.awt.image.BufferedImage;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import org.bytedeco.javacpp.FloatPointer;
 import org.bytedeco.javacpp.indexer.FloatIndexer;
 import org.bytedeco.opencv.global.opencv_core;
@@ -18,9 +36,7 @@ import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.MatExpr;
 import org.bytedeco.opencv.opencv_core.Rect;
 
-import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.PixelCalibration;
-import qupath.lib.regions.RegionRequest;
 
 /**
  * Calculate pixel-based features in both 2D and 3D.
@@ -177,130 +193,8 @@ public class MultiscaleFeatures {
 	 */
 	private static final FilterBorderType BORDER_DEFAULT = FilterBorderType.REPLICATE;
 	
-	/**
-	 * Temporary(!) method to facilitate interactively testing the code from a script 
-	 * during development.
-	 * @param imageData
-	 * @throws IOException
-	 */
-	static void testMe(ImageData<BufferedImage> imageData, double... sigmas) throws IOException {
-				
-		var server = imageData.getServer();
-		var hierarchy = imageData.getHierarchy();
-		var selectedROI = hierarchy.getSelectionModel().getSelectedROI();
-		if (sigmas.length == 0)
-			sigmas = new double[] {1.0};
-		double downsample = Math.max(1.0, sigmas[0] / server.getPixelCalibration().getAveragedPixelSizeMicrons());
-		System.err.println(downsample);
-		RegionRequest request = RegionRequest.createInstance(server);
-		if (selectedROI != null)
-			request = RegionRequest.createInstance(server.getPath(), downsample, selectedROI);
-		
-//		IJTools.extractHyperstack(server, request).show();
-		
-		var stack = OpenCVTools.extractZStack(server, request);
-		
-//		int sizeZ = stack.size();
-		
-		List<Map<MultiscaleFeature, Mat>> results = Collections.synchronizedList(new ArrayList<>());
-		
-		int[] channels = new int[] {2};
-		
-		var pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-		
-		List<Future<List<Map<MultiscaleFeature, Mat>>>> futures = new ArrayList<>();
-		for (int channel : channels) {
-		
-			Mat[] mats = new Mat[stack.size()];
-			for (int i = 0; i < stack.size(); i++) {
-				Mat mat = stack.get(i);
-				Mat temp = new Mat();
-				opencv_core.extractChannel(mat, temp, channel);
-				
-				temp.convertTo(temp, opencv_core.CV_32F);
-//				temp.put(opencv_core.multiply(temp, -1.0));
-				mats[i] = temp;
-			}
-			
-			// Do local normalization
-//			double sigmaNormalizeMicrons = 5.0;		
-//			normalize3D(
-//					Arrays.asList(mats), 
-//					sigmaNormalizeMicrons/server.getPixelWidthMicrons(), 
-//					sigmaNormalizeMicrons/server.getPixelHeightMicrons(),
-//					sigmaNormalizeMicrons/server.getZSpacingMicrons());
-			
-//			OpenCVTools.matToImagePlus("Normalized", mats).show();
-			
-			for (double sigmaMicrons : sigmas) {
-				futures.add(pool.submit(() -> {
-				
-					long startTime = System.currentTimeMillis();
-			
-					List<Map<MultiscaleFeature, Mat>> resultsTemp = new MultiscaleResultsBuilder()
-						.sigmaX(sigmaMicrons)
-						.sigmaY(sigmaMicrons)
-						.sigmaZ(sigmaMicrons)
-						.pixelCalibration(server.getMetadata().getPixelCalibration(), downsample)
-//						.ind3D(3)
-						.gaussianSmoothed(true)
-						.weightedStdDev(true)
-//						.gradientMagnitude(true)
-						.laplacianOfGaussian(true)
-//						.hessianEigenvalues(true)
-						.hessianDeterminant(true)
-						.build(Arrays.asList(mats));
-					
-					long endTime = System.currentTimeMillis();
-					System.err.println("Hessian calculation time: " + (endTime - startTime) + " ms");
 
-					return resultsTemp;
-				}));
-			}
-		}
-		pool.shutdown();
-		try {
-			for (var future : futures)
-				results.addAll(future.get());
-		} catch (Exception e) {
-			e.printStackTrace();
-			return;
-		}
-		
-		List<Mat> output = new ArrayList<>();
-		int n = 0;
-		List<String> names = new ArrayList<>();
-		for (var r : results) {
-			int before = output.size();
-//			output.add(r.getSmoothed());
-//			output.add(r.getDeterminant());
-//			output.add(r.getLaplacian());
-//			for (var m : r.getEigenvalues())
-//				output.add(m);
-			
-			for (var m : r.entrySet()) {
-				names.add(m.getKey().toString());
-				output.add(m.getValue());
-			}
 
-			
-			n = output.size() - before;
-		}
-		
-		var imp = OpenCVTools.matToImagePlus("My stack", output.toArray(Mat[]::new));
-//		imp = new CompositeImage(imp);
-//		imp.setDimensions(n, sizeZ, output.size() / n / sizeZ);
-		
-		int s = 1;
-		for (String name : names) {
-			imp.getStack().setSliceLabel(name, s++);
-		}
-		
-//		imp.setDimensions(output.size() / sizeZ, sizeZ, 1);
-//		((CompositeImage)imp).resetDisplayRanges();
-		imp.show();
-	}
-	
 	
 	
 	/**
@@ -336,6 +230,46 @@ public class MultiscaleFeatures {
 		 * Default constructor.
 		 */
 		public MultiscaleResultsBuilder() {}
+		
+		/**
+		 * Constructor prepared to calculate specified features.
+		 * 
+		 * @param features
+		 */
+		public MultiscaleResultsBuilder(Collection<MultiscaleFeature> features) {
+			for (var feature : features) {
+				switch(feature) {
+				case GAUSSIAN:
+					gaussianSmoothed(true);
+					break;
+				case GRADIENT_MAGNITUDE:
+					gradientMagnitude(true);
+					break;
+				case HESSIAN_DETERMINANT:
+					hessianDeterminant(true);
+					break;
+				case HESSIAN_EIGENVALUE_MAX:
+				case HESSIAN_EIGENVALUE_MIDDLE:
+				case HESSIAN_EIGENVALUE_MIN:
+					hessianEigenvalues(true);
+					break;
+				case LAPLACIAN:
+					laplacianOfGaussian(true);
+					break;
+				case STRUCTURE_TENSOR_COHERENCE:
+				case STRUCTURE_TENSOR_EIGENVALUE_MAX:
+				case STRUCTURE_TENSOR_EIGENVALUE_MIDDLE:
+				case STRUCTURE_TENSOR_EIGENVALUE_MIN:
+					structureTensorEigenvalues(true);
+					break;
+				case WEIGHTED_STD_DEV:
+					weightedStdDev(true);
+					break;
+				default:
+					break;
+				}
+			}
+		}
 
 		MultiscaleResultsBuilder(MultiscaleResultsBuilder builder) {
 			this.pixelCalibration = builder.pixelCalibration;
@@ -638,38 +572,47 @@ public class MultiscaleFeatures {
 			
 //			double scaleT = sigmaX * sigmaY;
 			
+			// TODO: Consder if some calculations need to be done in 64-bit
+//			int depth = structureTensorEigenvalues || doHessian ? opencv_core.CV_64F : opencv_core.CV_32F;
+			int depth = opencv_core.CV_32F;
+
+			
 			for (Mat mat : mats) {
 				
 				Map<MultiscaleFeature, Mat> features = new LinkedHashMap<>();
 				
 				Mat matSmooth = null;
 				if (doSmoothed) {
-					matSmooth = new Mat();
-					opencv_imgproc.sepFilter2D(mat, matSmooth, opencv_core.CV_32F, kx0, ky0, null, 0.0, border);
+					if (sigmaX > 0 || sigmaY > 0) {
+						matSmooth = new Mat();
+						opencv_imgproc.sepFilter2D(mat, matSmooth, depth, kx0, ky0, null, 0.0, border);
+					} else
+						matSmooth = mat.clone();
+					
 					stripPadding(matSmooth);
 					if (gaussianSmoothed)
 						features.put(MultiscaleFeature.GAUSSIAN, matSmooth);
 					
 					if (weightedStdDev) {
 						Mat matSquaredSmoothed = mat.mul(mat).asMat();
-						opencv_imgproc.sepFilter2D(matSquaredSmoothed, matSquaredSmoothed, opencv_core.CV_32F, kx0, ky0, null, 0.0, border);
+						opencv_imgproc.sepFilter2D(matSquaredSmoothed, matSquaredSmoothed, depth, kx0, ky0, null, 0.0, border);
 						stripPadding(matSquaredSmoothed);
 						matSquaredSmoothed.put(opencv_core.subtract(matSquaredSmoothed, matSmooth.mul(matSmooth)));
 						opencv_core.sqrt(matSquaredSmoothed, matSquaredSmoothed);
 						features.put(MultiscaleFeature.WEIGHTED_STD_DEV, matSquaredSmoothed);					
 					}
 				}
-				
+								
 				if (structureTensorEigenvalues) {
 					// Allow use of the same Mats as we might need for derivatives later
-					opencv_imgproc.Sobel(mat, dxx, opencv_core.CV_32F, 1, 0);
-					opencv_imgproc.Sobel(mat, dyy, opencv_core.CV_32F, 0, 1);
+					opencv_imgproc.Sobel(mat, dxx, depth, 1, 0);
+					opencv_imgproc.Sobel(mat, dyy, depth, 0, 1);
 					dxy.put(dxx.mul(dyy));
 					dxx.put(dxx.mul(dxx));
 					dyy.put(dyy.mul(dyy));
-					opencv_imgproc.sepFilter2D(dxx, dxx, opencv_core.CV_32F, kx0, ky0, null, 0.0, border);
-					opencv_imgproc.sepFilter2D(dyy, dyy, opencv_core.CV_32F, kx0, ky0, null, 0.0, border);					
-					opencv_imgproc.sepFilter2D(dxy, dxy, opencv_core.CV_32F, kx0, ky0, null, 0.0, border);
+					opencv_imgproc.sepFilter2D(dxx, dxx, depth, kx0, ky0, null, 0.0, border);
+					opencv_imgproc.sepFilter2D(dyy, dyy, depth, kx0, ky0, null, 0.0, border);					
+					opencv_imgproc.sepFilter2D(dxy, dxy, depth, kx0, ky0, null, 0.0, border);
 					
 					var temp = new EigenSymm2(dxx, dxy, dyy, false);
 					var stMax = stripPadding(temp.eigvalMax);
@@ -682,17 +625,17 @@ public class MultiscaleFeatures {
 				}
 				
 				if (gradientMagnitude) {
-					opencv_imgproc.sepFilter2D(mat, dxx, opencv_core.CV_32F, kx1, ky0, null, 0.0, border);
-					opencv_imgproc.sepFilter2D(mat, dyy, opencv_core.CV_32F, kx0, ky1, null, 0.0, border);					
+					opencv_imgproc.sepFilter2D(mat, dxx, depth, kx1, ky0, null, 0.0, border);
+					opencv_imgproc.sepFilter2D(mat, dyy, depth, kx0, ky1, null, 0.0, border);					
 					Mat magnitude = new Mat();
 					opencv_core.magnitude(dxx, dyy, magnitude);
 					features.put(MultiscaleFeature.GRADIENT_MAGNITUDE, stripPadding(magnitude));
 				}
 				
 				if (doHessian) {
-					opencv_imgproc.sepFilter2D(mat, dxx, opencv_core.CV_32F, kx2, ky0, null, 0.0, border);
-					opencv_imgproc.sepFilter2D(mat, dyy, opencv_core.CV_32F, kx0, ky2, null, 0.0, border);
-					opencv_imgproc.sepFilter2D(mat, dxy, opencv_core.CV_32F, kx1, ky1, null, 0.0, border);
+					opencv_imgproc.sepFilter2D(mat, dxx, depth, kx2, ky0, null, 0.0, border);
+					opencv_imgproc.sepFilter2D(mat, dyy, depth, kx0, ky2, null, 0.0, border);
+					opencv_imgproc.sepFilter2D(mat, dxy, depth, kx1, ky1, null, 0.0, border);
 					
 					// Strip padding now to reduce necessary calculations
 					stripPadding(dxx);
@@ -721,6 +664,13 @@ public class MultiscaleFeatures {
 						features.put(MultiscaleFeature.HESSIAN_EIGENVALUE_MIN, eigenvalues.get(1));
 					}
 					
+				}
+				
+				// Ensure our output is 32-bit
+				if (depth != opencv_core.CV_32F) {
+					for (var matFeature : features.values()) {
+						matFeature.convertTo(matFeature, opencv_core.CV_32F);
+					}
 				}
 				
 				results.add(features);
@@ -989,12 +939,15 @@ public class MultiscaleFeatures {
 
 		var coherence = new Mat(h, w, opencv_core.CV_32FC1);
 		FloatIndexer idxCoherence = coherence.createIndexer();
-		FloatIndexer idxMax = stMax.createIndexer();
-		FloatIndexer idxMin = stMin.createIndexer();
+		var idxMax = stMax.createIndexer();
+		var idxMin = stMin.createIndexer();
+		long[] inds = new long[2];
 		for (int r = 0; r < h; r++) {
 			for (int c = 0; c < w; c++) {
-				double max = idxMax.get(r, c);
-				double min = idxMin.get(r, c);
+				inds[0] = r;
+				inds[1] = c;
+				double max = idxMax.getDouble(inds);
+				double min = idxMin.getDouble(inds);
 				double difference = max - min;
 				double sum = max + min;
 				double co = sum == 0 ? 0 : (difference / sum) * (difference / sum);
@@ -1263,6 +1216,23 @@ public class MultiscaleFeatures {
 			
 			eigvalMin = opencv_core.subtract(t1, t2).asMat();
 			eigvalMax = opencv_core.add(t1, t2).asMat();
+			
+			// NaNs can occur! Remove these to prevent downstream problems (e.g. with any further filtering)
+			opencv_core.patchNaNs(eigvalMin, 0.0);
+			opencv_core.patchNaNs(eigvalMax, 0.0);
+			
+			// Try to debug a lot of zeros in the output (turned out normalization was applied too late)
+//			double total = eigvalMin.total();
+//			double zeroPercentMin = (total - opencv_core.countNonZero(eigvalMin))/total * 100;
+//			double zeroPercentMax = (total - opencv_core.countNonZero(eigvalMax))/total * 100;
+//			System.err.println(String.format("Zeros min: %.1f%%, max: %.1f%%", zeroPercentMin, zeroPercentMax));
+//			if (zeroPercentMax > 5 && zeroPercentMin > 5) {
+//				var imp = OpenCVTools.matToImagePlus("Temp", eigvalMin.clone(), eigvalMax.clone(), det.asMat(), trace.asMat());
+//				var imp2 = new CompositeImage(imp, CompositeImage.GRAYSCALE);
+//				imp2.setDimensions(imp.getStackSize(), 1, 1);
+//				imp2.resetDisplayRanges();
+//				imp2.show();
+//			}
 			
 			if (doEigenvectors) {
 				int width = dxx.cols();

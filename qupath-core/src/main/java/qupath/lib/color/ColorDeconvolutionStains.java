@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -28,6 +28,8 @@ import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
@@ -328,6 +330,21 @@ public class ColorDeconvolutionStains implements Externalizable {
 	}
 	
 	/**
+	 * Get a collection of all the stains.
+	 * @param includeResidual if true, include residual stains in the list. If false, only include non-residual stains.
+	 * @return a collection of stains.
+	 */
+	public Collection<StainVector> getStains(boolean includeResidual) {
+		var list = new ArrayList<StainVector>();
+		for (int s = 1; s <= 3; s++) {
+			var stain = getStain(s);
+			if (includeResidual || !stain.isResidual())
+				list.add(stain);
+		}
+		return list;
+	}
+	
+	/**
 	 * Get the stains name.
 	 * @return
 	 */
@@ -495,6 +512,7 @@ public class ColorDeconvolutionStains implements Externalizable {
 	
 	/**
 	 * Parses 3 values, suitable for use as a stain vector
+	 * @param locale 
 	 * @param s
 	 * @return
 	 */

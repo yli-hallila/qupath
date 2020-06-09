@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.gui.align;
 
 import java.awt.Graphics2D;
@@ -5,8 +26,6 @@ import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.NoninvertibleTransformException;
 import java.awt.image.BufferedImage;
-import java.awt.image.ImageObserver;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,21 +35,23 @@ import qupath.lib.gui.images.stores.DefaultImageRegionStore;
 import qupath.lib.gui.images.stores.ImageRenderer;
 import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.viewer.QuPathViewer;
-import qupath.lib.gui.viewer.overlays.AbstractImageDataOverlay;
+import qupath.lib.gui.viewer.overlays.AbstractOverlay;
+import qupath.lib.gui.viewer.overlays.PathOverlay;
+import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.regions.ImageRegion;
 
 /**
- * A PathOverlay implementation capable of painting one image on top of another, 
+ * A {@link PathOverlay} implementation capable of painting one image on top of another, 
  * including an optional affine transformation.
  * 
  * @author Pete Bankhead
  */
-public class ImageServerOverlay extends AbstractImageDataOverlay {
+public class ImageServerOverlay extends AbstractOverlay {
 	
 	private static Logger logger = LoggerFactory.getLogger(ImageServerOverlay.class);
 	
-	private QuPathViewer viewer;
+	private DefaultImageRegionStore store;
 	private ImageServer<BufferedImage> server;
 	
 	private ImageRenderer renderer;
@@ -56,8 +77,8 @@ public class ImageServerOverlay extends AbstractImageDataOverlay {
 	 * @param affine Affine transform to apply to the overlaid server
 	 */
 	public ImageServerOverlay(final QuPathViewer viewer, final ImageServer<BufferedImage> server, final Affine affine) {
-		super(viewer.getOverlayOptions(), viewer.getImageData());
-		this.viewer = viewer;
+		super(viewer.getOverlayOptions());
+		this.store = viewer.getImageRegionStore();
 		this.server = server;
 		this.transform = new AffineTransform();
 		this.transformInverse = null;//transform.createInverse();
@@ -70,10 +91,18 @@ public class ImageServerOverlay extends AbstractImageDataOverlay {
 		updateTransform();
 	}
 	
+	/**
+	 * Get the current renderer.
+	 * @return
+	 */
 	public ImageRenderer getRenderer() {
 		return renderer;
 	}
 	
+	/**
+	 * Set the rendered, which controls conversion of the image to RGB.
+	 * @param renderer
+	 */
 	public void setRenderer(ImageRenderer renderer) {
 		this.renderer = renderer;
 	}
@@ -104,14 +133,8 @@ public class ImageServerOverlay extends AbstractImageDataOverlay {
 	}
 
 	@Override
-	public boolean supportsImageDataChange() {
-		return false;
-	}
+	public void paintOverlay(Graphics2D g2d, ImageRegion imageRegion, double downsampleFactor, ImageData<BufferedImage> imageData, boolean paintCompletely) {
 
-	@Override
-	public void paintOverlay(Graphics2D g2d, ImageRegion imageRegion, double downsampleFactor, ImageObserver observer, boolean paintCompletely) {
-
-		DefaultImageRegionStore store = viewer.getImageRegionStore();
 		BufferedImage imgThumbnail = null;//store.getThumbnail(server, imageRegion.getZ(), imageRegion.getT(), true);
 			
 		// Paint the image
@@ -126,12 +149,12 @@ public class ImageServerOverlay extends AbstractImageDataOverlay {
 		var composite = getAlphaComposite();
 		if (composite != null)
 			gCopy.setComposite(composite);
-		if (PathPrefs.getViewerInterpolationBilinear())
+		if (PathPrefs.viewerInterpolateBilinearProperty().get())
 			gCopy.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 		else
 			gCopy.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 
-		store.paintRegion(server, gCopy, gCopy.getClip(), imageRegion.getZ(), imageRegion.getT(), downsampleFactor, imgThumbnail, observer, renderer);
+		store.paintRegion(server, gCopy, gCopy.getClip(), imageRegion.getZ(), imageRegion.getT(), downsampleFactor, imgThumbnail, null, renderer);
 		gCopy.dispose();
 				
 	}

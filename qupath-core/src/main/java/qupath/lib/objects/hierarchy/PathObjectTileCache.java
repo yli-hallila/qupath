@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -202,16 +202,16 @@ class PathObjectTileCache implements PathObjectHierarchyListener {
 			if (pathObject.isAnnotation() || pathObject.isTMACore()) {
 				geometryMap.put(roi, geometry);
 			}
-//			long startTime = System.currentTimeMillis();
-			if (!geometry.isValid()) {
-				int nVertices = geometry.getNumPoints();
-				if (geometry.getNumPoints() < 100)
-					logger.warn("{} is not a valid geometry! Actual geometry {}", pathObject, geometry);
-				else
-					logger.warn("{} is not a valid geometry! Actual geometry {} ({} vertices)", pathObject, geometry.getGeometryType(), nVertices);
-			}
-//			long endTime = System.currentTimeMillis();
-//			System.err.println("Testing " + (endTime - startTime) + " ms for " + geometry);
+////			long startTime = System.currentTimeMillis();
+//			if (!geometry.isValid()) {
+//				int nVertices = geometry.getNumPoints();
+//				if (geometry.getNumPoints() < 100)
+//					logger.warn("{} is not a valid geometry! Actual geometry {}", pathObject, geometry);
+//				else
+//					logger.warn("{} is not a valid geometry! Actual geometry {} ({} vertices)", pathObject, geometry.getGeometryType(), nVertices);
+//			}
+////			long endTime = System.currentTimeMillis();
+////			System.err.println("Testing " + (endTime - startTime) + " ms for " + geometry);
 		}
 		return geometry;
 	}
@@ -264,14 +264,33 @@ class PathObjectTileCache implements PathObjectHierarchyListener {
 	}
 	
 	boolean covers(PathObject possibleParent, PathObject possibleChild) {
-		var parent = getPreparedGeometry(getGeometry(possibleParent));
 		var child = getGeometry(possibleChild);
+		// If we have an annotation, do a quick check for a single coordinate outside
+		if (possibleParent.isAnnotation()) {
+			if (getLocator(possibleParent.getROI(), true).locate(child.getCoordinate()) == Location.EXTERIOR)
+				return false;
+		}
+		var parent = getGeometry(possibleParent);
+		return covers(parent, child);
+	}
+	
+	boolean covers(PreparedGeometry parent, Geometry child) {
 		return parent.covers(child);
 	}
 	
-	boolean covers(PreparedGeometry parent, PathObject possibleChild) {
-		var child = getGeometry(possibleChild);
-		return parent.covers(child);
+	boolean covers(Geometry parent, Geometry child) {
+//		if (!parent.getEnvelopeInternal().covers(child.getEnvelopeInternal()))
+//			return false;
+//		if (parent instanceof Polygon)
+//			return parent.covers(child);
+//		if (parent instanceof MultiPolygon) {
+//			for (int i = 0; i < parent.getNumGeometries(); i++) {
+//				if (covers(parent.getGeometryN(i), child))
+//					return true;
+//			}
+//			return false;
+//		}
+		return covers(getPreparedGeometry(parent), child);
 	}
 	
 	boolean containsCentroid(PathObject possibleParent, PathObject possibleChild) {
@@ -410,6 +429,9 @@ class PathObjectTileCache implements PathObjectHierarchyListener {
 				if (cls == null || (includeSubclasses && cls.isAssignableFrom(entry.getKey())) || cls.isInstance(entry.getKey())) {
 					if (entry.getValue() != null) {
 						var list = entry.getValue().query(envelope);
+						if (list.isEmpty())
+							continue;
+						
 						if (pathObjects == null)
 							pathObjects = new HashSet<PathObject>();
 						
@@ -450,9 +472,21 @@ class PathObjectTileCache implements PathObjectHierarchyListener {
 				if (cls == null || cls.isInstance(entry.getKey()) || (includeSubclasses && cls.isAssignableFrom(entry.getKey()))) {
 					if (entry.getValue() != null) {
 						var list = (List<PathObject>)entry.getValue().query(envelope);
-						if (list.stream().anyMatch(p -> p.hasROI() && 
-								(region == null || (p.getROI().getZ() == z && p.getROI().getT() == t))))
-							return true;
+						for (var pathObject : list) {
+							var roi = pathObject.getROI();
+							if (roi == null)
+								continue;
+							if (region == null)
+								return true;
+							if (roi.getZ() != z || roi.getT() != t)
+								continue;
+							if (region.intersects(roi.getBoundsX(), roi.getBoundsY(), roi.getBoundsWidth(), roi.getBoundsHeight())) {
+								return true;
+							}
+						}
+//						if (list.stream().anyMatch(p -> p.hasROI() && 
+//								(region == null || (p.getROI().getZ() == z && p.getROI().getT() == t))))
+//							return true;
 //						if (entry.getValue().hasObjectsForRegion(region))
 //							return true;
 					}

@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -28,7 +28,6 @@ import java.util.Collections;
 
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
-import qupath.lib.gui.viewer.ModeWrapper;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathROIObject;
 import qupath.lib.roi.RoiEditor;
@@ -43,10 +42,6 @@ import qupath.lib.roi.interfaces.ROI;
  */
 abstract class AbstractPathDraggingROITool extends AbstractPathROITool {
 
-	AbstractPathDraggingROITool(ModeWrapper modes) {
-		super(modes);
-	}
-
 	@Override
 	public void mouseDragged(MouseEvent e) {
 		super.mouseDragged(e);
@@ -55,6 +50,7 @@ abstract class AbstractPathDraggingROITool extends AbstractPathROITool {
             return;
         }
 		
+		var viewer = getViewer();
 		ROI currentROI = viewer.getCurrentROI() instanceof ROI ? (ROI)viewer.getCurrentROI() : null;
 		RoiEditor editor = viewer.getROIEditor();
 		
@@ -81,6 +77,7 @@ abstract class AbstractPathDraggingROITool extends AbstractPathROITool {
             return;
         }
 		
+		var viewer = getViewer();
 		PathObject selectedObject = viewer.getSelectedObject();
 		if (selectedObject == null)
 			return;

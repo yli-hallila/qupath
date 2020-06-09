@@ -54,6 +54,10 @@ public class RemoteOpenslide {
 		RemoteOpenslide.password = password;
 	}
 
+	public static boolean isConnected() {
+		return host != null;
+	}
+
 	public static void logout() {
 		setHost(null);
 		setAuthentication(null, null);

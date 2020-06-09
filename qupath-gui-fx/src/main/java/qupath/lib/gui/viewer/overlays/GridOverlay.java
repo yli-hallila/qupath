@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -29,8 +29,6 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.awt.image.ImageObserver;
-
 import qupath.lib.gui.viewer.GridLines;
 import qupath.lib.gui.viewer.OverlayOptions;
 import qupath.lib.images.ImageData;
@@ -45,21 +43,24 @@ import qupath.lib.regions.ImageRegion;
  * @author Pete Bankhead
  *
  */
-public class GridOverlay extends AbstractImageDataOverlay {
+public class GridOverlay extends AbstractOverlay {
 
-	
-	public GridOverlay(final OverlayOptions overlayOptions, final ImageData<BufferedImage> imageData) {
-		super(overlayOptions, imageData);
+	/**
+	 * Constructor.
+	 * @param overlayOptions overlay options to control the grid display
+	 */
+	public GridOverlay(final OverlayOptions overlayOptions) {
+		super(overlayOptions);
 	}
 	
 	@Override
-	public boolean isInvisible() {
-		return super.isInvisible() || !getOverlayOptions().getShowGrid();
+	public boolean isVisible() {
+		return super.isVisible() && getOverlayOptions().getShowGrid();
 	}
 
 	@Override
-	public void paintOverlay(final Graphics2D g, final ImageRegion imageRegion, final double downsampleFactor, final ImageObserver observer, final boolean paintCompletely) {
-		if (isInvisible())
+	public void paintOverlay(final Graphics2D g, final ImageRegion imageRegion, final double downsampleFactor, final ImageData<BufferedImage> imageData, final boolean paintCompletely) {
+		if (!isVisible() || imageData == null)
 			return;
 
 		
@@ -72,15 +73,9 @@ public class GridOverlay extends AbstractImageDataOverlay {
 		
 		// Draw grid lines
 		g2d.setStroke(new BasicStroke((float)(downsampleFactor*1.5)));
-		drawGrid(getOverlayOptions().getGridLines(), g2d, getServer(), downsampleFactor, imageRegion, getPreferredOverlayColor());
+		drawGrid(getOverlayOptions().getGridLines(), g2d, imageData.getServer(), downsampleFactor, imageRegion, getPreferredOverlayColor());
 		
 		g2d.dispose();
-	}
-
-
-	@Override
-	public boolean supportsImageDataChange() {
-		return true;
 	}
 
 	private static void drawGrid(final GridLines gridLines, final Graphics g, final ImageServer<?> server, final double downsample, final ImageRegion imageRegion, final Color color) {

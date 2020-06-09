@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.classifiers.pixel;
 
 import java.awt.image.BufferedImage;
@@ -130,6 +151,9 @@ public class PixelClassificationImageServer extends AbstractTileableImageServer 
 				.classificationLabels(classifierMetadata.getClassificationLabels())
 				.rgb(false);
 		
+		if (classifierMetadata.getOutputType() != ChannelType.CLASSIFICATION)
+			builder.channels(classifierMetadata.getOutputChannels());
+		
 //		if (classifierMetadata.getOutputType() == ChannelType.PROBABILITY)
 //			.channels(classifierMetadata.getOutputChannels())
 
@@ -215,64 +239,6 @@ public class PixelClassificationImageServer extends AbstractTileableImageServer 
 	@Override
 	protected ServerBuilder<BufferedImage> createServerBuilder() {
 		return null;
-	}
-	
-	/**
-	 * Request the classification for a specific pixel.
-	 * 
-	 * @param x
-	 * @param y
-	 * @param z
-	 * @param t
-	 * @return
-	 * @throws IOException
-	 */
-	public int getClassification(int x, int y, int z, int t) throws IOException {
-		
-		var type = classifier.getMetadata().getOutputType();
-		if (type != ImageServerMetadata.ChannelType.CLASSIFICATION && type != ImageServerMetadata.ChannelType.PROBABILITY)
-			return -1;
-		
-		var tile = getTileRequestManager().getTileRequest(0, x, y, z, t);
-		if (tile == null)
-			return -1;
-		
-		int xx = (int)Math.floor(x / tile.getDownsample() - tile.getTileX());
-		int yy = (int)Math.floor(y / tile.getDownsample() - tile.getTileY());
-		var img = getTile(tile);
-		
-		if (xx >= img.getWidth())
-			xx = img.getWidth() - 1;
-		if (xx < 0)
-			xx = 0;
-
-		if (yy >= img.getHeight())
-			yy = img.getHeight() - 1;
-		if (yy < 0)
-			yy = 0;
-
-		int nBands = img.getRaster().getNumBands();
-		if (nBands == 1 && type == ImageServerMetadata.ChannelType.CLASSIFICATION) {
-			try {
-				return img.getRaster().getSample(xx, yy, 0);
-			} catch (Exception e) {
-				logger.error("Error requesting classification", e);
-				return -1;
-			}
-		} else if (type == ImageServerMetadata.ChannelType.PROBABILITY) {
-			int maxInd = -1;
-			double maxVal = Double.NEGATIVE_INFINITY;
-			var raster = img.getRaster();
-			for (int b = 0; b < nBands; b++) {
-				double temp = raster.getSampleDouble(xx, yy, b);
-				if (temp > maxVal) {
-					maxInd = b;
-					maxVal = temp;
-				}
-			}
-			return maxInd;
-		}
-		return -1;
 	}
 	
 

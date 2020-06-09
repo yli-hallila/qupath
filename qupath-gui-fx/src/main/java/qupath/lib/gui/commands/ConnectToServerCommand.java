@@ -15,29 +15,28 @@ import org.controlsfx.control.StatusBar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.commands.interfaces.PathCommand;
-import qupath.lib.gui.helpers.DisplayHelpers;
 import qupath.lib.common.RemoteOpenslide;
+import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.prefs.PathPrefs;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ConnectToServerCommand implements PathCommand {
+public class ConnectToServerCommand implements Runnable {
 
     private Logger logger = LoggerFactory.getLogger(ConnectToServerCommand.class);
 
-    private QuPathGUI qupath;
+    private static QuPathGUI qupath = QuPathGUI.getInstance();
 
-    private boolean guest = true;
-    private String username = "";
-    private String password = "";
-
-    public ConnectToServerCommand(QuPathGUI qupath) {
-        this.qupath = qupath;
-    }
+    private static boolean guest = true;
+    private static String username = "";
+    private static String password = "";
 
     @Override
     public void run() {
+        openDialog();
+    }
+
+    public static void openDialog() {
         if (RemoteOpenslide.getHost() != null) {
             qupath.showWorkspaceDialog();
             return;
@@ -47,16 +46,16 @@ public class ConnectToServerCommand implements PathCommand {
             RemoteOpenslide.setHost(PathPrefs.remoteOpenslideHost().get());
             RemoteOpenslide.setAuthentication(username, password);
 
-            if (this.guest || RemoteOpenslide.login()) {
+            if (guest || RemoteOpenslide.login()) {
                 qupath.showWorkspaceDialog();
             } else {
                 RemoteOpenslide.logout();
-                this.run();
+                openDialog();
             }
         }
     }
 
-    private boolean showAuthenticationPanel() {
+    private static boolean showAuthenticationPanel() {
         AtomicBoolean cancelled = new AtomicBoolean(true);
         Stage dialog = new Stage();
 
@@ -73,7 +72,7 @@ public class ConnectToServerCommand implements PathCommand {
 
         loginAsGuest.setOnAction(action -> {
             cancelled.set(false);
-            this.guest = true;
+            guest = true;
 
             dialog.close();
         });
@@ -101,7 +100,7 @@ public class ConnectToServerCommand implements PathCommand {
         return !cancelled.get();
     }
 
-    private void showLoginDialog(AtomicBoolean cancelled, Stage dialog) {
+    private static void showLoginDialog(AtomicBoolean cancelled, Stage dialog) {
         GridPane loginPane = new GridPane();
 
         Label labUsername = new Label("Username");
@@ -129,11 +128,11 @@ public class ConnectToServerCommand implements PathCommand {
         loginPane.add(labPassword, 0, row);
         loginPane.add(tfPassword, 1, row);
 
-        if (DisplayHelpers.showConfirmDialog("Login", loginPane, false)) {
+        if (Dialogs.showConfirmDialog("Login", loginPane)) {
             cancelled.set(false);
-            this.guest = false;
-            this.username = tfUsername.getText();
-            this.password = tfPassword.getText();
+            guest = false;
+            username = tfUsername.getText();
+            password = tfPassword.getText();
 
             dialog.close();
         }

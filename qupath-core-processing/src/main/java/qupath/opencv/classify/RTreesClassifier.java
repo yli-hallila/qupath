@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -110,7 +110,7 @@ public class RTreesClassifier extends ParameterizableOpenCvClassifier<RTrees> im
 	protected void setPredictedClass(final RTrees classifier, final List<PathClass> pathClasses, final Mat samples, final Mat results, final PathObject pathObject) {
 		if (pathClasses.size() == 2 && termCriteria != null && ((TermCriteria.EPS & termCriteria.type()) == 0) && termCriteria.maxCount() > 0) {
 			double prediction = classifier.predict(samples, results, RTrees.PREDICT_SUM)  / termCriteria.maxCount();
-			int index = (int)Math.round(prediction); // Round the prediction
+			int index = (int)Math.round(prediction); // Round the prediction - NOTE: this gives a slightly different result from OpenCV's own predictions (which would round 0.5 down)
 			// Convert to a probability based on the number of trees
 			double probability = prediction;
 			if (index == 0)

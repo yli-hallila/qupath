@@ -4,27 +4,35 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
 package qupath.imagej.images.writers;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import ij.ImagePlus;
+import ij.io.FileSaver;
+import qupath.lib.common.GeneralTools;
 
 /**
  * ImageWriter implementation to write zipped TIFF images using ImageJ.
@@ -52,6 +60,18 @@ public class ZipWriterIJ extends AbstractWriterIJ {
 	@Override
 	public Collection<String> getExtensions() {
 		return Collections.singleton("zip");
+	}
+
+	@Override
+	public void writeImage(ImagePlus imp, OutputStream stream) throws IOException {
+		try (ZipOutputStream zos = new ZipOutputStream(stream)) {
+			String name = GeneralTools.getNameWithoutExtension(imp.getTitle());
+			if (name == null || name.isBlank())
+				name = "image";
+			name += ".tif";
+        	zos.putNextEntry(new ZipEntry(imp.getTitle()));
+        	zos.write(new FileSaver(imp).serialize());
+		}
 	}
 
 }

@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -25,9 +25,11 @@ package qupath.lib.regions;
 
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.roi.interfaces.ROI;
@@ -89,7 +91,7 @@ public class RegionRequest extends ImageRegion {
 	}
 	
 	/**
-	 * Create a requests for the full width and height of an {@link ImageServer}, for all planes (z-slices and time points).
+	 * Create requests for the full width and height of an {@link ImageServer}, for all planes (z-slices and time points).
 	 * @param server
 	 * @param downsample
 	 * @return
@@ -105,8 +107,8 @@ public class RegionRequest extends ImageRegion {
 	}
 
 	/**
-	 * Create a request that contains the pixels of the specified ROI.
-	 * This is calculated using the ROI bounding box.
+	 * Create a request that contains the pixels of the specified {@link ROI}.
+	 * This is calculated using the {@link ROI} bounding box.
 	 * @param path
 	 * @param downsample
 	 * @param roi
@@ -114,6 +116,19 @@ public class RegionRequest extends ImageRegion {
 	 */
 	public static RegionRequest createInstance(String path, double downsample, ROI roi) {
 		return createInstance(path, downsample, ImageRegion.createInstance(roi));
+	}
+	
+	/**
+	 * Create a request that contains the pixels of the specified {@link ROI}s.
+	 * This is calculated using the {@link ROI} bounding boxes.
+	 * @param path
+	 * @param downsample
+	 * @param rois
+	 * @return
+	 * @throws IllegalArgumentException if the {@link ROI}s do not all fall on the same {@link ImagePlane}.
+	 */
+	public static RegionRequest createInstance(String path, double downsample, Collection<? extends ROI> rois) {
+		return createInstance(path, downsample, ImageRegion.createInstance(rois));
 	}
 	
 	/**
@@ -199,6 +214,95 @@ public class RegionRequest extends ImageRegion {
 	public double getDownsample() {
 		return downsample;
 	}
+	
+	/**
+	 * Intersect to the specified 2D region, ignoring z and t.
+	 * @param region the region defining the x, y, width and height of the maximum permitted bounding box.
+	 * @return the clipped {@link RegionRequest}, which may be this if no clipping is required.
+	 */
+	public RegionRequest intersect2D(ImageRegion region) {
+		if (getX() >= region.getX() && getY() >= region.getY() && getMaxY() <= region.getMaxY() && getMaxX() <= region.getMaxX())
+			return this;
+		int x = Math.max(getMinX(), region.getMinX());
+		int y = Math.max(getMinY(), region.getMinY());
+		int x2 = Math.min(getMaxX(), region.getMaxX());
+		int y2 = Math.min(getMaxY(), region.getMaxY());
+		return RegionRequest.createInstance(
+				getPath(),
+				getDownsample(),
+				x, y, Math.max(x2-x, 0), Math.max(y2-y, 0),
+				getZ(), getT());
+	}
+	
+	/**
+	 * Intersect to the specified 2D region.
+	 * @param x x-coordinate of the second region's bounding box
+	 * @param y y-coordinate of the second region's bounding box
+	 * @param width width of the second region's bounding box
+	 * @param height height of the second region's bounding box
+	 * @return the clipped {@link RegionRequest}, which may be this if no clipping is required.
+	 */
+	public RegionRequest intersect2D(int x, int y, int width, int height) {
+		return intersect2D(ImageRegion.createInstance(x, y, width, height, getZ(), getT()));
+	}
+	
+	/**
+	 * Create a {@link RegionRequest} equivalent to this one with the updated z value.
+	 * @param z requested z position
+	 * @return {@link RegionRequest} with the specified z value (may be this object unchanged).
+	 */
+	public RegionRequest updateZ(int z) {
+		if (getZ() == z)
+			return this;
+		return RegionRequest.createInstance(getPath(), getDownsample(), getX(), getY(), getWidth(), getHeight(), z, getT());
+	}
+	
+	/**
+	 * Create a {@link RegionRequest} equivalent to this one with the updated t value.
+	 * @param t requested t position
+	 * @return {@link RegionRequest} with the specified t value (may be this object unchanged).
+	 */
+	public RegionRequest updateT(int t) {
+		if (getT() == t)
+			return this;
+		return RegionRequest.createInstance(getPath(), getDownsample(), getX(), getY(), getWidth(), getHeight(), getZ(), t);
+	}
+	
+	/**
+	 * Create a {@link RegionRequest} equivalent to this one with the updated downsample value.
+	 * @param downsample requested downsample position
+	 * @return {@link RegionRequest} with the specified downsample value (may be this object unchanged).
+	 */
+	public RegionRequest updateDownsample(double downsample) {
+		if (getDownsample() == downsample)
+			return this;
+		return RegionRequest.createInstance(getPath(), downsample, getX(), getY(), getWidth(), getHeight(), getZ(), getT());
+	}
+	
+	/**
+	 * Create a {@link RegionRequest} equivalent to this one with the updated path.
+	 * @param path requested path position
+	 * @return {@link RegionRequest} with the specified path value (may be this object unchanged).
+	 */
+	public RegionRequest updatePath(String path) {
+		Objects.requireNonNull(path);
+		if (getPath().equals(path))
+			return this;
+		return RegionRequest.createInstance(path, getDownsample(), getX(), getY(), getWidth(), getHeight(), getZ(), getT());
+	}
+	
+	/**
+	 * Add symmetric padding to the x and y dimensions of a request.
+	 * @param xPad padding to add along the x dimension; the width will be adjusted by {@code xPad * 2}
+	 * @param yPad padding to add along the y dimension; the height will be adjusted by {@code yPad * 2}
+	 * @return {@link RegionRequest} with the specified padding (may be this object unchanged if the padding is zero).
+	 */
+	public RegionRequest pad2D(int xPad, int yPad) {
+		if (xPad == 0 && yPad == 0)
+			return this;
+		return RegionRequest.createInstance(getPath(), getDownsample(), getX()-xPad, getY()-yPad, getWidth()+xPad*2, getHeight()+yPad*2, getZ(), getT());
+	}
+	
 
 
 	/* (non-Javadoc)

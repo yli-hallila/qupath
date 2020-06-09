@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -33,6 +33,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -40,11 +41,16 @@ import org.slf4j.LoggerFactory;
 
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
+import javafx.beans.binding.ObjectBinding;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
+import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
+import javafx.collections.transformation.FilteredList;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -65,6 +71,7 @@ import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.input.Clipboard;
@@ -78,7 +85,6 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Text;
@@ -86,19 +92,16 @@ import javafx.stage.Stage;
 import javafx.util.Callback;
 import qupath.lib.analysis.stats.Histogram;
 import qupath.lib.display.ChannelDisplayInfo;
-import qupath.lib.display.ChannelDisplayInfo.DirectServerChannelInfo;
+import qupath.lib.display.DirectServerChannelInfo;
 import qupath.lib.display.ImageDisplay;
-import qupath.lib.gui.ImageDataChangeListener;
-import qupath.lib.gui.ImageDataWrapper;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.commands.interfaces.PathCommand;
-import qupath.lib.gui.helpers.ColorToolsFX;
-import qupath.lib.gui.helpers.DisplayHelpers;
-import qupath.lib.gui.helpers.PaneToolsFX;
-import qupath.lib.gui.plots.HistogramPanelFX;
-import qupath.lib.gui.plots.HistogramPanelFX.HistogramData;
-import qupath.lib.gui.plots.HistogramPanelFX.ThresholdedChartWrapper;
+import qupath.lib.gui.charts.HistogramPanelFX;
+import qupath.lib.gui.charts.HistogramPanelFX.HistogramData;
+import qupath.lib.gui.charts.HistogramPanelFX.ThresholdedChartWrapper;
+import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.prefs.PathPrefs;
+import qupath.lib.gui.tools.ColorToolsFX;
+import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageChannel;
@@ -111,7 +114,7 @@ import qupath.lib.images.servers.ImageServerMetadata;
  * @author Pete Bankhead
  *
  */
-public class BrightnessContrastCommand implements PathCommand, ImageDataChangeListener<BufferedImage>, PropertyChangeListener {
+public class BrightnessContrastCommand implements Runnable, ChangeListener<ImageData<BufferedImage>>, PropertyChangeListener {
 	
 	private static Logger logger = LoggerFactory.getLogger(BrightnessContrastCommand.class);
 	
@@ -132,6 +135,13 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 //	private float maxCurrent = 0;
 	
 	private TableView<ChannelDisplayInfo> table = new TableView<>();
+	private StringProperty filterText = new SimpleStringProperty("");
+	private ObjectBinding<Predicate<ChannelDisplayInfo>> predicate = Bindings.createObjectBinding(() -> {
+		String text = filterText.get().toLowerCase().strip();
+		if (text.isBlank())
+			return info -> true;
+		return info -> info.getName().toLowerCase().contains(text);
+	}, filterText);
 	
 	private ColorPicker picker = new ColorPicker();
 	
@@ -144,9 +154,13 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 	
 	private BrightnessContrastKeyListener keyListener = new BrightnessContrastKeyListener();
 	
+	/**
+	 * Constructor.
+	 * @param qupath
+	 */
 	public BrightnessContrastCommand(final QuPathGUI qupath) {
 		this.qupath = qupath;
-		this.qupath.addImageDataChangeListener(this);
+		this.qupath.imageDataProperty().addListener(this);
 		
 		// Add 'pure' red, green & blue to the available colors
 		picker.getCustomColors().addAll(
@@ -177,7 +191,7 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		
 		initializePopup();
 		
-		imageDataChanged(null, null, qupath.getImageData());
+		changed(null, null, qupath.getImageData());
 		
 		BorderPane pane = new BorderPane();
 		
@@ -218,14 +232,13 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		
 		// In the absence of a better way, make it possible to enter display range values 
 		// manually by double-clicking on the corresponding label
-		// TODO: Consider a better way to do this; 
 		labelMinValue.setOnMouseClicked(e -> {
 			if (e.getClickCount() == 2) {
 				ChannelDisplayInfo infoVisible = getCurrentInfo();
 				if (infoVisible == null)
 					return;
 
-				Double value = DisplayHelpers.showInputDialog("Display range", "Set display range minimum", (double)infoVisible.getMinDisplay());
+				Double value = Dialogs.showInputDialog("Display range", "Set display range minimum", (double)infoVisible.getMinDisplay());
 				if (value != null && !Double.isNaN(value)) {
 					sliderMin.setValue(value);
 					// Update display directly if out of slider range
@@ -244,7 +257,7 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 				if (infoVisible == null)
 					return;
 
-				Double value = DisplayHelpers.showInputDialog("Display range", "Set display range maximum", (double)infoVisible.getMaxDisplay());
+				Double value = Dialogs.showInputDialog("Display range", "Set display range maximum", (double)infoVisible.getMaxDisplay());
 				if (value != null && !Double.isNaN(value)) {
 					sliderMax.setValue(value);
 					// Update display directly if out of slider range
@@ -267,9 +280,10 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 //					return;
 ////				setSliders((float)histogram.getEdgeMin(), (float)histogram.getEdgeMax());
 				ChannelDisplayInfo info = getCurrentInfo();
-				imageDisplay.autoSetDisplayRange(info, PathPrefs.getAutoBrightnessContrastSaturationPercent()/100.0);
+				double saturation = PathPrefs.autoBrightnessContrastSaturationPercentProperty().get()/100.0;
+				imageDisplay.autoSetDisplayRange(info, saturation);
 				for (ChannelDisplayInfo info2 : table.getSelectionModel().getSelectedItems()) {
-					imageDisplay.autoSetDisplayRange(info2, PathPrefs.getAutoBrightnessContrastSaturationPercent()/100.0);
+					imageDisplay.autoSetDisplayRange(info2, saturation);
 				}
 				updateSliders();
 				handleSliderChange();
@@ -295,39 +309,10 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		
 		table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
 		table.getSelectionModel().selectedItemProperty().addListener((v, o, n) -> {
-//			boolean alreadySelected = rowIndex == table.getSelectedRow();
-//	        super.changeSelection(rowIndex, columnIndex, toggle, extend);
-//	        ChannelDisplayInfo info = getCurrentInfo();
-//	        if (alreadySelected)
-//				toggleDisplay(info);
-//	        else
-//	        	updateDisplay(info, true);
 	        updateHistogram();
 			updateSliders();
 		});
-		// TODO: Consider reinstating code that tries to intercept selections & push them into a valid state
-//		{
-//			
-//			private static final long serialVersionUID = -162279729611434398L;
-//
-//			public void changeSelection(int rowIndex, int columnIndex, boolean toggle, boolean extend) {
-////		        ChannelDisplayInfo infoPrevious = tableModel.getChannelForRow(rowIndex);
-//				boolean alreadySelected = rowIndex == table.getSelectedRow();
-//		        super.changeSelection(rowIndex, columnIndex, toggle, extend);
-//		        ChannelDisplayInfo info = getCurrentInfo();
-////				infoVisible = info;
-////				if (info != null && infoPrevious == info && info.isAdditive()) {
-//		        if (alreadySelected)
-//					toggleDisplay(info);
-//		        else
-//		        	updateDisplay(info, true);
-////				else
-////					updateDisplay(info, alreadySelected);
-//		        updateHistogram();
-//				updateSliders();
-//		    }
-//			
-//		};
+
 		TableColumn<ChannelDisplayInfo, ChannelDisplayInfo> col1 = new TableColumn<>("Color");
 		col1.setCellValueFactory(new Callback<CellDataFeatures<ChannelDisplayInfo, ChannelDisplayInfo>, ObservableValue<ChannelDisplayInfo>>() {
 		     @Override
@@ -407,37 +392,54 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 			row.setOnMouseClicked(e -> {
 				if (e.getClickCount() == 2) {
 					ChannelDisplayInfo info = row.getItem();
-					if (info instanceof ChannelDisplayInfo.DirectServerChannelInfo) {
-						ChannelDisplayInfo.DirectServerChannelInfo multiInfo = (ChannelDisplayInfo.DirectServerChannelInfo)info;
+					var imageData = viewer.getImageData();
+					if (info instanceof DirectServerChannelInfo && imageData != null) {
+						DirectServerChannelInfo multiInfo = (DirectServerChannelInfo)info;
 						int c = multiInfo.getChannel();
+						var channel = imageData.getServer().getMetadata().getChannel(c);
 						
 						Color color = ColorToolsFX.getCachedColor(multiInfo.getColor());
 						picker.setValue(color);
 						
 						
 						Dialog<ButtonType> colorDialog = new Dialog<>();
-						colorDialog.setTitle("Channel color");
+						colorDialog.setTitle("Channel properties");
+												
 						colorDialog.getDialogPane().getButtonTypes().setAll(ButtonType.APPLY, ButtonType.CANCEL);
-						colorDialog.getDialogPane().setHeaderText("Select color for " + info.getName());
-						StackPane colorPane = new StackPane(picker);
-						colorDialog.getDialogPane().setContent(colorPane);
+						
+						var paneColor = new GridPane();
+						int r = 0;
+						var labelName = new Label("Channel name");
+						var tfName = new TextField(channel.getName());
+						labelName.setLabelFor(tfName);
+						PaneTools.addGridRow(paneColor, r++, 0, "Enter a name for the current channel", labelName, tfName);
+						var labelColor = new Label("Channel color");
+						labelColor.setLabelFor(picker);
+						PaneTools.addGridRow(paneColor, r++, 0, "Choose the color for the current channel", labelColor, picker);
+						paneColor.setVgap(5.0);
+						paneColor.setHgap(5.0);
+						
+						colorDialog.getDialogPane().setContent(paneColor);
 						Optional<ButtonType> result = colorDialog.showAndWait();
-						if (result.orElseGet(() -> ButtonType.CANCEL) == ButtonType.APPLY) {
+						if (result.orElse(ButtonType.CANCEL) == ButtonType.APPLY) {
 //							if (!DisplayHelpers.showMessageDialog("Choose channel color", picker))
 //								return;
+							String name = tfName.getText().trim();
+							if (name.isEmpty()) {
+								Dialogs.showErrorMessage("Set channel name", "The channel name must not be empty!");
+								return;
+							}
 							Color color2 = picker.getValue();
-							if (color == color2)
+							if (color == color2 && name.equals(channel.getName()))
 								return;
 							
 							// Update the server metadata
-							var imageData = viewer.getImageData();
 							int colorUpdated = ColorToolsFX.getRGB(color2);
 							if (imageData != null) {
 								var server = imageData.getServer();
 								var metadata = server.getMetadata();
 								var channels = new ArrayList<>(metadata.getChannels());
-								var channel = channels.get(c);
-								channels.set(c, ImageChannel.getInstance(channel.getName(), colorUpdated));
+								channels.set(c, ImageChannel.getInstance(name, colorUpdated));
 								var metadata2 = new ImageServerMetadata.Builder(metadata)
 										.channels(channels).build();
 								imageData.updateServerMetadata(metadata2);
@@ -482,7 +484,15 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		
 		BorderPane panelColor = new BorderPane();
 //		panelColor.setBorder(BorderFactory.createTitledBorder("Color display"));
-		panelColor.setCenter(table);
+		BorderPane paneTableAndFilter = new BorderPane(table);
+		TextField tfFilter = new TextField("");
+		tfFilter.textProperty().bindBidirectional(filterText);
+		tfFilter.setTooltip(new Tooltip("Enter text to find specific channels by name"));
+		tfFilter.setPromptText("Filter channels by name");
+		paneTableAndFilter.setBottom(tfFilter);
+		predicate.addListener((v, o, n) -> updatePredicate());
+		
+		panelColor.setCenter(paneTableAndFilter);
 		
 		CheckBox cbShowGrayscale = new CheckBox("Show grayscale");
 		cbShowGrayscale.selectedProperty().bindBidirectional(showGrayscale);
@@ -510,7 +520,7 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		// Create brightness/contrast panel
 		BorderPane panelSliders = new BorderPane();
 		panelSliders.setTop(box);
-		GridPane panelButtons = PaneToolsFX.createColumnGridControls(
+		GridPane panelButtons = PaneTools.createColumnGridControls(
 				btnAuto,
 				btnReset
 				);
@@ -521,7 +531,7 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 //		panelMinMax.setBorder(BorderFactory.createTitledBorder("Brightness/Contrast"));
 		panelMinMax.setTop(panelSliders);
 		
-		histogramPanel.setDrawAxes(false);
+		histogramPanel.setShowTickLabels(false);
 		histogramPanel.getChart().setAnimated(false);
 //		histogramPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 //		panelMinMax.setCenter(histogramPanel.getChart());
@@ -548,6 +558,12 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		updateDisplay(getCurrentInfo(), true);
 		updateHistogram();
 		updateSliders();
+		
+		// Update sliders when receiving focus - in case the display has been updated elsewhere
+		dialog.focusedProperty().addListener((v, o, n) -> {
+			if (n)
+				updateSliders();
+		});
 
 		return dialog;
 	}
@@ -569,7 +585,7 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 				histogramPanel.getHistogramData().get(0).setHistogram(histogram, color);
 			} else {
 				HistogramData histogramData = HistogramPanelFX.createHistogramData(histogram, true, infoSelected.getColor());
-				histogramData.setDoNormalizeCounts(true);
+				histogramData.setNormalizeCounts(true);
 				histogramPanel.getHistogramData().setAll(histogramData);
 			}
 		}
@@ -612,15 +628,6 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		pane.setHgap(4);
 		pane.setVgap(2);
 		int r = 0;
-		// TODO: Show min & max somewhere - but beware of the need to stay updated!
-//		if (infoSelected != null) {
-//			pane.add(new Label("Min display"), 0, r);
-//			pane.add(new Label(df.format(infoSelected.getMinDisplay())), 1, r);
-//			r++;
-//			pane.add(new Label("Max display"), 0, r);
-//			pane.add(new Label(df.format(infoSelected.getMaxDisplay())), 1, r);
-//			r++;
-//		}
 		if (histogram != null) {
 			pane.add(new Label("Min"), 0, r);
 			pane.add(new Label(df.format(histogram.getMinValue())), 1, r);
@@ -642,14 +649,6 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		else
 			Tooltip.install(histogramPanel.getChart(), chartTooltip);
 		
-////	case 0: return columnIndex == 0 ? "Min display" : df.format(channel.getMinDisplay());
-////	case 1: return columnIndex == 0 ? "Max display" : df.format(channel.getMaxDisplay());
-////	case 2: return columnIndex == 0 ? "Min" : df.format(histogram.getMinValue());
-////	case 3: return columnIndex == 0 ? "Max" : df.format(histogram.getMaxValue());
-////	case 4: return columnIndex == 0 ? "Mean" : df.format(histogram.getMeanValue());
-////	case 5: return columnIndex == 0 ? "Std.dev" : df.format(histogram.getStdDev());
-//		
-//		histogramTableModel.setHistogram(infoSelected, histogram);
 	}
 	
 	
@@ -664,20 +663,8 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		// If the table isn't null, we are displaying something
 		if (table != null) {
 			updateHistogram();
-	
-//			// Update current min & max
-//			ChannelDisplayInfo info = getCurrentInfo();
-//			if (info != null) {
-//				Histogram histogram = imageDisplay.getHistogram(info);
-//				if (histogram != null) {
-//					float minCurrent = (float)Math.min(info.getMinAllowed(), histogram.getEdgeMin());
-//					float maxCurrent = (float)Math.max(info.getMaxAllowed(), histogram.getEdgeMax());
-//					info.setMinMaxAllowed(minCurrent, maxCurrent);
-//				}
-//			}
 			table.refresh();
 		}
-//		viewer.updateThumbnail();
 		viewer.repaintEntireImage();
 	}
 	
@@ -751,11 +738,16 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 			n = (int)(range / .01);
 		slidersUpdating = true;
 		
-		sliderMin.setMin(infoVisible.getMinAllowed());
-		sliderMin.setMax(infoVisible.getMaxAllowed());
+		double maxDisplay = Math.max(infoVisible.getMaxDisplay(), infoVisible.getMinDisplay());
+		double minDisplay = Math.min(infoVisible.getMaxDisplay(), infoVisible.getMinDisplay());
+		double minSlider = Math.min(infoVisible.getMinAllowed(), minDisplay);
+		double maxSlider = Math.max(infoVisible.getMaxAllowed(), maxDisplay);
+		
+		sliderMin.setMin(minSlider);
+		sliderMin.setMax(maxSlider);
 		sliderMin.setValue(infoVisible.getMinDisplay());
-		sliderMax.setMin(infoVisible.getMinAllowed());
-		sliderMax.setMax(infoVisible.getMaxAllowed());
+		sliderMax.setMin(minSlider);
+		sliderMax.setMax(maxSlider);
 		sliderMax.setValue(infoVisible.getMaxDisplay());
 		
 		if (is8Bit) {
@@ -818,7 +810,6 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 	private void setTableSelectedChannels(boolean showChannels) {
 		if (!isInitialized())
 			return;
-		var selected = table.getSelectionModel().getSelectedItems();
 		for (ChannelDisplayInfo info : table.getSelectionModel().getSelectedItems()) {
 			imageDisplay.setChannelSelected(info, showChannels);
 		}
@@ -850,9 +841,14 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		}
 	}
 	
+	private void updatePredicate() {
+		var items = table.getItems();
+		if (items instanceof FilteredList) {
+			((FilteredList<ChannelDisplayInfo>)items).setPredicate(predicate.get());
+		}
+	}
 	
-	
-	public void updateTable() {
+	void updateTable() {
 		if (!isInitialized())
 			return;
 
@@ -860,7 +856,7 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		if (imageDisplay == null) {
 			table.setItems(FXCollections.emptyObservableList());
 		} else {
-			table.setItems(imageDisplay.availableChannels());
+			table.setItems(imageDisplay.availableChannels().filtered(predicate.get()));
 			showGrayscale.bindBidirectional(imageDisplay.useGrayscaleLutProperty());
 		}
 		table.refresh();
@@ -876,7 +872,8 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 
 
 	@Override
-	public void imageDataChanged(ImageDataWrapper<BufferedImage> source, ImageData<BufferedImage> imageDataOld, ImageData<BufferedImage> imageDataNew) {
+	public void changed(ObservableValue<? extends ImageData<BufferedImage>> source,
+			ImageData<BufferedImage> imageDataOld, ImageData<BufferedImage> imageDataNew) {
 		// TODO: Consider different viewers but same ImageData
 		if (imageDataOld == imageDataNew)
 			return;
@@ -924,7 +921,7 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 		// Update display - we might have changed stain vectors or server metadata in some major way
 		if (evt.getPropertyName().equals("serverMetadata") || 
 				!((evt.getSource() instanceof ImageData<?>) && evt.getPropertyName().equals("stains")))
-			imageDisplay.updateChannelOptions(false);
+			imageDisplay.refreshChannelOptions();
 		
 		updateTable();
 
@@ -1013,11 +1010,11 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 			}
 			var names = string.lines().collect(Collectors.toList());
 			if (selected.size() != names.size()) {
-				DisplayHelpers.showErrorNotification("Paste channel names", "The number of lines on the clipboard doesn't match the number of channel names to replace!");
+				Dialogs.showErrorNotification("Paste channel names", "The number of lines on the clipboard doesn't match the number of channel names to replace!");
 				return;
 			}
 			if (names.size() != new HashSet<>(names).size()) {
-				DisplayHelpers.showErrorNotification("Paste channel names", "Channel names should be unique!");
+				Dialogs.showErrorNotification("Paste channel names", "Channel names should be unique!");
 				return;
 			}
 			var metadata = server.getMetadata();
@@ -1038,7 +1035,7 @@ public class BrightnessContrastCommand implements PathCommand, ImageDataChangeLi
 			List<String> allNewNames = channels.stream().map(c -> c.getName()).collect(Collectors.toList());
 			Set<String> allNewNamesSet = new LinkedHashSet<>(allNewNames);
 			if (allNewNames.size() != allNewNamesSet.size()) {
-				DisplayHelpers.showErrorMessage("Channel", "Cannot paste channels - names would not be unique \n(check log for details)");
+				Dialogs.showErrorMessage("Channel", "Cannot paste channels - names would not be unique \n(check log for details)");
 				for (String n : allNewNamesSet)
 					allNewNames.remove(n);
 				logger.warn("Requested channel names would result in duplicates: " + String.join(", ", allNewNames));

@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -25,7 +25,6 @@ package qupath.imagej.superpixels;
 
 import ij.ImagePlus;
 import ij.gui.PolygonRoi;
-import ij.gui.Roi;
 import ij.plugin.filter.MaximumFinder;
 import ij.plugin.filter.RankFilters;
 import ij.process.Blitter;
@@ -139,9 +138,19 @@ public class DoGSuperpixelsPlugin extends AbstractTileableDetectionPlugin<Buffer
 				return null;
 			}
 			// Get a PathImage if we have a new ROI
-			if (!pathROI.equals(this.pathROI)) {
+			if (!pathROI.equals(this.pathROI) || true) {
 				ImageServer<BufferedImage> server = imageData.getServer();
-				this.pathImage = IJTools.convertToImagePlus(server, RegionRequest.createInstance(server.getPath(), params.getDoubleParameterValue("downsampleFactor"), pathROI));
+				
+
+				double downsample = params.getDoubleParameterValue("downsampleFactor");
+				
+				// Create an expanded request (we will clip to the actual ROI later)
+				var request = RegionRequest.createInstance(server.getPath(), downsample, pathROI)
+						.pad2D((int)Math.ceil(downsample * 2), (int)Math.ceil(downsample * 2))
+						.intersect2D(0, 0, server.getWidth(), server.getHeight());
+				
+				this.pathImage = IJTools.convertToImagePlus(server, request);
+				
 //				this.pathImage = IJTools.createPathImage(server, pathROI, params.getDoubleParameterValue("downsampleFactor"));
 				this.pathROI = pathROI;
 			}
@@ -194,7 +203,6 @@ public class DoGSuperpixelsPlugin extends AbstractTileableDetectionPlugin<Buffer
 			// Convert to tiles & create a labelled image for later
 			PolygonRoi[] polygons = RoiLabeling.labelsToFilledROIs(ipLabels, (int)ipLabels.getMax());
 			List<PathObject> pathObjects = new ArrayList<>(polygons.length);
-			int label = 0;
 			// Set thresholds - regions means must be within specified range
 			double minThreshold = params.getDoubleParameterValue("minThreshold");
 			double maxThreshold = params.getDoubleParameterValue("maxThreshold");
@@ -218,9 +226,6 @@ public class DoGSuperpixelsPlugin extends AbstractTileableDetectionPlugin<Buffer
 						return Collections.emptyList();
 
 					superpixelROIs.add(IJTools.convertToROI(roi, pathImage));
-					label++;
-					ipLabels.setValue(label);
-					ipLabels.fill(roi);
 				}
 				if (pathROI != null)
 					superpixelROIs = RoiTools.clipToROI(pathROI, superpixelROIs);
@@ -255,7 +260,6 @@ public class DoGSuperpixelsPlugin extends AbstractTileableDetectionPlugin<Buffer
 		}
 		
 	}
-	
 	
 	
 	@Override

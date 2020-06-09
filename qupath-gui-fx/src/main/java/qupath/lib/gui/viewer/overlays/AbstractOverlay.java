@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -38,16 +38,19 @@ import qupath.lib.gui.viewer.OverlayOptions;
  */
 public abstract class AbstractOverlay implements PathOverlay {
 
-	protected OverlayOptions overlayOptions = null;
+	private OverlayOptions overlayOptions = null;
 	private Color overlayColor = ColorToolsAwt.TRANSLUCENT_BLACK;
 	private double opacity = 1.0;
 	private AlphaComposite composite = null;
-	private boolean visible = true;
-
-	public AbstractOverlay() {
-		super();
+	
+	protected AbstractOverlay(OverlayOptions options) {
+		this.overlayOptions = options;
 	}
 
+	/**
+	 * Get the overlay options, which may influence the display of this overlay.
+	 * @return
+	 */
 	public OverlayOptions getOverlayOptions() {
 		return overlayOptions;
 	}
@@ -61,42 +64,47 @@ public abstract class AbstractOverlay implements PathOverlay {
 			g2d.setComposite(composite);
 	}
 
-	@Override
+	/**
+	 * Check overlay visibility status.  If isVisible() returns {@code false},
+	 * then calls to paintOverlay() will not do anything.
+	 * @return
+	 */
 	public boolean isVisible() {
-		return visible;
-	}
-
-	@Override
-	public void setVisible(boolean visible) {
-		this.visible = visible;
+		return opacity > 0;
 	}
 
 	/**
-	 * Tests both isVisible() and whether opacity &lt;= 0, i.e. will return true if this overlay could not cause
-	 * any change in appearance.
-	 * @return
+	 * Set a preferred overlay color, which the overlay may or may not make use of.
+	 * The aim is to provide a means to suggest drawing with a light color on a dark image, 
+	 * or a dark color on a light image.
+	 * 
+	 * @param color
 	 */
-	@Override
-	public boolean isInvisible() {
-		return !isVisible() || opacity <= 0;
-	}
-
-	@Override
 	public void setPreferredOverlayColor(Color color) {
 		this.overlayColor = color;
 	}
 
-	@Override
+	/**
+	 * Return the preferred overlay color.
+	 * @return
+	 * @see #setPreferredOverlayColor(Color)
+	 */
 	public Color getPreferredOverlayColor() {
 		return overlayColor;
 	}
 
-	@Override
+	/**
+	 * Get opacity, between 0 (completely transparent) and 1 (completely opaque).
+	 * @return
+	 */
 	public double getOpacity() {
 		return opacity;
 	}
 
-	@Override
+	/**
+	 * Set opacity between 0 (completely transparent) and 1 (completely opaque).
+	 * @param opacity
+	 */
 	public void setOpacity(double opacity) {
 		opacity = Math.max(0, Math.min(opacity, 1.0));
 		if (this.opacity == opacity)
@@ -107,5 +115,5 @@ public abstract class AbstractOverlay implements PathOverlay {
 		else
 			composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, (float)opacity);
 	}
-
+	
 }

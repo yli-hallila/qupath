@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -49,9 +49,8 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.extensions.QuPathExtension;
-import qupath.lib.gui.helpers.DisplayHelpers;
+import qupath.lib.gui.tools.GuiTools;
 import qupath.lib.images.servers.ImageServerBuilder;
 import qupath.lib.images.servers.ImageServerProvider;
 
@@ -61,19 +60,12 @@ import qupath.lib.images.servers.ImageServerProvider;
  * @author Pete Bankhead
  *
  */
-public class ShowInstalledExtensionsCommand implements PathCommand {
+class ShowInstalledExtensionsCommand {
 	
 	final private static Logger logger = LoggerFactory.getLogger(ShowInstalledExtensionsCommand.class);
 	
-	private QuPathGUI qupath;
 	
-	public ShowInstalledExtensionsCommand(final QuPathGUI qupath) {
-		this.qupath = qupath;
-	}
-	
-	@Override
-	public void run() {
-		
+	public static void showInstalledExtensions(final QuPathGUI qupath) {
 		Stage dialog = new Stage();
 		dialog.initOwner(qupath.getStage());
 		dialog.initModality(Modality.APPLICATION_MODAL);
@@ -121,26 +113,6 @@ public class ShowInstalledExtensionsCommand implements PathCommand {
 	
 	
 	private static void addEntry(final GridPane pane, final QuPathExtensionEntry entry, final int row) {
-//		TextArea textArea = new TextArea(entry.getDescription());
-//		textArea.setPrefRowCount(3);
-//		textArea.setWrapText(true);
-//		textArea.setEditable(false);
-//		textArea.setMinWidth(100);
-//		
-//		Label label = new Label(entry.getName());
-//		label.setMaxWidth(Double.MAX_VALUE);
-//		label.setTextAlignment(TextAlignment.RIGHT);
-//		
-//		Tooltip tooltip = new Tooltip(entry.getPathToJar());
-//		label.setTooltip(tooltip);
-//		textArea.setTooltip(tooltip);
-//		textArea.setMaxWidth(Double.MAX_VALUE);
-//		GridPane.setHgrow(textArea, Priority.ALWAYS);
-//		GridPane.setFillWidth(textArea, Boolean.TRUE);
-//		
-//		pane.add(label, 1, row*2);
-//		pane.add(textArea, 1, row*2+1);
-		
 		
 		TextArea textArea = new TextArea(entry.getDescription());
 		textArea.setPrefRowCount(3);
@@ -168,7 +140,7 @@ public class ShowInstalledExtensionsCommand implements PathCommand {
 			File dir = file.isDirectory() ? file : file.getParentFile();
 				labelPath.setOnMouseClicked(e -> {
 					if (e.getClickCount() == 2) {
-						DisplayHelpers.openFile(dir);
+						GuiTools.openFile(dir);
 					}
 				});
 		}
@@ -195,44 +167,11 @@ public class ShowInstalledExtensionsCommand implements PathCommand {
 		GridPane.setFillWidth(paneEntry, Boolean.TRUE);
 		
 		pane.add(paneEntry, 1, row);
-		
-		
-//		Label label = new Label(entry.getName());
-//		pane.add(label, 0, row);
-//		label.setMinWidth(100);
-////		pane.add(label, 0, row, 1, 2);
-////		TextFlow textFlow = new TextFlow(new Text(entry.getDescription()));
-////		pane.add(textFlow, 1, row);
-////		GridPane.setHgrow(textFlow, Priority.ALWAYS);
-//		
-//		TextArea textArea = new TextArea(entry.getDescription());
-//		textArea.setPrefColumnCount(40);
-//		textArea.setPrefRowCount(3);
-//		textArea.setWrapText(true);
-//		textArea.setEditable(false);
-////		textArea.setOpacity(0.5);
-////		textArea.setStyle("-fx-background-color: transparent;");
-//		// Not enough to actually achieve transparency... need to go to CSS...?
-//		textArea.setBackground(Background.EMPTY);
-//		for (Node node : textArea.getChildrenUnmodifiable()) {
-//			if (node instanceof Region) {
-//				((Region)node).setBackground(Background.EMPTY);
-//			}
-//		}
-//		textArea.setMinWidth(100);
-//		pane.add(textArea, 1, row);
-//		
-//		Tooltip tooltip = new Tooltip(entry.getPathToJar());
-//		label.setTooltip(tooltip);
-//		textArea.setTooltip(tooltip);
-//		
-////		pane.add(new Label(entry.getPathToJar()), 1, row+1);
-//		GridPane.setHgrow(textArea, Priority.SOMETIMES);
 	}
 	
 	
 	
-	private class QuPathExtensionEntry {
+	private static class QuPathExtensionEntry {
 		
 		private Object extension;
 		

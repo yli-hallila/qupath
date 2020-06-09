@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -34,6 +34,9 @@ import java.io.IOException;
 import java.text.DecimalFormat;
 import java.util.Arrays;
 import java.util.List;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.function.Function;
 
 import javax.swing.SwingUtilities;
 
@@ -48,6 +51,7 @@ import ij.gui.PointRoi;
 import ij.gui.PolygonRoi;
 import ij.gui.Roi;
 import ij.gui.ShapeRoi;
+import ij.gui.Wand;
 import ij.io.FileInfo;
 import ij.measure.Calibration;
 import ij.process.Blitter;
@@ -57,6 +61,7 @@ import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import ij.process.LUT;
 import ij.process.ShortProcessor;
+import qupath.imagej.processing.RoiLabeling;
 import qupath.lib.awt.common.BufferedImageTools;
 import qupath.lib.color.ColorDeconvolutionHelper;
 import qupath.lib.color.ColorDeconvolutionStains;
@@ -71,11 +76,12 @@ import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.PixelCalibration;
 import qupath.lib.images.servers.ServerTools;
 import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.PathObjects;
+import qupath.lib.objects.classes.PathClassFactory;
 import qupath.lib.regions.ImagePlane;
 import qupath.lib.regions.ImageRegion;
 import qupath.lib.regions.RegionRequest;
-import qupath.lib.roi.AreaROI;
 import qupath.lib.roi.EllipseROI;
 import qupath.lib.roi.LineROI;
 import qupath.lib.roi.PointsROI;
@@ -118,10 +124,10 @@ public class IJTools {
 	 * Check if sufficient memory is available to request pixels for a specific region, and the number 
 	 * of pixels is less than the maximum length of a Java array.
 	 * 
-	 * @param region - the requested region coming from 
-	 * @param imageData - this BufferedImage
-	 * @return - true if the memory is sufficient
-	 * @throws Exception - either the fact that IamgeJ cannot handle the image size or that the memory is insufficient
+	 * @param region the requested region coming from 
+	 * @param imageData this BufferedImage
+	 * @return true if the memory is sufficient
+	 * @throws Exception either the fact that ImageJ cannot handle the image size or that the memory is insufficient
 	 */
 	public static boolean isMemorySufficient(RegionRequest region, final ImageData<BufferedImage> imageData) throws Exception {
 		
@@ -181,16 +187,19 @@ public class IJTools {
 	/**
 	 * Extract a full ImageJ hyperstack for a specific region, for specified ranges of z-slices and time points.
 	 * 
-	 * @param server
-	 * @param request
-	 * @param zStart
-	 * @param zEnd
-	 * @param tStart
-	 * @param tEnd
-	 * @return
+	 * @param server server from which to extract pixels
+	 * @param request region and downsample value; if null, the entire image is used
+	 * @param zStart starting z-slice index (0-based index)
+	 * @param zEnd ending z-slice index (exclusive)
+	 * @param tStart starting timepoint index (0-based index)
+	 * @param tEnd ending timepoint index (exclusive)
+	 * @return the ImageJ hyperstack
 	 * @throws IOException
 	 */
 	public static ImagePlus extractHyperstack(ImageServer<BufferedImage> server, RegionRequest request, int zStart, int zEnd, int tStart, int tEnd) throws IOException {
+		
+		if (request == null)
+			request = RegionRequest.createInstance(server);
 		
 		int nChannels = -1;
 		int nZ = zEnd - zStart;
@@ -352,34 +361,177 @@ public class IJTools {
 	}
 
 	/**
-	 * Create a QuPath annotation or detection object for a specific ImageJ Roi.
+	 * Create a {@link PathObject} for a specific ImageJ Roi.
 	 * 
 	 * @param imp
 	 * @param server
 	 * @param roi
 	 * @param downsampleFactor
-	 * @param makeDetection
+	 * @param creator
 	 * @param plane
 	 * @return
 	 */
-	public static PathObject convertToPathObject(ImagePlus imp, ImageServer<?> server, Roi roi, double downsampleFactor, boolean makeDetection, ImagePlane plane) {
+	public static PathObject convertToPathObject(ImagePlus imp, ImageServer<?> server, Roi roi, double downsampleFactor, Function<ROI, PathObject> creator, ImagePlane plane) {
 		Calibration cal = imp.getCalibration();
+		if (plane == null)
+			plane = getImagePlane(roi, imp);
 		ROI pathROI = IJTools.convertToROI(roi, cal, downsampleFactor, plane);
 		if (pathROI == null)
 			return null;
-		PathObject pathObject;
-		if (makeDetection && !(pathROI instanceof PointsROI))
-			pathObject = PathObjects.createDetectionObject(pathROI);
-		else
-			pathObject = PathObjects.createAnnotationObject(pathROI);
-		Color color = roi.getStrokeColor();
-		if (color == null)
-			color = Roi.getColor();
-		pathObject.setColorRGB(color.getRGB());
-		if (roi.getName() != null)
-			pathObject.setName(roi.getName());
+		PathObject pathObject = creator.apply(pathROI);
+		calibrateObject(pathObject, roi);
 		return pathObject;
 	}
+	
+	
+	/**
+	 * Set the properties of a {@link PathObject} based upon an ImageJ Roi.
+	 * This attempts to extract as much useful information as is relevant, including name, color and group.
+	 * @param pathObject
+	 * @param roi
+	 */
+	public static void calibrateObject(PathObject pathObject, Roi roi) {
+		Color color = roi.getStrokeColor();
+		Integer colorRGB = color == null ? null : color.getRGB();
+		String name = roi.getName();
+		if (name != null && !name.isBlank()) {
+			pathObject.setName(name);
+		} else if (roi.getGroup() > 0) {
+			// If the group is set, use it as a classification
+			pathObject.setPathClass(PathClassFactory.getPathClass("Group " + roi.getGroup(), colorRGB));
+		}
+		if (colorRGB != null && pathObject.getPathClass() == null) {
+			pathObject.setColorRGB(colorRGB);
+		}
+	}
+	
+	
+	/**
+	 * Create an annotation object for a specific ImageJ Roi.
+	 * @param imp
+	 * @param server
+	 * @param roi
+	 * @param downsampleFactor
+	 * @param plane
+	 * @return
+	 */
+	public static PathObject convertToAnnotation(ImagePlus imp, ImageServer<?> server, Roi roi, double downsampleFactor, ImagePlane plane) {
+		return convertToPathObject(imp, server, roi, downsampleFactor, r -> PathObjects.createAnnotationObject(r), plane);
+	}
+	
+	/**
+	 * Create an detection object for a specific ImageJ Roi.
+	 * @param imp
+	 * @param server
+	 * @param roi
+	 * @param downsampleFactor
+	 * @param plane
+	 * @return
+	 */
+	public static PathObject convertToDetection(ImagePlus imp, ImageServer<?> server, Roi roi, double downsampleFactor, ImagePlane plane) {
+		return convertToPathObject(imp, server, roi, downsampleFactor, r -> PathObjects.createDetectionObject(r), plane);
+	}
+	
+	/**
+	 * Convert integer labeled images into cell objects.
+	 * 
+	 * @param ipNuclei labels corresponding to cell nuclei; non-zero values here must be identical to the values in ipCells
+	 * @param ipCells labels corresponding to full cell areas
+	 * @param cal a {@link Calibration} object used to aid conversion between ImageJ and QuPath ROIs
+	 * @param downsample the downsample value for the ImageProcessors, used to aid conversion between ImageJ and QuPath ROIs
+	 * @param plane the {@link ImagePlane} defining where ROIs should be added
+	 * @return a {@link SortedMap} containing integer labels from the original labeled images mapped to the corresponding cells that have been created
+	 */
+	public static SortedMap<Number, PathObject> convertLabelsToCells(
+			ImageProcessor ipNuclei, ImageProcessor ipCells,
+			Calibration cal, double downsample, ImagePlane plane) {
+		
+		double x = cal == null ? 0 : cal.xOrigin;
+		double y = cal == null ? 0 : cal.yOrigin;
+		return convertLabelsToCells(ipNuclei, ipCells, x, y, downsample, plane);
+	}
+	
+	
+	/**
+	 * Convert integer labeled images into cell objects.
+	 * 
+	 * @param ipNuclei labels corresponding to cell nuclei; non-zero values here must be identical to the values in ipCells
+	 * @param ipCells labels corresponding to full cell areas
+	 * @param xOrigin the x pixel coordinate for the top left corner of the image, used to aid conversion between ImageJ and QuPath ROIs; equivalent to {@link Calibration#xOrigin}
+	 * @param yOrigin the y pixel coordinate for the top left corner of the image, used to aid conversion between ImageJ and QuPath ROIs; equivalent to {@link Calibration#yOrigin}
+	 * @param downsample the downsample value for the ImageProcessors, used to aid conversion between ImageJ and QuPath ROIs
+	 * @param plane the {@link ImagePlane} defining where ROIs should be added
+	 * @return a {@link SortedMap} containing integer labels from the original labeled images mapped to the corresponding cells that have been created
+	 */
+	public static SortedMap<Number, PathObject> convertLabelsToCells(
+			ImageProcessor ipNuclei, ImageProcessor ipCells,
+			double xOrigin, double yOrigin, double downsample, ImagePlane plane) {
+		
+		int width = ipCells.getWidth();
+		int height = ipCells.getHeight();
+		SortedMap<Number, PathObject> cells = new TreeMap<>();
+		
+		// First, go through and get all nuclei & associated cells
+		var wandCells = new Wand(ipCells);
+		var wandNuclei = new Wand(ipNuclei);
+		int wandMode = Wand.EIGHT_CONNECTED;
+		var bpDone = new ByteProcessor(width, height);
+		bpDone.setValue(255.0);
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				// Check we have valid labels
+				int labelNucleus = (int)ipNuclei.getf(x, y);
+				int labelCell = (int)ipNuclei.getf(x, y);
+				if (labelNucleus > 0 && labelCell != labelNucleus)
+					throw new IllegalArgumentException("All nucleus labels must have an identical corresponding cell label! "
+							+ "Found nucleus label " + labelNucleus + " with cell " + labelCell + " at (" + x + ", " + y + ")");
+				
+				// Check if we've already handled this pixel
+				if (labelNucleus == 0 || bpDone.get(x, y) != (byte)0)
+					continue;
+				
+				wandNuclei.autoOutline(x, y, labelNucleus, labelNucleus, wandMode);
+				var nucleusRoi = RoiLabeling.wandToRoi(wandNuclei);
+				wandCells.autoOutline(x, y, labelCell, labelCell, wandMode);
+				var cellRoi = RoiLabeling.wandToRoi(wandCells);
+				
+				var roiNucleus = convertToROI(nucleusRoi, xOrigin, yOrigin, downsample, plane);
+				var roiCell = convertToROI(cellRoi, xOrigin, yOrigin, downsample, plane);
+				// Retain the cell with the larger nucleus
+				var newCell = PathObjects.createCellObject(roiCell, roiNucleus, null, null);
+				var previous = cells.put(labelNucleus, newCell);
+				if (previous != null) {
+					logger.warn("Found duplicate cells/nuclei for label {}, will keep only one!", labelNucleus);
+					if (PathObjectTools.getROI(newCell, true).getArea() < PathObjectTools.getROI(previous, true).getArea())
+						cells.put(labelNucleus, previous);
+				}
+				
+				// Keep track of what we've done
+				bpDone.fill(cellRoi);
+			}
+		}
+		
+		// Now check if we have any other cells but without nuclei
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				int label = (int)ipCells.getf(x, y);
+				if (label == 0 || bpDone.get(x, y) != (byte)0)
+					continue;
+				wandCells.autoOutline(x, y, label, label, wandMode);
+				var cellRoi = RoiLabeling.wandToRoi(wandCells);
+				var roiCell = convertToROI(cellRoi, xOrigin, yOrigin, downsample, plane);
+				// Use putIfAbsent as we'd rather retain the first cell (which might have a nucleus associated with it)
+				var previous = cells.putIfAbsent(label, PathObjects.createCellObject(roiCell, null, null, null));
+				if (previous != null)
+					logger.warn("Found duplicate cell for label {}, will keep only one!", previous);
+				// Keep track of what we've done
+				bpDone.fill(cellRoi);
+			}
+		}
+		
+		return cells;
+	}
+
 	
 	
 	/**
@@ -632,6 +784,36 @@ public class IJTools {
 		double y = cal == null ? 0 : cal.yOrigin;
 		return IJTools.convertToROI(roi, x, y, downsampleFactor, plane);
 	}
+	
+	
+	/**
+	 * Get the {@link ImagePlane} of an ImageJ Roi, based upon its stored positions.
+	 * @param roi ImageJ roi that may have c, z, t or position properties set.
+	 * @param imp associated image; if not null, this will be used to convert the Roi's 'position' property, if non-zero
+	 * @return the {@link ImagePlane} that is the best approximation of this Roi's position.
+	 */	
+	public static ImagePlane getImagePlane(Roi roi, ImagePlus imp) {
+		int position = roi.getPosition();
+		int c = roi.getCPosition();
+		int z = roi.getZPosition();
+		int t = roi.getTPosition();
+		if (imp != null && c == 0 && z == 0 && t == 0 && position > 0) {
+			int[] pos = imp.convertIndexToPosition(position);
+			c = pos[0];
+			z = pos[1];
+			t = pos[2];
+		}
+		c = Math.max(c-1, 0);
+		z = Math.max(z-1, 0);
+		t = Math.max(t-1, 0);
+		if (c == 0 && z == 0 && t == 0)
+			return ImagePlane.getDefaultPlane();
+		if (c > 0)
+			return ImagePlane.getPlaneWithChannel(c, z, t);
+		else
+			return ImagePlane.getPlane(z, t);
+	}
+	
 
 	/**
 	 * Create a ROI from an ImageJ Roi.
@@ -710,6 +892,8 @@ public class IJTools {
 		 * @return
 		 */
 		public static ROI convertToROI(Roi roi, double xOrigin, double yOrigin, double downsampleFactor, ImagePlane plane) {
+			if (plane == null)
+				plane = getImagePlane(roi, null);
 			int c = plane.getC();
 			int z = plane.getZ();
 			int t = plane.getT();

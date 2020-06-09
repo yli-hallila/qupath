@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.images.servers;
 
 import java.awt.geom.AffineTransform;
@@ -25,6 +46,8 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 
+import qupath.lib.color.ColorDeconvolutionStains;
+import qupath.lib.images.servers.ColorTransforms.ColorTransform;
 import qupath.lib.images.servers.ImageServerBuilder.AbstractServerBuilder;
 import qupath.lib.images.servers.ImageServerBuilder.DefaultImageServerBuilder;
 import qupath.lib.images.servers.ImageServerBuilder.ServerBuilder;
@@ -50,10 +73,12 @@ public class ImageServers {
 			.registerSubtype(DefaultImageServerBuilder.class, "uri")
 			.registerSubtype(RotatedImageServerBuilder.class, "rotated")
 			.registerSubtype(ConcatChannelsImageServerBuilder.class, "channels")
+			.registerSubtype(ChannelTransformFeatureServerBuilder.class, "color")
 			.registerSubtype(AffineTransformImageServerBuilder.class, "affine")
 			.registerSubtype(SparseImageServerBuilder.class, "sparse")
 			.registerSubtype(CroppedImageServerBuilder.class, "cropped")
-			.registerSubtype(PyramidGeneratingServerBuilder.class, "pyramidize")
+			.registerSubtype(PyramidGeneratingServerBuilder.class, "pyramidize") // For consistency, this would ideally be pyramidalize... but need to keep backwards-compatibility
+			.registerSubtype(ColorDeconvolutionServerBuilder.class, "color_deconvolved")
 			;
 	
 	/**
@@ -243,7 +268,13 @@ public class ImageServers {
 		
 		@Override
 		protected ImageServer<BufferedImage> buildOriginal() throws Exception {
-			return new AffineTransformImageServer(builder.build(), transform);
+			double[] flat = new double[6];
+			// The state is a transient property, which is not restored when using JSON serialization -
+			// so we need to create a new transform, rather than simply using the existing one.
+			// If we don't, operations aren't performed because the transform is assumed to be the identity 
+			// (based upon state, even though the values are 'correct')
+			transform.getMatrix(flat);
+			return new AffineTransformImageServer(builder.build(), new AffineTransform(flat));
 		}
 
 		@Override
@@ -276,9 +307,10 @@ public class ImageServers {
 		protected ImageServer<BufferedImage> buildOriginal() throws Exception {
 			List<ImageServer<BufferedImage>> servers = new ArrayList<>();
 			ImageServer<BufferedImage> server = null;
-			for (ServerBuilder<BufferedImage> channel :channels) {
+			for (ServerBuilder<BufferedImage> channel : channels) {
 				var temp = channel.build();
 				servers.add(temp);
+				// TODO: Warning! in general, ServerBuilders do not necessarily override equals/hashcode - which can be problematic here
 				if (builder.equals(channel))
 					server = temp;
 			}
@@ -309,6 +341,70 @@ public class ImageServers {
 			if (!changes)
 				return this;
 			return new ConcatChannelsImageServerBuilder(getMetadata(), newBuilder, newChannels);
+		}
+		
+	}
+	
+	static class ChannelTransformFeatureServerBuilder extends AbstractServerBuilder<BufferedImage> {
+		
+		private ServerBuilder<BufferedImage> builder;
+		private List<ColorTransform> transforms;
+		
+		ChannelTransformFeatureServerBuilder(ImageServerMetadata metadata, ServerBuilder<BufferedImage> builder, List<ColorTransform> transforms) {
+			super(metadata);
+			this.builder = builder;
+			this.transforms = transforms;
+		}
+		
+		@Override
+		protected ImageServer<BufferedImage> buildOriginal() throws Exception {
+			return new ChannelTransformFeatureServer(builder.build(), transforms);
+		}
+		
+		@Override
+		public Collection<URI> getURIs() {
+			return builder.getURIs();
+		}
+
+		@Override
+		public ServerBuilder<BufferedImage> updateURIs(Map<URI, URI> updateMap) {
+			ServerBuilder<BufferedImage> newBuilder = builder.updateURIs(updateMap);
+			if (newBuilder == builder)
+				return this;
+			return new ChannelTransformFeatureServerBuilder(getMetadata(), newBuilder, transforms);
+		}
+		
+	}
+	
+	static class ColorDeconvolutionServerBuilder extends AbstractServerBuilder<BufferedImage> {
+		
+		private ServerBuilder<BufferedImage> builder;
+		private ColorDeconvolutionStains stains;
+		private int[] channels;
+		
+		ColorDeconvolutionServerBuilder(ImageServerMetadata metadata, ServerBuilder<BufferedImage> builder, ColorDeconvolutionStains stains, int... channels) {
+			super(metadata);
+			this.builder = builder;
+			this.stains = stains;
+			this.channels = channels == null ? null : channels.clone();
+		}
+		
+		@Override
+		protected ImageServer<BufferedImage> buildOriginal() throws Exception {
+			return new ColorDeconvolutionImageServer(builder.build(), stains, channels);
+		}
+		
+		@Override
+		public Collection<URI> getURIs() {
+			return builder.getURIs();
+		}
+
+		@Override
+		public ServerBuilder<BufferedImage> updateURIs(Map<URI, URI> updateMap) {
+			ServerBuilder<BufferedImage> newBuilder = builder.updateURIs(updateMap);
+			if (newBuilder == builder)
+				return this;
+			return new ColorDeconvolutionServerBuilder(getMetadata(), newBuilder, stains, channels);
 		}
 		
 	}
@@ -446,7 +542,6 @@ public class ImageServers {
 				in.setLenient(lenient);
 			}
 		}
-		
 		
 	}
 

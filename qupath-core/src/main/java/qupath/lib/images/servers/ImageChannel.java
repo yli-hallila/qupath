@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.images.servers;
 
 import java.awt.Color;
@@ -42,7 +63,7 @@ public class ImageChannel {
 	/**
 	 * Default blue channel for RGB images.
 	 */
-	public final static ImageChannel BLUE  = getInstance("Blue", ColorTools.makeRGB(0, 0, 0255));
+	public final static ImageChannel BLUE  = getInstance("Blue", ColorTools.makeRGB(0, 0, 255));
 	
 	/**
 	 * Get a channel instance with the specified name and color.
@@ -60,6 +81,19 @@ public class ImageChannel {
 			cache.put(key, channel);
 		}
 		return channel;
+	}
+	
+	/**
+	 * Convert an array of channel names into a list of {@link ImageChannel} using default colors.
+	 * @param names the names of the channels
+	 * @return a list of {@link ImageChannel}, where channel names are taken from the input array
+	 */
+	public synchronized static List<ImageChannel> getChannelList(String... names) {
+		var list = new ArrayList<ImageChannel>();
+		int i = 0;
+		for (String name : names)
+			list.add(getInstance(name, getDefaultChannelColor(i++)));
+		return list;
 	}
 	
 	@Override

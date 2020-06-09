@@ -24,24 +24,17 @@
 package qupath.lib.gui.viewer.tools;
 
 import javafx.scene.input.MouseEvent;
-import qupath.lib.gui.viewer.ModeWrapper;
 import qupath.lib.regions.ImagePlane;
-import qupath.lib.roi.ArrowROI;
-import qupath.lib.roi.LineROI;
 import qupath.lib.roi.ROIs;
 import qupath.lib.roi.interfaces.ROI;
 
 /**
- * PathTool for drawing lines.
+ * PathTool for drawing arrows.
  *
- * @author Pete Bankhead
+ * @author Aaron Yli-Hallila
  *
  */
 public class ArrowTool extends AbstractPathDraggingROITool {
-
-    public ArrowTool(ModeWrapper modes) {
-        super(modes);
-    }
 
     /**
      * Returns false (no pixel snapping for the line tool).

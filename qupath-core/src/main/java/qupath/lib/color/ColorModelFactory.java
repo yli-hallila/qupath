@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.color;
 
 import java.awt.image.ColorModel;
@@ -10,10 +31,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import qupath.lib.common.ColorTools;
 import qupath.lib.images.servers.ImageChannel;
 import qupath.lib.images.servers.PixelType;
 import qupath.lib.objects.classes.PathClass;
+import qupath.lib.objects.classes.PathClassFactory;
+import qupath.lib.objects.classes.PathClassFactory.StandardPathClasses;
 import qupath.lib.objects.classes.PathClassTools;
 
 /**
@@ -23,6 +49,8 @@ import qupath.lib.objects.classes.PathClassTools;
  *
  */
 public final class ColorModelFactory {
+	
+	private final static Logger logger = LoggerFactory.getLogger(ColorModelFactory.class);
 	
 	private static Map<Map<Integer, PathClass>, IndexColorModel> classificationModels = Collections.synchronizedMap(new HashMap<>());
 
@@ -35,8 +63,7 @@ public final class ColorModelFactory {
 	}
 	
 	/**
-	 * Get a ColorModel suitable for showing output pixel classifications, using an 8-bit 
-	 * labeled image.
+	 * Get a ColorModel suitable for showing output pixel classifications, using an 8-bit or 16-bit labeled image.
      * A cached model may be retrieved if possible, rather than generating a new one.
 	 * 
 	 * @param channels
@@ -44,7 +71,7 @@ public final class ColorModelFactory {
 	 */
     public static ColorModel getIndexedClassificationColorModel(Map<Integer, PathClass> channels) {
     	var map = classificationModels.get(channels);
-    	
+
     	var stats = channels.keySet().stream().mapToInt(c -> c).summaryStatistics();
     	if (stats.getMin() < 0)
     		throw new IllegalArgumentException("Minimum label must be >= 0");
@@ -54,15 +81,24 @@ public final class ColorModelFactory {
             int[] cmap = new int[length];
             
             for (var entry: channels.entrySet()) {
-            	if (PathClassTools.isIgnoredClass(entry.getValue())) {
-            		var color = entry.getValue().getColor();
-                	cmap[entry.getKey()] = ColorTools.makeRGBA(ColorTools.red(color), ColorTools.green(color), ColorTools.blue(color), 32);
+        		var pathClass = entry.getValue();
+        		if (pathClass == null || pathClass == PathClassFactory.getPathClassUnclassified()) {
+        			cmap[entry.getKey()] = ColorTools.makeRGBA(255, 255, 255, 0);
+        		} else if (PathClassTools.isIgnoredClass(entry.getValue())) {
+            		var color = pathClass == null ? 0 : pathClass.getColor();
+            		int alpha = 192;
+            		if (pathClass == PathClassFactory.getPathClass(StandardPathClasses.IGNORE))
+            			alpha = 32;
+                	cmap[entry.getKey()] = ColorTools.makeRGBA(ColorTools.red(color), ColorTools.green(color), ColorTools.blue(color), alpha);
             	} else
             		cmap[entry.getKey()] = entry.getValue().getColor();
             }
-            if (cmap.length > 256)
-            	throw new IllegalArgumentException("Only 256 possible classifications supported!");
-            map = new IndexColorModel(8, length, cmap, 0, true, -1, DataBuffer.TYPE_BYTE);    		
+            if (cmap.length <= 256)
+                map = new IndexColorModel(8, length, cmap, 0, true, -1, DataBuffer.TYPE_BYTE);    		
+            else if (cmap.length <= 65536)
+                map = new IndexColorModel(16, length, cmap, 0, true, -1, DataBuffer.TYPE_USHORT);
+            else
+            	throw new IllegalArgumentException("Only 65536 possible classifications supported!");
             classificationModels.put(new LinkedHashMap<>(channels), map);
     	}
     	return map;
@@ -71,6 +107,7 @@ public final class ColorModelFactory {
     /**
      * Create an indexed colormap for a labelled (indexed color) image.
      * @param labelColors map with integer labels as keys and packed (A)RGB colors as values.
+     * @param includeAlpha if true, allow alpha values to be included in the colormap
      * @return
      */
     public static ColorModel createIndexedColorModel(Map<Integer, Integer> labelColors, boolean includeAlpha) {
@@ -82,11 +119,18 @@ public final class ColorModelFactory {
         int[] cmap = new int[length];
         
         for (var entry: labelColors.entrySet()) {
-        	cmap[entry.getKey()] = entry.getValue();
+        	Integer value = entry.getValue();
+        	if (value == null) {
+        		logger.warn("No color specified for index {} - using default gray", entry.getKey());
+        		cmap[entry.getKey()] = includeAlpha ? ColorTools.makeRGBA(127, 127, 127, 127) : ColorTools.makeRGB(127, 127, 127);
+        	} else
+        		cmap[entry.getKey()] = entry.getValue();
         }
-        if (cmap.length > 256)
-        	throw new IllegalArgumentException("Only 256 possible classifications supported!");
-        return new IndexColorModel(8, length, cmap, 0, includeAlpha, -1, DataBuffer.TYPE_BYTE);    		
+        if (cmap.length <= 256)
+            return new IndexColorModel(8, length, cmap, 0, includeAlpha, -1, DataBuffer.TYPE_BYTE);    		
+        if (cmap.length <= 65536)
+        	return new IndexColorModel(16, length, cmap, 0, includeAlpha, -1, DataBuffer.TYPE_USHORT);
+    	throw new IllegalArgumentException("Only 65536 possible labels supported!");
     }
     
     

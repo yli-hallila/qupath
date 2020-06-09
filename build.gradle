@@ -1,14 +1,43 @@
-/*
+/**
  * Gradle script for building QuPath.
- *
+ * <p>
  * To create a complete build including associated license files, try the following:
- *
- * ./gradlew clean build createPackage -Ppackager=/full/path/to/jpackage
+ * <p>
+ * ./gradlew clean build createPackage
  * or on Windows
- * gradlew.bat clean build createPackage -Ppackager=/full/path/to/jpackage.exe
+ * gradlew.bat clean build createPackage
  */
 
 /**
+ * Configure build script
+ */
+buildscript {
+
+  dependencies {
+    classpath 'com.github.jk1:gradle-license-report:1.14'
+    classpath 'org.anarres.jarjar:jarjar-gradle:1.0.1'
+  }
+
+  repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url "https://oss.sonatype.org/content/repositories/snapshots" }
+    maven { url 'https://plugins.gradle.org/m2/' }
+  }
+}
+
+/*
+ * Using java-library rather than java enables us to define api dependencies,
+ * i.e. dependencies exported from the API of QuPath.
+ * An example is JTS, since QuPath ROIs can be converted to JTS Geometries and this 
+ * should be accessible throughout the software.
+ */
+plugins {
+  id 'java-library'
+  id 'org.javamodularity.moduleplugin' version '1.6.0' apply false
+}
+
+/*
  * Some metadata for the manifest
  */
 
@@ -18,7 +47,7 @@ def qupathVendor = "QuPath developers"
 println 'Building QuPath version ' + qupathVersion
 
 /*
- * Output location; once things are gathered here, they can be used as input for jpackager
+ * Output location; once things are gathered here, they can be used as input for jpackage
  */
 def qupathOutputDir = 'qupath'
 def additionalResourcesDir = "build/${qupathOutputDir}"
@@ -26,27 +55,28 @@ def additionalResourcesDir = "build/${qupathOutputDir}"
 /*
  * JavaFX version
  */
-def jfxVersion = '13.0.1'
+def jfxVersion = '14.0.1'
 
 /*
- * OpenCV version
- * Note, if this is a SNAPSHOT version then it must already be installed locally (with Maven)
- */
-def opencvVersion = '4.1.0-1.5.1'
-// def opencvVersion = '4.1.1-1.5.2-SNAPSHOT'
-
-/*
- * Include OpenCV binaries with GPU support (quite big, may not be used?)
+ * Placeholder to use OpenCV binaries with GPU support... if/when this is supported (warning: they are quite big)
  */
 def useGPU = false
 
 /*
- * Modules not yet supported (because of some dependency troubles).
- * This disables code that would otherwise try to move in a modular direction.
+ * Modules not yet supported because of various dependency troubles.
+ * Specifially:
+ *  - ImageJ contains MacAdapter outside of any package, this must be removed 
+ *    (jarjar-gradle can do the job, but it seems to confuse eclipse)
+ *  - RuntimeTypeAdapterFactory needs to be in a valid package
+ *  - JPen's automatic module name is invalid (jpen.2)
+ *  - Bio-Formats is not module-friendly
+ *  - OpenSlide also seems module-unfriendly (at least within eclipse)
+ * Setting the flag to false disables code that would otherwise try to move in a modular direction, 
+ * while making it a bit easier to return to this later.
  */
 def doModular = false
 
-/**
+/*
  * Helps to output build time for reference later
  */
 def buildTime = new Date().format("yyyy-MM-dd, HH:mm")
@@ -56,6 +86,32 @@ def buildTime = new Date().format("yyyy-MM-dd, HH:mm")
  */
 println 'Current Java version: ' + JavaVersion.current()
 println System.properties['java.home']
+
+
+// Request latest commit by a command line call to Git, if required
+def requestLatestCommit = project.findProperty('request-git-tag') == 'true'
+
+// Including the latest commit when building can help traceability - but requires git being available
+ext {
+  latestGitCommit = null
+}
+if (requestLatestCommit) {
+  try {
+    def stdout = new ByteArrayOutputStream()
+    def result = exec {
+      commandLine 'git', 'log', "--pretty=format:'%h'", "-n 1"
+      standardOutput = stdout
+    }
+    latestGitCommit = stdout.toString().trim()
+    println 'Latest commit: ' + latestGitCommit
+  } catch (Exception e) {
+    logger.warn('Unable to get latest commit: ' + e.getLocalizedMessage())
+    latestGitCommit = 'Unknown (is Git installed?)'
+  }
+} else {
+  println "I won't try to get the last commit - consider running with '-Prequest-git-tag=true' if you want this next time (assuming Git is installed)"
+}
+
 
 /*
  * Handle OS-specific decisions
@@ -79,24 +135,31 @@ if (OperatingSystem.current().isMacOsX()) {
 } else if (OperatingSystem.current().isWindows()) {
   nativesClassifier = 'natives-windows'
   if (System.properties['sun.arch.data.model'] == '32') {
-	println "WARNING: You appear to be using a 32-bit JDK - If I can't find a 32-bit version of JavaFX, this will fail! Probably at the 'test' stage."
+	logger.warn("You appear to be using a 32-bit JDK - If I can't find a 32-bit version of JavaFX, this will fail! Probably at the 'test' stage.")
 	nativesCPP = 'windows-x86'
   } else
 	nativesCPP = 'windows-x86_64'
   platform = 'win'
   iconName = 'windows/QuPath.ico'
 } else {
-  println 'Unknown operating system!'
+  logger.warn('Unknown operating system!')
 }
 
-
-/* 
+/*
  * Note on OpenCV, OpenBLAS & Mac.
  * This appears to segfault sometimes, in which case the following command line parameters may help:
  *   -Dorg.bytedeco.openblas.load=blas -Djava.library.path=.:/usr/lib/ 
  * See https://github.com/bytedeco/javacpp-presets/tree/master/openblas for further information.
+ *
+ * Another way to avoid requiring this is to set the number of threads to 1 within the QuPath code.
  */
 
+/*
+ * Easier to use the wrapper with source
+ */
+wrapper {
+    distributionType = Wrapper.DistributionType.ALL
+}
 
 /*
  * jarjar makes it possible to remove the troublesome MacAdapter in ij.jar, 
@@ -105,17 +168,98 @@ if (OperatingSystem.current().isMacOsX()) {
  *
  * Only required if building modules. Currently all instances commented out.
  */
-//apply plugin: 'org.anarres.jarjar'
+if (doModular) {
+  apply plugin: 'org.anarres.jarjar'
+}
 
-/**
+
+/*
+ * Check command arguments to optional inclusions/exclusions
+ */
+def includeTensorFlowGPU = (findProperty('tensorflow-gpu') ?: "false") != "false"
+def includeTensorFlow = includeTensorFlowGPU || (findProperty('tensorflow-cpu') ?: "false") != "false"
+
+def excludeSubprojects = []
+if (includeTensorFlowGPU) {
+	println 'Requesting TensorFlow (GPU) subproject'	
+} else if (includeTensorFlow) {
+	println 'Requesting TensorFlow (CPU) subproject'	
+} else {
+    excludeSubprojects << 'qupath-extension-tensorflow'
+	println "Use -Ptensorflow-cpu=true or -Ptensorflow-gpu=true if you wish to include experimental TensorFlow module"
+}
+
+
+
+/*
  * Define managed dependencies for use within sub-projects
  */
-subprojects {
+allprojects {
+  apply plugin: 'java-library'
+  
+  if (doModular) {
+	  apply plugin: 'org.javamodularity.moduleplugin'
+  }
+
+  group = 'qupath'
+  version = qupathVersion
+
+  ext {
+    // Java compatibility version
+    javaVersion = 11
+  
+    // Dependency versions
+    bioformatsVersion  = '6.5.0'
+    commonsMathVersion = '3.6.1'
+    commonsTextVersion = '1.8'
+    controlsfxVersion  = '11.0.1'
+    groovyVersion      = '3.0.3'
+    gsonVersion        = '2.8.6'
+    guavaVersion       = '29.0-jre'
+    imagejVersion      = '1.53a'
+    jfxtrasVersion     = '10.0-r1'
+    jpenVersion        = '2-150301'
+    jtsVersion         = '1.16.1'
+    openslideVersion   = '3.4.1_2'
+    richtextVersion    = '0.10.5'
+    picocliVersion     = '4.3.2'
+    jfreesvgVersion    = '4.1'
+    // Note, if OpenCV is a SNAPSHOT version then it must already be installed locally (with Maven)
+    javacppVersion     = '1.5.3'
+    opencvVersion      = "4.3.0-${javacppVersion}"
+    
+    // Additional versions
+    logbackVersion     = '1.2.3'
+    slf4jVersion       = '1.3.0'
+    junitVersion       = '5.6.2'
+    
+    // Optional versions
+    tensorflowVersion  = "1.15.2-${javacppVersion}"
+    mkldnnVersion      = "0.21.4-${javacppVersion}"
+    
+    /*
+     * Link to the main external Javadocs if -PlinkJavadoc=true
+     */
+    if (findProperty('linkJavadoc'))
+	    externalJavadocs = [
+				"https://docs.oracle.com/en/java/javase/11/docs/api/",
+//				"https://openjfx.io/javadoc/11/", // The fact we don't yet use modules causes trouble here; see https://bugs.openjdk.java.net/browse/JDK-8240169
+				"https://javadoc.io/doc/org.controlsfx/controlsfx/", // May not be working..?
+				"https://imagej.nih.gov/ij/developer/api/",
+				"https://locationtech.github.io/jts/javadoc/",
+				"https://javadoc.io/doc/com.google.code.gson/gson/latest",
+				"https://javadoc.io/doc/org.bytedeco/javacpp/" + javacppVersion
+				]
+	else
+		externalJavadocs = []
+  }
+
   configurations {
   	jts
     groovy
     richtextfx
     commonsmath
+    commonstext
     gson
     controlsfx
     jfxtras
@@ -123,105 +267,167 @@ subprojects {
     jpen
     imagej
     bioformats
-    bioformatsTest
     openslide
     javafx
     nativeloader
     guava
     picocli
-    
-    // Guava tries to bring in extra dependencies not required at runtime
-    implementation {
-    	exclude group: 'com.google.code.findbugs'
-    	exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
-    	exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-    	exclude group: 'com.google.j2objc', module: 'j2objc-annotations'
-    	exclude group: 'org.checkerframework', module: 'checker-qual'
-    }    
+    jfreesvg
+	junit
+	logback
+	
+	// Optional
+	tensorflow
   }
 
   dependencies {
 
-    jts "org.locationtech.jts:jts-core:1.16.1"
+    jts "org.locationtech.jts:jts-core:${jtsVersion}"
     // Optionally add GeoJSON support (brings in json-simple as sub-dependency)
     // However, the use of simple-json is troublesome since it brings in an old version of junit
-//   jts "org.locationtech.jts.io:jts-io-common:1.16.1"
+//   jts "org.locationtech.jts.io:jts-io-common:${jtsVersion}"
 
-    groovy "org.codehaus.groovy:groovy:2.5.8"
-    groovy "org.codehaus.groovy:groovy-jsr223:2.5.8"
+    groovy "org.codehaus.groovy:groovy:${groovyVersion}"
+    groovy "org.codehaus.groovy:groovy-jsr223:${groovyVersion}"
+    groovy "org.codehaus.groovy:groovy-xml:${groovyVersion}"
 
     for (fx in ['javafx-base', 'javafx-controls', 'javafx-graphics', 'javafx-media', 'javafx-web', 'javafx-swing']) {
       javafx "org.openjfx:${fx}:${jfxVersion}"
       javafx "org.openjfx:${fx}:${jfxVersion}:${platform}"
     }
 
-//	picocli 'info.picocli:picocli:3.9.6'
+    richtextfx "org.fxmisc.richtext:richtextfx:${richtextVersion}"
 
-    richtextfx 'org.fxmisc.richtext:richtextfx:0.10.2'
+    commonsmath "org.apache.commons:commons-math3:${commonsMathVersion}"
+    
+    commonstext "org.apache.commons:commons-text:${commonsTextVersion}"
 
-    commonsmath 'org.apache.commons:commons-math3:3.6.1'
+    gson "com.google.code.gson:gson:${gsonVersion}"
 
-    gson 'com.google.code.gson:gson:2.8.6'
+    controlsfx "org.controlsfx:controlsfx:${controlsfxVersion}",  { 
+    	// ControlsFX 11.0.1 uses a linux classifier to bring in more JavaFX than it may need
+    	exclude group: 'org.openjfx'
+    }
 
-    controlsfx 'org.controlsfx:controlsfx:11.0.0'
+    jfxtras "org.jfxtras:jfxtras-menu:${jfxtrasVersion}"
 
-//	bioformats 'ome:bioformats_package:6.0.1'
-	bioformats 'ome:formats-gpl:6.3.0'
-	bioformatsTest 'ome:bio-formats_plugins:6.3.0' // Only required for testing
-
-    jfxtras 'org.jfxtras:jfxtras-menu:10.0-r1'
-
-    opencv 'org.bytedeco:opencv:${opencvVersion}'
+    opencv "org.bytedeco:opencv:${opencvVersion}"
     if (nativesCPP != null) {
 	  opencv "org.bytedeco:openblas::${nativesCPP}" // Required for OpenCV with JavaCPP >= 1.5.1
-      if (useGPU)
+      if (useGPU) {
+      	logger.warn("Requested useGPU... so this will probably fail - please don't do that")
         opencv "org.bytedeco:opencv:${opencvVersion}:${nativesCPP}-gpu"
-      else
-	    opencv "org.bytedeco:opencv:${opencvVersion}:${nativesCPP}"
+        // Isn't terribly clear if this is also needed when requesting GPU?
+        //opencv "org.bytedeco:opencv:${opencvVersion}:${nativesCPP}"
+     } else
+        opencv "org.bytedeco:opencv:${opencvVersion}:${nativesCPP}"
     }
-    // opencv 'org.bytedeco:mkl-dnn:0.20-1.5.1' // Explore if can help avoid segfaults on Mac at least
 
-    jpen 'net.sourceforge.jpen:jpen:2-150301'
+    jpen "net.sourceforge.jpen:jpen:${jpenVersion}"
     if (nativesClassifier != null)
-      jpen 'net.sourceforge.jpen:jpen:2-150301:' + nativesClassifier
+      jpen "net.sourceforge.jpen:jpen:${jpenVersion}:${nativesClassifier}"
 
-    imagej 'net.imagej:ij:1.52q'
-//    imagej jarjar.repackage {
-//    	from 'net.imagej:ij:1.52o'
-//    	classDelete 'MacAdapter'
-//	}
+    if (doModular) {
+	    imagej jarjar.repackage {
+	    	from "net.imagej:ij:${imagejVersion}"
+	    	classDelete 'MacAdapter'
+		}
+	} else
+	    imagej "net.imagej:ij:${imagejVersion}"
 
-    openslide 'org.openslide:openslide:3.4.1_2'
+	bioformats "ome:formats-gpl:${bioformatsVersion}", {
+	  	exclude group: 'xalan', module: 'serializer'
+	  	exclude group: 'xalan', module: 'xalan'
+	  	exclude group: 'io.minio', module: 'minio'
+	  	exclude group: 'commons-codec', module: 'commons-codec'
+        exclude group: 'commons-logging', module: 'commons-logging'
+//        exclude group: 'edu.ucar', module: 'cdm'
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        exclude group: 'com.google.code.findbugs', module: 'annotations'
+	 }
+
+    openslide "org.openslide:openslide:${openslideVersion}"
     if (nativesClassifier != null)
-      openslide 'org.openslide:openslide:3.4.1_2:' + nativesClassifier
+      openslide "org.openslide:openslide:${openslideVersion}:${nativesClassifier}"
 
-//    nativeloader 'org.scijava:native-lib-loader:2.3.4'
-
-    guava 'com.google.guava:guava:28.1-jre'
+    guava "com.google.guava:guava:${guavaVersion}", {
+    	exclude group: 'com.google.code.findbugs'
+    	exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
+    	exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+    	exclude group: 'com.google.j2objc', module: 'j2objc-annotations'
+    	exclude group: 'org.checkerframework', module: 'checker-qual'
+    }
+    
+    picocli "info.picocli:picocli:${picocliVersion}"
+    
+    jfreesvg "org.jfree:org.jfree.svg:${jfreesvgVersion}"
+    
+    junit "org.junit.jupiter:junit-jupiter:${junitVersion}"
+//    junit "org.junit.jupiter:junit-jupiter-engine:${junitVersion}"
+    
+    logback "ch.qos.logback:logback-classic:${logbackVersion}"
+    logback "org.slf4j:slf4j-api:${slf4jVersion}"
+    
+    tensorflow "org.bytedeco:tensorflow:${tensorflowVersion}"
+    if (includeTensorFlowGPU)
+	    tensorflow "org.bytedeco:tensorflow:${tensorflowVersion}:${nativesCPP}-gpu"
+	else
+	    tensorflow "org.bytedeco:tensorflow:${tensorflowVersion}:${nativesCPP}"
+    tensorflow "org.bytedeco:mkl-dnn:${mkldnnVersion}"
+    tensorflow "org.bytedeco:mkl-dnn:${mkldnnVersion}:${nativesCPP}"
+    
   }
+  
+  javadoc {
+  
+  	def strictJavadoc = findProperty('strictJavadoc')
+	if (!strictJavadoc) {
+		options.addBooleanOption 'Xdoclint:none', true
+	}
+	
+	options {
+		links += externalJavadocs
+	}
+  
+    def docPath = "${rootProject.buildDir}/docs/${project.name}"
+  	destinationDir = file(docPath)
+  	
+  }
+  
 }
 
-/**
- * Set group & version
- */
-allprojects  {
-  group = 'qupath'
-  version = qupathVersion
-}
 
 /*
- * Not everybody is ready to be a module yet... 
+ * Define inter-dependencies of sub-projects
  */
-def moduleExclusionFilter = {String moduleName -> !doModular || moduleName.contains('bioformats') || moduleName.contains('jpen')}
+project(':qupath-core-processing') {
+  dependencies {
+	  api project(':qupath-core')
+  }
+}
+project(':qupath-gui-fx') {
+  dependencies {
+	  api project(':qupath-core'), project(':qupath-core-processing')
+  }
+}
+/*
+ * All extensions require the GUI module
+ */
+configure( subprojects.findAll {it.name.contains('-extension') || it.name.contains('-experimental')} ) {
+	dependencies {
+		implementation project(':qupath-core'), project(':qupath-core-processing'), project(':qupath-gui-fx')
+	}
+}
+
 
 subprojects {
 
+
     afterEvaluate {
 
-        compileJava {
-            if (moduleExclusionFilter(moduleName))
-                return
 
+        compileJava {
+/*
             inputs.property("moduleName", moduleName)
             doFirst {
                 options.compilerArgs = [
@@ -229,7 +435,10 @@ subprojects {
                 ]
                 classpath = files()
             }
+            */
         }
+
+
 
         jar {
         	// Important to set version so this can be queried within QuPath
@@ -247,81 +456,60 @@ subprojects {
             }
         }
 
-        /*compileTestJava {
-            if (moduleExclusionFilter(moduleName))
-                return
-
-            inputs.property("moduleName", moduleName)
-            doFirst {
-                options.compilerArgs = [
-                        '--module-path', classpath.asPath,
-                        '--add-modules', 'junit',
-                        '--add-reads', "$moduleName=junit",
-                        '--patch-module', "$moduleName=" + files(sourceSets.test.java.srcDirs).asPath,
-                ]
-                classpath = files()
-            }
-        }
 
         test {
-            if (moduleExclusionFilter(moduleName))
-                return
-
-            inputs.property("moduleName", moduleName)
-            doFirst {
-                jvmArgs = [
-                        '--module-path', classpath.asPath,
-                        '--add-modules', 'ALL-MODULE-PATH',
-                        '--add-reads', "$moduleName=junit",
-                        '--patch-module', "$moduleName=" + files(sourceSets.test.java.outputDir).asPath,
-                ]
-                classpath = files()
-            }
-        }*/
+	        useJUnitPlatform()
+        }
     }
 }
 
-/**
+/*
  * Build all projects
  */
 allprojects {
-  apply plugin: 'java'
-  sourceCompatibility = JavaVersion.VERSION_11
-  targetCompatibility = JavaVersion.VERSION_11
+
+  sourceCompatibility = javaVersion
+  targetCompatibility = javaVersion
 
   repositories {
     mavenLocal()
     mavenCentral()
 
+    // May be required for snapshot ImageJ2 jars
+    maven { url 'https://maven.imagej.net/content/groups/public' }
+
+	// Required for Bio-Formats
     maven {
       name 'Unidata'
       url 'https://artifacts.unidata.ucar.edu/content/repositories/unidata-releases'
     }
-    maven {
-      url 'https://artifacts.openmicroscopy.org/artifactory/maven/'
-    }
-    maven {
-      url 'https://oss.sonatype.org/content/repositories/snapshots'
-    }
+    maven { url 'https://artifacts.openmicroscopy.org/artifactory/maven/' }
+    
+    // May be required for snapshot JavaCPP jars
+    maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
+    
+    // Currently required for OpenSlide
     maven { url "../maven/repo" }
   }
 
-  dependencies {
-    implementation group: 'ch.qos.logback', name: 'logback-classic', version:'1.2.3'
-    testImplementation group: 'junit', name: 'junit', version:'4.12'
+  // May use this in the future, but fails where javadocs are incomplete
+//  java {
+//    withJavadocJar()
+//  }
+
+  configurations {
+    implementation.extendsFrom logback
+  	testImplementation.extendsFrom junit
   }
+
 }
 
 
-
-/**
+/*
  * Build the main launcher class
  */
-apply plugin: 'java'
+apply plugin: 'java-library'
 rootProject.libsDirName = qupathOutputDir
-
-//println 'BASE NAME: ' + jar.archiveName
-
 
 repositories {
   mavenLocal()
@@ -329,18 +517,25 @@ repositories {
   maven { url "./maven/repo" }
 }
 
-/**
+configurations {
+    implementation.extendsFrom picocli
+}
+
+/*
  * I suspect there may be a cleaner way to specify subprojects...
  */
 dependencies {
-  compile "org.openjfx:javafx-graphics:${jfxVersion}"    
-  compile "org.openjfx:javafx-graphics:${jfxVersion}:${platform}"    
+  implementation "org.openjfx:javafx-graphics:${jfxVersion}"    
+  implementation "org.openjfx:javafx-graphics:${jfxVersion}:${platform}"    
   subprojects {
-    compile it
-  }
+    if (!excludeSubprojects.contains(it.name))
+	  	implementation it
+	 else
+	 	println 'Excluding ' + it
+  }	
 }
 
-/**
+/*
  * Copy licenses from subprojects to include in distribution
  */
 task copyLicenses(type: Copy) {
@@ -356,7 +551,7 @@ task copyLicenses(type: Copy) {
   into additionalResourcesDir + '/licenses'
 }
 
-/**
+/*
  * Get the main changelog & license
  */
 task copyChangelog(type: Copy) {
@@ -368,13 +563,13 @@ task copyChangelog(type: Copy) {
   include 'VERSION'
 }
 
-/**
+/*
  * Extract native libraries where necessary
  */
 task extractNativeLibraries() {
   if (nativesClassifier == null)
     return
-  configurations.compile.files.findAll({ it.getName().contains(nativesClassifier) }).each { file ->
+  configurations.runtimeClasspath.files.findAll({ it.getName().contains(nativesClassifier) }).each { file ->
     println 'Extracting native libraries from ' + file + " into " + additionalResourcesDir
     doLast {
       copy {
@@ -386,15 +581,15 @@ task extractNativeLibraries() {
   }
 }
 
-/**
+/*
  * Copy required jars all into one directory
  */
 task copyRuntimeLibs(type: Copy) {
   into additionalResourcesDir
-  from configurations.runtime
+  from configurations.runtimeClasspath
 }
 
-/**
+/*
  * Run automated license generation (in addition to manually-curated licenses)
  */
 apply plugin: 'com.github.jk1.dependency-license-report'
@@ -405,7 +600,7 @@ import java.nio.file.Paths
 
 licenseReport {
   print("LICENSE PATH: " + new File(projectDir, 'license-unknown.txt').getAbsolutePath())
-  filters = [new LicenseBundleNormalizer()]
+//  filters = [new LicenseBundleNormalizer()] // May introduce errors
   renderers = [new TextReportRenderer('THIRD-PARTY.txt'),
                new CsvReportRenderer(),
                new InventoryHtmlReportRenderer('index.html', 'Third party licenses',
@@ -417,52 +612,7 @@ task copyLicenseReport(type: Copy) {
 }
 
 
-
-/**
- * Configure build script
- */
-buildscript {
-
-  dependencies {
-      classpath 'com.github.jk1:gradle-license-report:1.9'
-//      classpath 'org.anarres.jarjar:jarjar-gradle:1.0.1'
-  }
-
-  repositories {
-      mavenLocal()
-      mavenCentral()
-      maven { url "https://oss.sonatype.org/content/repositories/snapshots" }
-      maven { url 'https://plugins.gradle.org/m2/' }
-  }
-  
-  // Request latest commit by a command line call to Git, if required
-  def requestLatestCommit = project.findProperty('request-git-tag') == 'true'
-
-  // Try to get version number
-  ext {
-  	latestGitCommit = null
-  }
-  if (requestLatestCommit) {
-	  try {
-	  	def stdout = new ByteArrayOutputStream()
-	    def result = exec {
-	        commandLine 'git', 'log', "--pretty=format:'%h'", "-n 1"
-//	        commandLine 'git', 'describe', '--tags'
-	        standardOutput = stdout
-	    }
-	    latestGitCommit = stdout.toString().trim()
-	    println 'Latest commit: ' + latestGitCommit
-	  } catch (Exception e) {
-	  	println 'Unable to get latest commit: ' + e.getLocalizedMessage()
-	  	latestGitCommit = 'Unknown (is Git installed?)'
-	  }
-  } else {
-    println "I won't try to get the last commit - consider running with '-Prequest-git-tag=true' if you want this next time (assuming Git is installed)"
-  }
-
-}
-
-/**
+/*
  * Specify the order of some operations
  */
 copyLicenses.dependsOn generateLicenseReport
@@ -473,7 +623,7 @@ jar.dependsOn extractNativeLibraries
 build.dependsOn copyLicenseReport
 build.dependsOn copyRuntimeLibs
 
-/**
+/*
  * Squeeze some useful metadata into the Manifest of the main jar -
  * QuPath can display this through the GUI
  */
@@ -484,7 +634,7 @@ jar {
        "Implementation-Title": 'QuPath',
        "Implementation-Version": qupathVersion,
        "Main-Class": "qupath.QuPath",
-       "Class-Path": configurations.compile.collect { it.getName() }.join(' '),
+       "Class-Path": configurations.runtimeClasspath.collect { it.getName() }.join(' '),
        "QuPath-build-time": buildTime
     ]
     if (latestGitCommit != null)
@@ -495,25 +645,45 @@ jar {
 }
 
 
-/**
+/*
  * Create javadocs for all modules/packages in one place.
+ * Use -PstrictJavadoc=true to fail on error with doclint (which is rather strict).
  */
+def strictJavadoc = findProperty('strictJavadoc')
+ 
 task mergedJavadocs(type: Javadoc) {
+	if (!strictJavadoc) {
+		options.addBooleanOption 'Xdoclint:none', true
+	}
+	
     source subprojects.collect { project ->
-        project.sourceSets.main.allJava
+        project.sourceSets.main.allJava.filter {it.name != 'module-info.java'}
     }
+    
+    options {
+    	links += rootProject.ext.externalJavadocs
+    	source = javaVersion
+    }
+    
     destinationDir = new File(buildDir, 'merged-docs')
+    
     classpath = files(subprojects.collect { project ->
         project.sourceSets.main.compileClasspath
     })
+    
 }
 
 
 
-/**
- * Create a custom runtime.  Mostly to avoid using the same one as jpackager for now.
+/*
+ * Create a custom runtime
  */
 task createRuntime(dependsOn:build, type:Exec) {
+
+  String jreModules = findProperty('jreModules')
+  if (!jreModules) {
+    jreModules = 'default'
+  }
 	
   def outputDir = new File(rootProject.buildDir, 'jre')
 
@@ -521,19 +691,53 @@ task createRuntime(dependsOn:build, type:Exec) {
   onlyIf { !outputDir.exists() }
 
   doFirst {
-
-   def params = ["${System.properties['java.home']}/bin/jlink"]
-	
+  
+  	// Indispensible modules
+    def requiredModules = [
+        'java.desktop',
+    	'java.xml',
+    	'java.scripting',
+    	'java.sql',
+    	'java.naming',
+    	'jdk.unsupported',
+    	'jdk.zipfs',           // Needed for zip filesystem support
+        'jdk.jsobject',
+        'java.net.http',
+    ]
+    
+    def usefulModules = [
+        'java.net.http',       // Add HttpClient support (may be used by scripts)
+    	'java.management',     // Useful to check memory usage
+    	'jdk.management.agent' // Enables VisualVM to connect and sample CPU use
+    ]
+  
+    def addModules
+    if (jreModules == 'all') {
+      println 'Creating Java runtime using all modules'
+      addModules = 'ALL-MODULE-PATH'
+    } else if (jreModules == 'minimum') {
+      println 'Creating minimal Java runtime (this may exclude some useful modules)'
+      addModules = String.join(',', requiredModules)
+    } else {
+      if (jreModules != 'default')
+      	logger.warn("Unsupported jreModules property '${jreModules}', will use 'default' instead")
+      println 'Creating default Java runtime'
+      addModules = String.join(',', requiredModules + usefulModules)
+    }
+    
+    def params = ["${System.properties['java.home']}/bin/jlink"]
+   
     params << '--output' << outputDir.getAbsolutePath()
-    params << '--add-modules' << 'java.desktop,java.xml,java.scripting,java.sql,java.naming,jdk.unsupported,jdk.zipfs,jdk.jsobject,java.net.http'
+    params << '--add-modules' << addModules
+    
+    if (jreModules == 'default')
+	    params << '--bind-services'
 
     params << '--strip-debug'
     params << '--no-header-files'
     params << '--no-man-pages'
     params << '--strip-native-commands'
     params << '--compress=2'
-
-//	params << '--module-path' << System.properties.'java.home' + '/jmods' 
 
     print String.join(' ', params)
     
@@ -542,48 +746,37 @@ task createRuntime(dependsOn:build, type:Exec) {
 
 }
 
-/**
- * If we have a packager (somewhere), use it.
- *
- * To call this:
- *   gradlew createPackage -Ppackager=/path/to/jpackager
- *
- * Or to make an installer:
- *   gradlew createPackage -Ppackager=/path/to/jpackager -Ptype=installer}
+/*
+ * Create a native package. This requires jpackage, first included within JDK 14.
  */
 task createPackage(dependsOn:createRuntime, type:Exec) {
 
   doFirst {
-
-    def packager = findProperty('packager')
-    if (packager == null || !new File(packager).exists()) {
-      println '-------'
-      println 'Please specify where I can find a suitable packager!  Something like this:'
-      if (OperatingSystem.current().isWindows())
-	      println 'gradlew.bat createPackage -Ppackager=/full/path/to/jpackage.exe'
-	  else
-	      println 'gradlew createPackage -Ppackager=/full/path/to/jpackage'
-      println 'Current value of -Ppackager is ' + packager
-      println 'Note: You can also specify this in a gradle.properties file'
-      println '-------'
-      throw new GradleException('Please specify where I can find a suitable jpackage!')
-    }
-    println 'Using packager: ' + packager
-
+  
+  	if (!JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_14)) {
+  		throw new GradleException("Creating a package requires jpackage in JDK 14, but the current JDK version is ${JavaVersion.current()}.")
+  	}
+  
 	// Versioning rules can be strict on some platforms - may need to further change this
   	def appVersion = qupathVersion.replace('-SNAPSHOT', '')
 
     def packageType = findProperty('type')
+    if (!packageType) {
+    	packageType = 'app-image'
+    	logger.info("No package type specified, using default ${packageType}")
+   	}
+   	boolean associateFiles = packageType != 'app-image'
 
-    def params = [packager]
+    def params = ["${System.properties['java.home']}/bin/jpackage"]
 
     params << '--input' << new File(rootProject.buildDir, rootProject.libsDirName).getAbsolutePath()
     params << '--dest' << new File(rootProject.buildDir, 'dist').getAbsolutePath()
 
     params << '--main-jar' << jar.archiveName
     
-    params << '--name' << 'QuPath-' + qupathVersion
-//    params << '--class' << 'qupath.QuPath'
+    String launcherName = 'QuPath-' + qupathVersion
+    params << '--name' << launcherName
+//    params << '--name' << 'QuPath-' + qupathVersion
 
     // Default to using 50% available memory
 	params << '--java-options' << '-XX:MaxRAMPercentage=50'
@@ -592,33 +785,36 @@ task createPackage(dependsOn:createRuntime, type:Exec) {
 		params << '--mac-package-name' << 'QuPath'
 		params << '--mac-package-identifier' << 'QuPath'
 		if (packageType == 'installer') {
-			params << '--type' << 'dmg'
+			params << '--type' << 'pkg'
 		} else {
-			params << '--type' << 'app-image'
+			params << '--type' << packageType
 		}
+		associateFiles = true // Should work for Mac
 	} else if (OperatingSystem.current().isWindows()) {
 		if (packageType == 'installer') {
 			params << '--type' << 'msi'
+			params << '--win-menu'
 			params << '--win-menu-group' << 'QuPath'
 			params << '--win-dir-chooser'
-//			params << '--win-shortcut'
+			params << '--win-shortcut'
 			params << '--win-per-user-install'
 			int lastDash = appVersion.lastIndexOf('-')
 			if (lastDash > 0) {
 				appVersion = appVersion.substring(0, lastDash)
-				println "Simplifying QuPath version ${qupathVersion} to ${appVersion} for compatibility" 
+				logger.info("Simplifying QuPath version ${qupathVersion} to ${appVersion} for compatibility")
 			}
 		} else
-			params << '--type' << 'app-image'
+			params << '--type' << packageType
 		// Create a separate launcher with a console - this can help with debugging
 		def fileTemp = File.createTempFile('qupath-building', '.properties')
-		def consoleLauncherName = "QuPath-${qupathVersion} (debug)"
+		def consoleLauncherName = launcherName + " (console)"
 		fileTemp.deleteOnExit()
 		fileTemp.text = 'win-console=true'
-//		fileTemp << System.lineSeparator() << 'java-options=' << '"-Dqupath.config="' << consoleLauncherName + '.cfg""'
+		fileTemp << System.lineSeparator() << 'java-options=' << '-XX:MaxRAMPercentage=50' << ' -Dqupath.config=console'
+//		fileTemp << System.lineSeparator() << 'java-options=' << '-Dqupath.config=console'
 		params << '--add-launcher' << "\"${consoleLauncherName}\"=\"${fileTemp.getAbsolutePath()}\""
 	} else
-		params << '--type' << 'app-image'
+		params << '--type' << packageType
 
     // Store the app version (typically a simplified version of the full format)
     params << '--app-version' << appVersion
@@ -629,11 +825,19 @@ task createPackage(dependsOn:createRuntime, type:Exec) {
             'resources', 'main', 'package',
             iconName).toFile().getAbsolutePath()
     params << '--icon' << pathIcon
+    
+    // Set file associations
+    if (associateFiles) {
+	    def associations = Paths.get(
+	            rootProject.buildDir.getAbsolutePath(),
+	            'resources', 'main', 'package', 'associations').toFile().listFiles()
+	    associations.each {
+	            if (it.isFile() && it.name.endsWith('.properties'))
+		 		    params << '--file-associations' << it.getAbsolutePath()
+	    }
+	}
 
 	params << '--runtime-image' << new File(rootProject.buildDir, 'jre').getAbsolutePath()
-//    params << '--add-modules' << 'java.desktop,java.xml,java.scripting,java.sql,java.naming,jdk.unsupported'
-
-//	params << '--module-path' << System.properties.'java.home' + '/jmods' 
 
     println String.join(' ', params)
     

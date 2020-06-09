@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -31,29 +31,41 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.locationtech.jts.geom.Geometry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import qupath.imagej.tools.IJTools;
+import qupath.lib.analysis.DelaunayTools;
 import qupath.lib.analysis.DistanceTools;
+import qupath.lib.analysis.features.ObjectMeasurements;
+import qupath.lib.analysis.features.ObjectMeasurements.ShapeFeatures;
 import qupath.lib.awt.common.BufferedImageTools;
 import qupath.lib.classifiers.PathClassifierTools;
 import qupath.lib.classifiers.PathObjectClassifier;
+import qupath.lib.classifiers.object.ObjectClassifier;
+import qupath.lib.classifiers.object.ObjectClassifiers;
+import qupath.lib.classifiers.pixel.PixelClassifier;
 import qupath.lib.color.ColorDeconvolutionStains;
 import qupath.lib.common.ColorTools;
 import qupath.lib.common.GeneralTools;
@@ -62,11 +74,18 @@ import qupath.lib.images.ImageData.ImageType;
 import qupath.lib.images.servers.ImageChannel;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerMetadata;
+import qupath.lib.images.servers.ImageServerProvider;
+import qupath.lib.images.servers.ServerTools;
 import qupath.lib.images.writers.ImageWriterTools;
+import qupath.lib.images.writers.TileExporter;
 import qupath.lib.io.GsonTools;
+import qupath.lib.io.PathIO;
+import qupath.lib.io.PointIO;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.PathObjects;
+import qupath.lib.objects.PathTileObject;
+import qupath.lib.objects.CellTools;
 import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.PathCellObject;
 import qupath.lib.objects.PathDetectionObject;
@@ -79,14 +98,22 @@ import qupath.lib.objects.hierarchy.TMAGrid;
 import qupath.lib.plugins.CommandLinePluginRunner;
 import qupath.lib.plugins.PathPlugin;
 import qupath.lib.plugins.workflow.RunSavedClassifierWorkflowStep;
+import qupath.lib.projects.Project;
+import qupath.lib.projects.ProjectIO;
+import qupath.lib.projects.ProjectImageEntry;
 import qupath.lib.projects.Projects;
 import qupath.lib.regions.ImagePlane;
 import qupath.lib.regions.ImageRegion;
+import qupath.lib.regions.Padding;
 import qupath.lib.regions.RegionRequest;
 import qupath.lib.roi.GeometryTools;
 import qupath.lib.roi.ROIs;
 import qupath.lib.roi.RoiTools;
 import qupath.lib.roi.interfaces.ROI;
+import qupath.opencv.ml.pixel.PixelClassifierTools;
+import qupath.opencv.ml.pixel.PixelClassifierTools.CreateObjectOptions;
+import qupath.opencv.ml.pixel.PixelClassifiers;
+import qupath.opencv.ops.ImageOps;
 import qupath.opencv.tools.OpenCVTools;
 
 /**
@@ -137,20 +164,36 @@ public class QP {
 	/**
 	 * Store ImageData accessible to the script thread
 	 */
-	private static Map<Thread, ImageData<?>> batchImageData = new WeakHashMap<>();
+	private static Map<Thread, ImageData<BufferedImage>> batchImageData = new WeakHashMap<>();
+
+	/**
+	 * Store Project accessible to the script thread
+	 */
+	private static Map<Thread, Project<BufferedImage>> batchProject = new WeakHashMap<>();
 	
+	/**
+	 * Placeholder for the path to the current project.
+	 * May be used as follows:
+	 * <pre>
+	 *   var path = buildFilePath(PROJECT_BASE_DIR, 'subdir', 'name.txt')
+	 * </pre>
+	 */
+	final public static String PROJECT_BASE_DIR = "{%PROJECT}";
+
 	
 	private final static List<Class<?>> CORE_CLASSES = Collections.unmodifiableList(Arrays.asList(
 			// Core datastructures
-			//ImageData.class,
-			//ImageServer.class,
-			//PathObject.class,
-			//PathObjectHierarchy.class,
-			//PathClass.class,
+			ImageData.class,
+			ImageServer.class,
+			PathObject.class,
+			PathObjectHierarchy.class,
+			PathClass.class,
+			
 			ImageRegion.class,
 			RegionRequest.class,
 			ImagePlane.class,
-			
+			Padding.class,
+
 			// Static constructors
 			PathObjects.class,
 			ROIs.class,
@@ -165,13 +208,24 @@ public class QP {
 			PathClassifierTools.class,
 			ColorTools.class,
 			GeneralTools.class,
+			DistanceTools.class,
 //			ImageWriter.class,
 			ImageWriterTools.class,
 			PathClassTools.class,
 			GeometryTools.class,
 			IJTools.class,
 			OpenCVTools.class,
-			GeometryTools.class,
+			TileExporter.class,
+			ServerTools.class,
+			PixelClassifierTools.class,
+			
+			ImageOps.class,
+			DelaunayTools.class,
+			CellTools.class,
+			
+			// IO classes
+			PointIO.class,
+			ProjectIO.class,
 			
 			// External classes
 			BufferedImage.class
@@ -236,6 +290,8 @@ public class QP {
 	
 	private static String getString(Method m) {
 		var sb = new StringBuilder();
+		if (Modifier.isStatic(m.getModifiers()))
+			sb.append("static ");
 		sb.append(m.getReturnType().getSimpleName());
 		sb.append(" ");
 		sb.append(m.getName());
@@ -277,13 +333,33 @@ public class QP {
 	
 	
 	/**
+	 * Set the {@link Project} and {@link ImageData} to use for batch processing for the current thread.
+	 * @param project
+	 * @param imageData
+	 */
+	public static void setBatchProjectAndImage(final Project<BufferedImage> project, final ImageData<BufferedImage> imageData) {
+		setBatchProject(project);
+		setBatchImageData(imageData);
+	}
+	
+	/**
+	 * Reset the {@link Project} and {@link ImageData} used for batch processing for the current thread.
+	 */
+	public static void resetBatchProjectAndImage() {
+		setBatchProject(null);
+		setBatchImageData(null);
+	}
+	
+	/**
 	 * Set the ImageData to use for batch processing.  This will be local for the current thread.
 	 * @param imageData
 	 * @return
 	 */
-	public static ImageData<?> setBatchImageData(final ImageData<?> imageData) {
+	static ImageData<BufferedImage> setBatchImageData(final ImageData<BufferedImage> imageData) {
 		Thread thread = Thread.currentThread();
 		logger.trace("Setting image data for {} to {}", thread, imageData);
+		if (imageData == null)
+			return batchImageData.remove(thread);
 		return batchImageData.put(thread, imageData);
 	}
 	
@@ -293,9 +369,53 @@ public class QP {
 	 * <p>
 	 * @return The ImageData set with setBatchImageData, or null if no ImageData has been set for the current thread.
 	 */
-	public static ImageData<?> getBatchImageData() {
+	static ImageData<BufferedImage> getBatchImageData() {
 		return batchImageData.get(Thread.currentThread());
 	}
+	
+	/**
+	 * Set the Project to use for batch processing.  This will be local for the current thread.
+	 * @param project
+	 * @return
+	 */
+	static Project<BufferedImage> setBatchProject(final Project<BufferedImage> project) {
+		Thread thread = Thread.currentThread();
+		logger.trace("Setting project for {} to {}", thread, project);
+		if (project == null)
+			return batchProject.remove(thread);
+		return batchProject.put(thread, project);
+	}
+	
+	
+	/**
+	 * Set the ImageData to use for batch processing.  This will be local for the current thread.
+	 * <p>
+	 * @return The ImageData set with setBatchImageData, or null if no ImageData has been set for the current thread.
+	 */
+	static Project<BufferedImage> getBatchProject() {
+		return batchProject.get(Thread.currentThread());
+	}
+	
+	
+	
+	/**
+	 * Load ImageData from a file.
+	 * 
+	 * @param path path to the file containing ImageData.
+	 * @param setBatchData if true, the <code>setBatchImageData(ImageData)</code> will be called if the loading is successful.
+	 * @return
+	 * @throws IOException 
+	 * 
+	 * @see #setBatchImageData
+	 */
+	@Deprecated
+	public static ImageData<BufferedImage> loadImageData(final String path, final boolean setBatchData) throws IOException {
+		ImageData<BufferedImage> imageData = PathIO.readImageData(new File(resolvePath(path)), null, null, BufferedImage.class);
+		if (setBatchData && imageData != null)
+			setBatchImageData(imageData);
+		return imageData;
+	}
+	
 	
 //	public static ImageData<?> getCurrentImageData() {
 //		// Try the batch image data first
@@ -373,15 +493,133 @@ public class QP {
 	/**
 	 * Get the path to the current {@code ImageData}.
 	 * <p>
-	 * In this implementation, it is the same as calling {@code getBatchImageData()}.
+	 * In this implementation, it is the same as calling {@link #getBatchImageData()}.
 	 * 
 	 * @return
 	 * 
 	 * @see #getBatchImageData()
 	 */
-	public static ImageData<?> getCurrentImageData() {
+	public static ImageData<BufferedImage> getCurrentImageData() {
 		return getBatchImageData();
 	}
+	
+	
+	/**
+	 * Get the current project.
+	 * <p>
+	 * In this implementation, it is the same as calling {@link #getBatchProject()}.
+	 * 
+	 * @return
+	 * 
+	 * @see #getBatchProject()
+	 */
+	public static Project<BufferedImage> getProject() {
+		return getBatchProject();
+	}
+	
+	/**
+	 * Resolve a path, replacing any placeholders. Currently, this means only {@link #PROJECT_BASE_DIR}.
+	 * @param path
+	 * @return
+	 */
+	public static String resolvePath(final String path) {
+		String base = getProjectBaseDirectory();
+		if (base != null)
+			return path.replace(PROJECT_BASE_DIR, base);
+		else if (path.contains(PROJECT_BASE_DIR))
+			throw new IllegalArgumentException("Cannot resolve path '" + path + "' - no project base directory available");
+		return
+			path;
+	}
+	
+	/**
+	 * Build a file path from multiple components.
+	 * A common use of this is
+	 * <pre>
+	 *   String path = buildFilePath(PROJECT_BASE_DIR, "export")
+	 * </pre>
+	 * @param path
+	 * @return
+	 */
+	public static String buildFilePath(String...path) {
+		File file = new File(resolvePath(path[0]));
+		for (int i = 1; i < path.length; i++)
+			file = new File(file, path[i]);
+		return file.getAbsolutePath();
+	}
+	
+	/**
+	 * Ensure directories exist for the specified path, calling {@code file.mkdirs()} if not.
+	 * @param path the directory path
+	 * @return true if a directory was created, false otherwise
+	 */
+	public static boolean mkdirs(String path) {
+		File file = new File(resolvePath(path));
+		if (!file.exists())
+			return file.mkdirs();
+		return false;
+	}
+	
+	/**
+	 * Query if a file exists.
+	 * @param path full file path
+	 * @return true if the file exists, false otherwise
+	 */
+	public static boolean fileExists(String path) {
+		return new File(resolvePath(path)).exists();
+	}
+
+	/**
+	 * Query if a file path corresponds to a directory.
+	 * @param path full file path
+	 * @return true if the file exists and is a directory, false otherwise
+	 */
+	public static boolean isDirectory(String path) {
+		return new File(resolvePath(path)).isDirectory();
+	}
+
+	
+	/**
+	 * Get the base directory for the currently-open project, or null if no project is open.
+	 * 
+	 * This can be useful for setting e.g. save directories relative to the current project.
+	 * 
+	 * @return
+	 */
+	private static String getProjectBaseDirectory() {
+		File dir = Projects.getBaseDirectory(getProject());
+		return dir == null ? null : dir.getAbsolutePath();
+	}
+	
+	/**
+	 * Get the project entry for the currently-open image within the current project, 
+	 * or null if no project/image is open.
+	 * 
+	 * @return
+	 */
+	public static ProjectImageEntry<BufferedImage> getProjectEntry() {
+		Project<BufferedImage> project = getProject();
+		var imageData = getCurrentImageData();
+		if (project == null || imageData == null)
+			return null;
+		return project.getEntry(imageData);
+	}
+	
+	
+	/**
+	 * Get the metadata value from the current project entry for the specified key, 
+	 * or null if no such metadata value exists (or no project entry is open).
+	 * 
+	 * @param key
+	 * @return
+	 */
+	public static String getProjectEntryMetadataValue(final String key) {
+		ProjectImageEntry<BufferedImage> entry = getProjectEntry();
+		if (entry == null)
+			return null;
+		return entry.getMetadataValue(key);
+	}
+	
 	
 	/**
 	 * Get the {@code PathObjectHierarchy} of the current {@code ImageData}.
@@ -667,6 +905,65 @@ public class QP {
 	}
 	
 	/**
+	 * Add the specified shape measurements to the current selected objects of the current image.
+	 * If no features are specified, all will be added.
+	 * @param features
+	 */
+	public static void addShapeMeasurements(String... features) {
+		var imageData = getCurrentImageData();
+		Collection<PathObject> selected = imageData == null ? Collections.emptyList() : imageData.getHierarchy().getSelectionModel().getSelectedObjects();
+		if (selected.isEmpty()) {
+			logger.debug("Cannot add shape measurements (no objects selected)");
+			return;
+		}
+		addShapeMeasurements(imageData, new ArrayList<>(selected), features);
+	}
+
+	/**
+	 * Add shape measurements to the specified objects.
+	 * @param imageData the image to which the objects belong. This is used to determine pixel calibration and to fire an update event. May be null.
+	 * @param pathObjects the objects that should be measured
+	 * @param features optional array of Strings specifying the features to add. If none are specified, all available features will be added.
+	 */
+	public static void addShapeMeasurements(ImageData<?> imageData, Collection<? extends PathObject> pathObjects, String... features) {
+		addShapeMeasurements(imageData, pathObjects, parseFeatures(features));
+	}
+	
+	/**
+	 * Add shape measurements to the specified objects.
+	 * @param imageData the image to which the objects belong. This is used to determine pixel calibration and to fire an update event. May be null.
+	 * @param pathObjects the objects that should be measured
+	 * @param features the specific features to add. If none are specified, all available features will be added.
+	 */
+	public static void addShapeMeasurements(ImageData<?> imageData, Collection<? extends PathObject> pathObjects, ShapeFeatures... features) {
+		if (pathObjects.isEmpty())
+			return;
+		if (imageData == null) {
+			ObjectMeasurements.addShapeMeasurements(pathObjects, null, features);
+		} else {
+			var hierarchy = imageData.getHierarchy();
+			ObjectMeasurements.addShapeMeasurements(pathObjects, imageData.getServer().getPixelCalibration(), features);
+			hierarchy.fireObjectMeasurementsChangedEvent(hierarchy, pathObjects);			
+		}
+	}
+	
+	private static ShapeFeatures[] parseFeatures(String... names) {
+		if (names == null || names.length == 0)
+			return new ShapeFeatures[0];
+		var objectOptions = new HashSet<ShapeFeatures>();
+		for (var optionName : names) {
+			try {
+				var option = ShapeFeatures.valueOf(optionName);
+				objectOptions.add(option);
+			} catch (Exception e) {
+				logger.warn("Could not parse option {}", optionName);
+			}
+		}
+		return objectOptions.toArray(ShapeFeatures[]::new);
+	}
+	
+	
+	/**
 	 * Set the channel names for the current ImageData.
 	 * 
 	 * @param names
@@ -718,6 +1015,7 @@ public class QP {
 	 * by passing n values, the first n channel names will be set.
 	 * Any name that is null will be left unchanged.
 	 * 
+	 * @param imageData
 	 * @param colors
 	 * @see #setChannelNames(ImageData, String...)
 	 */
@@ -754,6 +1052,7 @@ public class QP {
 	 * Also, currently it is not possible to set channels for RGB images - attempting to do so 
 	 * will throw an IllegalArgumentException.
 	 * 
+	 * @param imageData 
 	 * @param channels
 	 * @see #setChannelNames(ImageData, String...)
 	 * @see #setChannelColors(ImageData, Integer...)
@@ -803,6 +1102,7 @@ public class QP {
 	 * Run the specified plugin on the specified {@code ImageData}.
 	 * 
 	 * @param className
+	 * @param imageData
 	 * @param args
 	 * @return
 	 * @throws InterruptedException
@@ -974,6 +1274,7 @@ public class QP {
 	 * @param imageData
 	 * @param classifier
 	 */
+	@Deprecated
 	public static void runClassifier(final ImageData<?> imageData, final PathObjectClassifier classifier) {
 		if (imageData != null)
 			runClassifier(imageData.getHierarchy(), classifier);
@@ -984,7 +1285,9 @@ public class QP {
 	 * @param hierarchy
 	 * @param classifier
 	 */
+	@Deprecated
 	public static void runClassifier(final PathObjectHierarchy hierarchy, final PathObjectClassifier classifier) {
+		logger.warn("runClassifier() is a legacy command for 'old' detection classifiers in QuPath v0.1.2 and earlier, and may be removed in a future version");
 		PathClassifierTools.runClassifier(hierarchy, classifier);
 	}
 	
@@ -992,6 +1295,7 @@ public class QP {
 	 * Run a detection object classifier for the current image data, reading the classifier from a specified path
 	 * @param path
 	 */
+	@Deprecated
 	public static void runClassifier(final String path) {
 		ImageData<?> imageData = getCurrentImageData();
 		if (imageData == null)
@@ -1030,12 +1334,51 @@ public class QP {
 	 * @param setSelected if true, select the object that was created after it is added to the hierarchy
 	 */
 	public static void createSelectAllObject(final boolean setSelected) {
+		createSelectAllObject(setSelected, 0, 0);
+	}
+
+	/**
+	 * Build an {@link ImageServer} with the class {@link BufferedImage}.
+	 * 
+	 * @param path image path (usually a file path or URI)
+	 * @param args optional arguments
+	 * @param cls generic type for the server (usually BufferedImage)
+	 * @return an {@link ImageServer}, if one could be build from the supplied arguments
+	 * 
+	 * @throws IOException if unable to build the server
+	 */
+	public static <T> ImageServer<T> buildServer(String path, Class<T> cls, String... args) throws IOException {
+		return ImageServerProvider.buildServer(path, cls, args);
+	}
+	
+	/**
+	 * Build an {@link ImageServer} with the class {@link BufferedImage}.
+	 * 
+	 * @param path image path (usually a file path or URI)
+	 * @param args optional arguments
+	 * @return an {@link ImageServer}, if one could be build from the supplied arguments
+	 * 
+	 * @throws IOException if unable to build the server
+	 */
+	public static ImageServer<BufferedImage> buildServer(String path, String... args) throws IOException {
+		return buildServer(path, BufferedImage.class, args);
+	}
+	
+	
+	/**
+	 * Create an annotation for the entire width and height of the current image data, on the default plane (z-slice, time point).
+	 * 
+	 * @param setSelected if true, select the object that was created after it is added to the hierarchy
+	 * @param z z-slice index for the annotation
+	 * @param t timepoint index for the annotation
+	 */
+	public static void createSelectAllObject(final boolean setSelected, int z, int t) {
 		ImageData<?> imageData = getCurrentImageData();
 		if (imageData == null)
 			return;
 		ImageServer<?> server = imageData.getServer();
 		PathObject pathObject = PathObjects.createAnnotationObject(
-				ROIs.createRectangleROI(0, 0, server.getWidth(), server.getHeight(), ImagePlane.getDefaultPlane())
+				ROIs.createRectangleROI(0, 0, server.getWidth(), server.getHeight(), ImagePlane.getPlane(z, t))
 				);
 		imageData.getHierarchy().addPathObject(pathObject);
 		if (setSelected)
@@ -1198,7 +1541,7 @@ public class QP {
 	
 	
 	/**
-	 * Delete the selected objects from the current hierarchy, optoonally keeping their child (descendant) objects.
+	 * Delete the selected objects from the current hierarchy, optionally keeping their child (descendant) objects.
 	 * 
 	 * @param keepChildren
 	 */
@@ -1254,10 +1597,34 @@ public class QP {
 		if (hierarchy != null)
 			hierarchy.getSelectionModel().setSelectedObjects(pathObjects, mainSelection);
 	}
+	
+	/**
+	 * Set one or more objects to be selected within the specified hierarchy.
+	 * @param hierarchy
+	 * @param pathObjects
+	 */
+	public static void selectObjects(final PathObjectHierarchy hierarchy, final PathObject... pathObjects) {
+		if (pathObjects.length == 0)
+			return;
+		if (pathObjects.length == 1)
+			hierarchy.getSelectionModel().setSelectedObject(pathObjects[0]);
+		else
+			hierarchy.getSelectionModel().setSelectedObjects(Arrays.asList(pathObjects), null);
+	}
+	
+	/**
+	 * Set one or more objects to be selected within the current hierarchy.
+	 * @param pathObjects
+	 */
+	public static void selectObjects(final PathObject... pathObjects) {
+		PathObjectHierarchy hierarchy = getCurrentHierarchy();
+		if (hierarchy != null)
+			selectObjects(hierarchy, pathObjects);
+	}
 
 	/**
 	 * Get a list of all objects in the specified hierarchy according to a specified predicate.
-	 * 
+	 * @param hierarchy 
 	 * @param predicate
 	 * @return
 	 */
@@ -1267,7 +1634,7 @@ public class QP {
 
 	/**
 	 * Set selected objects to contain (only) all objects in the specified hierarchy according to a specified predicate.
-	 * 
+	 * @param hierarchy 
 	 * @param predicate
 	 */
 	public static void selectObjects(final PathObjectHierarchy hierarchy, final Predicate<PathObject> predicate) {
@@ -1276,6 +1643,7 @@ public class QP {
 	
 	/**
 	 * Set objects that are a subclass of a specified class.
+	 * Not to be confused with {@link #selectObjectsByPathClass(PathClass...)} and {@link #selectObjectsByClassification(String...)}.
 	 * 
 	 * @param cls
 	 */
@@ -1285,7 +1653,9 @@ public class QP {
 	
 	/**
 	 * Set objects that are a subclass of a specified class.
+	 * Not to be confused with {@link #selectObjectsByPathClass(PathObjectHierarchy, PathClass...)} and {@link #selectObjectsByClassification(PathObjectHierarchy, String...)}.
 	 * 
+	 * @param hierarchy 
 	 * @param cls
 	 */
 	public static void selectObjectsByClass(final PathObjectHierarchy hierarchy, final Class<? extends PathObject> cls) {
@@ -1311,6 +1681,7 @@ public class QP {
 	/**
 	 * Select all TMA core objects in the specified hierarchy, optionally including missing cores.
 	 * @param hierarchy
+	 * @param includeMissing 
 	 */
 	public static void selectTMACores(final PathObjectHierarchy hierarchy, final boolean includeMissing) {
 		hierarchy.getSelectionModel().setSelectedObjects(PathObjectTools.getTMACoreObjects(hierarchy, includeMissing), null);
@@ -1350,6 +1721,7 @@ public class QP {
 	
 	/**
 	 * Select all TMA core objects in the current hierarchy, optionally including missing cores.
+	 * @param includeMissing 
 	 */
 	public static void selectTMACores(final boolean includeMissing) {
 		PathObjectHierarchy hierarchy = getCurrentHierarchy();
@@ -1375,7 +1747,75 @@ public class QP {
 			selectCells(hierarchy);
 	}
 	
+	/**
+	 * Select all tile objects in the specified hierarchy.
+	 * @param hierarchy
+	 */
+	public static void selectTiles(final PathObjectHierarchy hierarchy) {
+		selectObjectsByClass(hierarchy, PathTileObject.class);
+	}
+
+	/**
+	 * Select all tile objects in the current hierarchy.
+	 */
+	public static void selectTiles() {
+		PathObjectHierarchy hierarchy = getCurrentHierarchy();
+		if (hierarchy != null)
+			selectTiles(hierarchy);
+	}
 	
+	/**
+	 * Select objects for the current hierarchy that have one of the specified classifications.
+	 * @param pathClassNames one or more classification names, which may be converted to a {@link PathClass} with {@link #getPathClass(String)}
+	 */
+	public static void selectObjectsByClassification(final String... pathClassNames) {
+		var hierarchy = getCurrentHierarchy();
+		if (hierarchy != null)
+			selectObjectsByClassification(hierarchy, pathClassNames);
+	}
+	
+	/**
+	 * Select objects for the current hierarchy that have one of the specified {@link PathClass} classifications assigned.
+	 * @param pathClasses one or more classifications
+	 * 
+	 * @see #selectObjectsByPathClass(PathClass...)
+	 */
+	public static void selectObjectsByPathClass(final PathClass... pathClasses) {
+		var hierarchy = getCurrentHierarchy();
+		if (hierarchy != null)
+			selectObjectsByPathClass(hierarchy, pathClasses);
+	}
+
+	/**
+	 * Select objects for the specified hierarchy that have one of the specified classifications.
+	 * @param hierarchy the hierarchy containing objects that may be selected
+	 * @param pathClassNames one or more classification names, which may be converted to a {@link PathClass} with {@link #getPathClass(String)}
+	 * 
+	 * @see #selectObjectsByPathClass(PathObjectHierarchy, PathClass...)
+	 */
+	public static void selectObjectsByClassification(final PathObjectHierarchy hierarchy, final String... pathClassNames) {
+		PathClass[] pathClasses;
+		if (pathClassNames == null)
+			pathClasses = new PathClass[1];
+		else
+			pathClasses = Arrays.stream(pathClassNames).map(s -> getPathClass(s)).toArray(PathClass[]::new);
+		selectObjectsByPathClass(hierarchy, pathClasses);
+	}
+	
+	/**
+	 * Select objects for the specified hierarchy that have one of the specified {@link PathClass} classifications assigned.
+	 * @param hierarchy the hierarchy containing objects that may be selected
+	 * @param pathClasses one or more classifications
+	 */
+	public static void selectObjectsByPathClass(final PathObjectHierarchy hierarchy, final PathClass... pathClasses) {
+		Set<PathClass> pathClassSet;
+		if (pathClasses == null)
+			pathClassSet = Set.of((PathClass)null);
+		else
+			pathClassSet = Arrays.stream(pathClasses).map(p -> p == PathClassFactory.getPathClassUnclassified() ? null : p).collect(Collectors.toCollection(HashSet::new));
+		selectObjects(hierarchy, p -> pathClassSet.contains(p.getPathClass()));
+	}
+
 	
 	// TODO: Update parsePredicate to something more modern... a proper DSL
 	@Deprecated
@@ -1451,8 +1891,6 @@ public class QP {
 			scanner.close();
 		}
 	}
-
-
 
 	/**
 	 * Select objects based on a specified measurement.
@@ -1662,7 +2100,7 @@ public class QP {
 	}
 	
 	/**
-	 * Clear the measurement lists for all detections in a hierarchy.
+	 * Clear the measurement lists for all detections in a hierarchy (including sub-classes of detections).
 	 * @param hierarchy
 	 */
 	public static void clearDetectionMeasurements(PathObjectHierarchy hierarchy) {
@@ -1675,6 +2113,95 @@ public class QP {
 	 */
 	public static void clearDetectionMeasurements() {
 		clearDetectionMeasurements(getCurrentHierarchy());
+	}
+	
+	/**
+	 * Clear the measurement lists for all TMA core objects in a hierarchy.
+	 * @param hierarchy
+	 */
+	public static void clearTMACoreMeasurements(PathObjectHierarchy hierarchy) {
+		if (hierarchy != null)
+			clearMeasurements(hierarchy, TMACoreObject.class);
+	}
+	
+	/**
+	 * Clear the measurement lists for all TMA core objects in the current hierarchy.
+	 */
+	public static void clearTMACoreMeasurements() {
+		clearTMACoreMeasurements(getCurrentHierarchy());
+	}
+	
+	/**
+	 * Clear the measurement lists for objects of a specific class in a hierarchy (subclasses are not included!).
+	 * @param hierarchy
+	 * @param cls 
+	 */
+	public static void clearMeasurements(PathObjectHierarchy hierarchy, Class<? extends PathObject> cls) {
+		if (hierarchy != null)
+			clearMeasurements(hierarchy, hierarchy.getObjects(null, null).stream().filter(p -> p.getClass().equals(cls)).toArray(PathObject[]::new));
+	}
+	
+	/**
+	 * Clear the measurement lists for objects of a specific class in the current hierarchy (subclasses are not included!).
+	 * @param cls 
+	 */
+	public static void clearMeasurements(Class<? extends PathObject> cls) {
+		clearMeasurements(getCurrentHierarchy(), cls);
+	}
+	
+	/**
+	 * Clear the measurement lists for all detections in the current hierarchy.
+	 */
+	public static void clearMeasurements() {
+		clearDetectionMeasurements(getCurrentHierarchy());
+	}
+	
+	/**
+	 * Clear the measurement lists for all cells in a hierarchy.
+	 * @param hierarchy
+	 */
+	public static void clearCellMeasurements(PathObjectHierarchy hierarchy) {
+		if (hierarchy != null)
+			clearMeasurements(hierarchy, hierarchy.getCellObjects());
+	}
+	
+	/**
+	 * Clear the measurement lists for all cells in the current hierarchy.
+	 */
+	public static void clearCellMeasurements() {
+		clearCellMeasurements(getCurrentHierarchy());
+	}
+	
+	/**
+	 * Clear the measurement lists for all tiles in a hierarchy.
+	 * @param hierarchy
+	 */
+	public static void clearTileMeasurements(PathObjectHierarchy hierarchy) {
+		if (hierarchy != null)
+			clearMeasurements(hierarchy, hierarchy.getTileObjects());
+	}
+	
+	/**
+	 * Clear the measurement lists for all tiles in the current hierarchy.
+	 */
+	public static void clearTileMeasurements() {
+		clearTileMeasurements(getCurrentHierarchy());
+	}
+	
+	/**
+	 * Clear the measurement lists for the root object.
+	 * @param hierarchy
+	 */
+	public static void clearRootMeasurements(PathObjectHierarchy hierarchy) {
+		if (hierarchy != null)
+			clearMeasurements(hierarchy, hierarchy.getRootObject());
+	}
+	
+	/**
+	 * Clear the measurement lists for the root object.
+	 */
+	public static void clearRootMeasurements() {
+		clearRootMeasurements(getCurrentHierarchy());
 	}
 	
 	
@@ -1723,7 +2250,7 @@ public class QP {
 	 * @param measurementName measurement to threshold
 	 * @param thresholds either 1 or 3 thresholds, depending upon whether objects should be classified as Positive/Negative or Negative/1+/2+/3+
 	 */
-	public static void setIntensityClassifications(final Collection<PathObject> pathObjects, final String measurementName, final double... thresholds) {
+	public static void setIntensityClassifications(final Collection<? extends PathObject> pathObjects, final String measurementName, final double... thresholds) {
 		PathClassifierTools.setIntensityClassifications(pathObjects, measurementName, thresholds);
 	}
 	
@@ -1765,6 +2292,26 @@ public class QP {
 	 */
 	public static void setIntensityClassifications(final Class<? extends PathObject> cls, final String measurementName, final double... thresholds) {
 		setIntensityClassifications(getCurrentHierarchy(), cls, measurementName, thresholds);
+	}
+	
+	/**
+	 * Set the intensity classifications for detections in the specified hierarchy.
+	 * @param hierarchy 
+	 * @param measurementName measurement to threshold
+	 * @param thresholds either 1 or 3 thresholds, depending upon whether objects should be classified as Positive/Negative or Negative/1+/2+/3+
+	 */
+	public static void setDetectionIntensityClassifications(final PathObjectHierarchy hierarchy, final String measurementName, final double... thresholds) {
+		setIntensityClassifications(hierarchy, PathDetectionObject.class, measurementName, thresholds);
+	}
+	
+	/**
+	 * Set the intensity classifications for detections in the current hierarchy.
+	 * 
+	 * @param measurementName measurement to threshold
+	 * @param thresholds either 1 or 3 thresholds, depending upon whether objects should be classified as Positive/Negative or Negative/1+/2+/3+
+	 */
+	public static void setDetectionIntensityClassifications(final String measurementName, final double... thresholds) {
+		setDetectionIntensityClassifications(getCurrentHierarchy(), measurementName, thresholds);
 	}
 	
 	/**
@@ -1839,6 +2386,30 @@ public class QP {
 	}
 	
 	/**
+	 * Write the output of applying a pixel classifier to an image. The writer will be determined based on the file extension.
+	 * @param imageData image to which the classifier should be applied
+	 * @param classifier pixel classifier
+	 * @param path output file path
+	 * @throws IOException
+	 */
+	public static void writePredictionImage(ImageData<BufferedImage> imageData, PixelClassifier classifier, String path) throws IOException {
+		if (imageData == null)
+			imageData = getCurrentImageData();
+		var server = PixelClassifierTools.createPixelClassificationServer(imageData, classifier);
+		ImageWriterTools.writeImage(server, path);
+	}
+	
+	/**
+	 * Write the output of applying a pixel classifier to the current image image.
+	 * @param classifierName name of the classifier, see {@link #loadPixelClassifier(String)}
+	 * @param path output file path
+	 * @throws IOException
+	 */
+	public static void writePredictionImage(String classifierName, String path) throws IOException {
+		writePredictionImage(getCurrentImageData(), loadPixelClassifier(classifierName), path);
+	}
+	
+	/**
 	 * Write a full image to the specified path. The writer will be determined based on the file extension.
 	 * @param server
 	 * @param path
@@ -1860,20 +2431,70 @@ public class QP {
 	
 	
 	/**
+	 * Compute the distance for all detection object centroids to the closest detection with each valid, not-ignored classification and add 
+	 * the result to the detection measurement list.
+	 * @param imageData
+	 * @param splitClassNames 
+	 * @see DistanceTools#detectionCentroidDistances(ImageData, boolean)
+	 */
+	public static void detectionCentroidDistances(ImageData<?> imageData, boolean splitClassNames) {
+		DistanceTools.detectionCentroidDistances(imageData, splitClassNames);
+	}
+	
+	/**
+	 * Compute the distance for all detection object centroids to the closest detection with each valid, not-ignored classification and add 
+	 * the result to the detection measurement list for the current ImageData - without splitting class names.
+	 * 
+	 * @deprecated retained only for compatibility of v0.2.0 milestone releases; use instead #detectionCentroidDistances(boolean)
+	 * 
+	 * @see DistanceTools#detectionCentroidDistances(ImageData, boolean)
+	 */
+	@Deprecated
+	public static void detectionCentroidDistances() {
+		detectionCentroidDistances(false);
+	}
+	
+	/**
+	 * Compute the distance for all detection object centroids to the closest detection with each valid, not-ignored classification and add 
+	 * the result to the detection measurement list for the current ImageData.
+	 * @param splitClassNames 
+	 * @see DistanceTools#detectionCentroidDistances(ImageData, boolean)
+	 */
+	public static void detectionCentroidDistances(boolean splitClassNames) {
+		detectionCentroidDistances(getCurrentImageData(), splitClassNames);
+	}
+	
+	/**
 	 * Compute the distance for all detection object centroids to the closest annotation with each valid, not-ignored classification and add 
 	 * the result to the detection measurement list.
 	 * @param imageData
+	 * @param splitClassNames 
+	 * @see DistanceTools#detectionToAnnotationDistances(ImageData, boolean)
 	 */
-	public static void detectionToAnnotationDistances(ImageData<?> imageData) {
-		DistanceTools.detectionToAnnotationDistances(imageData);
+	public static void detectionToAnnotationDistances(ImageData<?> imageData, boolean splitClassNames) {
+		DistanceTools.detectionToAnnotationDistances(imageData, splitClassNames);
+	}
+	
+	/**
+	 * Compute the distance for all detection object centroids to the closest annotation with each valid, not-ignored classification and add 
+	 * the result to the detection measurement list for the current ImageData - without splitting class names.
+	 * 
+	 * @deprecated retained only for compatibility of v0.2.0 milestone releases; use instead #detectionToAnnotationDistances(boolean)
+	 * 
+	 */
+	@Deprecated
+	public static void detectionToAnnotationDistances() {
+		detectionToAnnotationDistances(false);
 	}
 	
 	/**
 	 * Compute the distance for all detection object centroids to the closest annotation with each valid, not-ignored classification and add 
 	 * the result to the detection measurement list for the current ImageData.
+	 * @param splitClassNames 
+	 * @see DistanceTools#detectionToAnnotationDistances(ImageData, boolean)
 	 */
-	public static void detectionToAnnotationDistances() {
-		DistanceTools.detectionToAnnotationDistances(getCurrentImageData());
+	public static void detectionToAnnotationDistances(boolean splitClassNames) {
+		detectionToAnnotationDistances(getCurrentImageData(), splitClassNames);
 	}
 
 	/**
@@ -1984,13 +2605,518 @@ public class QP {
 	}
 	
 	
+	/**
+	 * Resolve the location of annotations in the current hierarchy by setting parent/child relationships.
+	 */
+	public static void resolveHierarchy() {
+		resolveHierarchy(getCurrentHierarchy());
+	}
 	
+	/**
+	 * Resolve the location of annotations in the specified hierarchy by setting parent/child relationships.
+	 * 
+	 * @param hierarchy
+	 */
+	public static void resolveHierarchy(PathObjectHierarchy hierarchy) {
+		if (hierarchy == null)
+			return;
+		hierarchy.resolveHierarchy();
+	}
 	
+	/**
+	 * Insert objects into the hierarchy, resolving their location and setting parent/child relationships.
+	 * 
+	 * @param pathObjects
+	 */
+	public static void insertObjects(Collection<? extends PathObject> pathObjects) {
+		var hierarchy = getCurrentHierarchy();
+		if (hierarchy != null)
+			hierarchy.insertPathObjects(pathObjects);
+	}	
 	
-	
+	/**
+	 * Insert object into the hierarchy, resolving its location and setting parent/child relationships.
+	 * 
+	 * @param pathObject
+	 */
+	public static void insertObjects(PathObject pathObject) {
+		var hierarchy = getCurrentHierarchy();
+		if (hierarchy != null)
+			hierarchy.insertPathObject(pathObject, true);
+	}	
 	
 	private static boolean isFinite(Number val) {
 		return val != null && Double.isFinite(val.doubleValue());
+	}
+	
+	/**
+	 * Merge point annotations sharing the same {@link PathClass} and {@link ImagePlane} as the selected annotations
+	 * of the current hierarchy, creating multi-point annotations for all matching points and removing the (previously-separated) annotations.
+	 * 
+	 * @return true if changes are made to the hierarchy, false otherwise
+	 */
+	public static boolean mergePointsForAllClasses() {
+		return PathObjectTools.mergePointsForAllClasses(getCurrentHierarchy());
+	}
+	
+	/**
+	 * Merge point annotations sharing the same {@link PathClass} and {@link ImagePlane} for the current hierarchy, 
+	 * creating multi-point annotations for all matching points and removing the (previously-separated) annotations.
+	 * 
+	 * @return true if changes are made to the hierarchy, false otherwise
+	 */
+	public static boolean mergePointsForSelectedObjectClasses() {
+		return PathObjectTools.mergePointsForSelectedObjectClasses(getCurrentHierarchy());
+	}
+	
+	/**
+	 * Duplicate the selected annotations in the current hierarchy.
+	 * 
+	 * @return true if changes are made to the hierarchy, false otherwise
+	 */
+	public static boolean duplicateSelectedAnnotations() {
+		return PathObjectTools.duplicateSelectedAnnotations(getCurrentHierarchy());
+	}
+	
+	/**
+	 * Merge annotations for the current hierarchy.
+	 * @param annotations the annotations to merge
+	 * @return true if changes were made the hierarchy, false otherwise
+	 */
+	public static boolean mergeAnnotations(final Collection<PathObject> annotations) {
+		return mergeAnnotations(getCurrentHierarchy(), annotations);
+	}
+	
+	/**
+	 * Merge the currently-selected annotations of the current hierarchy to create a new annotation containing the union of their ROIs.
+	 * <p>
+	 * Note:
+	 * <ul>
+	 * <li>The existing annotations will be removed from the hierarchy if possible, therefore should be duplicated first 
+	 * if this is not desired.</li>
+	 * <li>The new object will be set to be the selected object in the hierarchy (which can be used to retrieve it if needed).</li>
+	 * </ul>
+	 * 
+	 * @return true if changes are made to the hierarchy, false otherwise
+	 */
+	public static boolean mergeSelectedAnnotations() {
+		return mergeSelectedAnnotations(getCurrentHierarchy());
+	}
+	
+	/**
+	 * Merge the specified annotations to create a new annotation containing the union of their ROIs.
+	 * <p>
+	 * Note:
+	 * <ul>
+	 * <li>The existing annotations will be removed from the hierarchy if possible, therefore should be duplicated first 
+	 * if this is not desired.</li>
+	 * <li>The new object will be set to be the selected object in the hierarchy (which can be used to retrieve it if needed).</li>
+	 * </ul>
+	 * 
+	 * @param hierarchy
+	 * @param annotations
+	 * @return true if changes are made to the hierarchy, false otherwise
+	 */
+	public static boolean mergeAnnotations(final PathObjectHierarchy hierarchy, final Collection<PathObject> annotations) {
+		if (hierarchy == null)
+			return false;
+		
+		// Get all the selected annotations with area
+		ROI shapeNew = null;
+		List<PathObject> merged = new ArrayList<>();
+		Set<PathClass> pathClasses = new HashSet<>();
+		for (PathObject annotation : annotations) {
+			if (annotation.isAnnotation() && annotation.hasROI() && annotation.getROI().isArea()) {
+				if (shapeNew == null)
+					shapeNew = annotation.getROI();//.duplicate();
+				else
+					shapeNew = RoiTools.combineROIs(shapeNew, annotation.getROI(), RoiTools.CombineOp.ADD);
+				if (annotation.getPathClass() != null)
+					pathClasses.add(annotation.getPathClass());
+				merged.add(annotation);
+			}
+		}
+		// Check if we actually merged anything
+		if (merged.isEmpty() || merged.size() == 1)
+			return false;
+	
+		// Create and add the new object, removing the old ones
+		PathObject pathObjectNew = PathObjects.createAnnotationObject(shapeNew);
+		if (pathClasses.size() == 1)
+			pathObjectNew.setPathClass(pathClasses.iterator().next());
+		else
+			logger.warn("Cannot assign class unambiguously - " + pathClasses.size() + " classes represented in selection");
+		hierarchy.removeObjects(merged, true);
+		hierarchy.addPathObject(pathObjectNew);
+		hierarchy.getSelectionModel().setSelectedObject(pathObjectNew);
+		//				pathObject.removePathObjects(children);
+		//				pathObject.addPathObject(pathObjectNew);
+		//				hierarchy.fireHierarchyChangedEvent(pathObject);
+		return true;
+	}
+
+	/**
+	 * Merge the currently-selected annotations to create a new annotation containing the union of their ROIs.
+	 * <p>
+	 * Note:
+	 * <ul>
+	 * <li>The existing annotations will be removed from the hierarchy if possible, therefore should be duplicated first 
+	 * if this is not desired.</li>
+	 * <li>The new object will be set to be the selected object in the hierarchy (which can be used to retrieve it if needed).</li>
+	 * </ul>
+	 * 
+	 * @param hierarchy
+	 * @return
+	 */	public static boolean mergeSelectedAnnotations(final PathObjectHierarchy hierarchy) {
+		return hierarchy == null ? null : mergeAnnotations(hierarchy, hierarchy.getSelectionModel().getSelectedObjects());
+	}
+	
+	/**
+	 * Make an annotation for the current {@link ImageData}, for which the ROI is obtained by subtracting 
+	 * the existing ROI from the ROI of its parent object (or entire image if no suitable parent object is available).
+	 * 
+	 * @param pathObject the existing object defining the ROI to invert
+	 * @return true if an inverted annotation is added to the hierarchy, false otherwise
+	 */
+	public static boolean makeInverseAnnotation(final PathObject pathObject) {
+		return makeInverseAnnotation(getCurrentImageData(), pathObject);
+	}
+	
+
+	/**
+	 * Make an annotation for the specified {@link ImageData}, for which the ROI is obtained by subtracting 
+	 * the existing ROI from the ROI of its parent object (or entire image if no suitable parent object is available).
+	 * 
+	 * @param imageData the imageData for which an inverted annotation should be created
+	 * @param pathObject the existing object defining the ROI to invert
+	 * @return true if an inverted annotation is added to the hierarchy, false otherwise
+	 */
+	public static boolean makeInverseAnnotation(final ImageData<?> imageData, final PathObject pathObject) {
+		if (imageData == null)
+			return false;
+		return makeInverseAnnotation(imageData, Collections.singletonList(pathObject));
+	}
+	
+	/**
+	 * Make an inverse annotation using the current {@link ImageData} and its current selected objects.
+	 * @return true if an inverted annotation is added to the hierarchy, false otherwise
+	 */
+	public static boolean makeInverseAnnotation() {
+		return makeInverseAnnotation(getCurrentImageData());
+	}
+
+	/**
+	 * Make an inverse annotation using the specified {@link ImageData} and current selected objects.
+	 * @param imageData the imageData for which an inverted annotation should be created
+	 * @return true if an inverted annotation is added to the hierarchy, false otherwise
+	 */
+	public static boolean makeInverseAnnotation(final ImageData<?> imageData) {
+		return makeInverseAnnotation(imageData, imageData.getHierarchy().getSelectionModel().getSelectedObjects());
+	}
+	
+	/**
+	 * Make an annotation, for which the ROI is obtained by subtracting the ROIs of the specified objects from the closest 
+	 * common ancestor ROI (or entire image if the closest ancestor is the root).
+	 * <p>
+	 * In an inverted annotation can be created, it is added to the hierarchy and set as selected.
+	 * 
+	 * @param imageData the image containing the annotation
+	 * @param pathObjects the annotation to invert
+	 * @return true if an inverted annotation is added to the hierarchy, false otherwise.
+	 */
+	public static boolean makeInverseAnnotation(final ImageData<?> imageData, Collection<PathObject> pathObjects) {
+		if (imageData == null)
+			return false;
+		
+		var map = pathObjects.stream().filter(p -> p.hasROI() && p.getROI().isArea())
+				.collect(Collectors.groupingBy(p -> p.getROI().getImagePlane()));
+		if (map.isEmpty()) {
+			logger.warn("No area annotations available - cannot created inverse ROI!");
+			return false;
+		}
+		if (map.size() > 1) {
+			logger.error("Cannot merge annotations from different image planes!");
+			return false;
+		}
+		ImagePlane plane = map.keySet().iterator().next();
+		List<PathObject> pathObjectList = map.get(plane);
+				
+		PathObjectHierarchy hierarchy = imageData.getHierarchy();
+		
+		// Try to get the best candidate parent
+		Collection<PathObject> parentSet = pathObjectList.stream().map(p -> p.getParent()).collect(Collectors.toCollection(HashSet::new));
+		PathObject parent;
+		if (parentSet.size() > 1) {
+			parentSet.clear();
+			boolean firstTime = true;
+			for (PathObject temp : pathObjectList) {
+				if (firstTime)
+					parentSet.addAll(PathObjectTools.getAncestorList(temp));
+				else
+					parentSet.retainAll(PathObjectTools.getAncestorList(temp));
+				firstTime = false;
+			}
+			List<PathObject> parents = new ArrayList<>(parentSet);
+			Collections.sort(parents, Comparator.comparingInt(PathObject::getLevel).reversed()
+					.thenComparingDouble(p -> p.hasROI() ? p.getROI().getArea() : Double.MAX_VALUE));
+			parent = parents.get(0);
+		} else
+			parent = parentSet.iterator().next();			
+		
+		// Get the parent area
+		Geometry geometryParent;
+		if (parent == null || parent.isRootObject() || !parent.hasROI())
+			geometryParent = GeometryTools.createRectangle(0, 0, imageData.getServer().getWidth(), imageData.getServer().getHeight());
+		else
+			geometryParent = parent.getROI().getGeometry();
+
+		// Get the parent area to use
+		var union = GeometryTools.union(pathObjectList.stream().map(p -> p.getROI().getGeometry()).collect(Collectors.toList()));
+		var geometry = geometryParent.difference(union);
+
+		// Create the new ROI
+		ROI shapeNew = GeometryTools.geometryToROI(geometry, plane);
+		PathObject pathObjectNew = PathObjects.createAnnotationObject(shapeNew);
+		parent.addPathObject(pathObjectNew);
+		hierarchy.fireHierarchyChangedEvent(parent);	
+		hierarchy.getSelectionModel().setSelectedObject(pathObjectNew);
+		return true;
+	}
+	
+	
+	
+	
+	/**
+	 * Apply an object classifier to the current {@link ImageData}.
+	 * This method throws an {@link IllegalArgumentException} if the classifier cannot be found.
+	 * @param names the name of the classifier within the current project, or file path to a classifier to load from disk.
+	 * 				If more than one name is provided, a composite classifier is created.
+	 * @throws IllegalArgumentException if the classifier cannot be found
+	 */
+	public static void runObjectClassifier(String... names) throws IllegalArgumentException {
+		runObjectClassifier(getCurrentImageData(), names);
+	}
+	
+	/**
+	 * Apply an object classifier to the specified {@link ImageData}.
+	 * This method throws an {@link IllegalArgumentException} if the classifier cannot be found.
+	 * @param imageData 
+	 * @param names the name of the classifier within the current project, or file path to a classifier to load from disk.
+	 * 				If more than one name is provided, a composite classifier is created.
+	 * @throws IllegalArgumentException if the classifier cannot be found
+	 */
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	public static void runObjectClassifier(ImageData imageData, String... names) throws IllegalArgumentException {
+		if (names.length == 0) {
+			logger.warn("Cannot run object classifier - no names provided!");
+			return;			
+		}
+		if (imageData == null) {
+			logger.warn("Cannot run object classifier - no ImageData available!");
+			return;
+		}
+		ObjectClassifier classifier = loadObjectClassifier(names);
+		
+		var pathObjects = classifier.getCompatibleObjects(imageData);
+		if (classifier.classifyObjects(imageData, pathObjects, true) > 0)
+			imageData.getHierarchy().fireObjectClassificationsChangedEvent(classifier, pathObjects);
+	}
+	
+	/**
+	 * Load an object classifier for a project or file path.
+	 * 
+	 * @param names the names of the classifier within the current project, or file paths to a classifier to load from disk.
+	 * 				If more than one name is provided, a composite classifier is created (applying each classifier in sequence).
+	 * @return the requested {@link ObjectClassifier}
+	 * @throws IllegalArgumentException if the classifier cannot be found
+	 */
+	public static ObjectClassifier<BufferedImage> loadObjectClassifier(String... names) throws IllegalArgumentException {
+		var project = getProject();
+		List<ObjectClassifier<BufferedImage>> classifiers = new ArrayList<>();
+		for (String name : names) {
+			ObjectClassifier<BufferedImage> classifier = null;
+			Exception exception = null;
+			if (project != null) {
+				try {
+					var objectClassifiers = project.getObjectClassifiers();
+					if (objectClassifiers.contains(name))
+						classifier = objectClassifiers.get(name);
+				} catch (Exception e) {
+					exception = e;
+					logger.debug("Object classifier '{}' not found in project", name);
+				}
+			}
+			if (classifier == null) {
+				try {
+					var path = Paths.get(name);
+					if (Files.exists(path))
+						classifier = ObjectClassifiers.readClassifier(path);
+				} catch (Exception e) {
+					exception = e;
+					logger.debug("Object classifier '{}' cannot be read from file", name);
+				}
+			}
+			if (classifier == null) {
+				throw new IllegalArgumentException("Unable to find object classifier " + name, exception);
+			} else if (names.length == 1)
+				return classifier;
+			else
+				classifiers.add(classifier);
+		}
+		return ObjectClassifiers.createCompositeClassifier(classifiers);
+	}
+	
+	
+	
+	
+	/**
+	 * Load a pixel classifier for a project or file path.
+	 * 
+	 * @param name the name of the classifier within the current project, or file path to a classifier to load from disk.
+	 * @return the requested {@link PixelClassifier}
+	 * @throws IllegalArgumentException if the classifier cannot be found
+	 */
+	public static PixelClassifier loadPixelClassifier(String name) throws IllegalArgumentException {
+		var project = getProject();
+		Exception exception = null;
+		if (project != null) {
+			try {
+				var pixelClassifiers = project.getPixelClassifiers();
+				if (pixelClassifiers.contains(name))
+					return pixelClassifiers.get(name);
+			} catch (Exception e) {
+				exception = e;
+				logger.debug("Pixel classifier '{}' not found in project", name);
+			}
+		}
+		try {
+			var path = Paths.get(name);
+			if (Files.exists(path))
+				return PixelClassifiers.readClassifier(path);
+		} catch (Exception e) {
+			exception = e;
+			logger.debug("Pixel classifier '{}' cannot be read from file", name);
+		}
+		throw new IllegalArgumentException("Unable to find object classifier " + name, exception);
+	}
+	
+	
+	/**
+	 * Add measurements from pixel classification to the selected objects.
+	 * @param classifierName the pixel classifier name
+	 * @param measurementID
+	 * @see #loadPixelClassifier(String)
+	 */
+	public static void addPixelClassifierMeasurements(String classifierName, String measurementID) {
+		addPixelClassifierMeasurements(loadPixelClassifier(classifierName), measurementID);
+	}
+	
+	/**
+	 * Add measurements from pixel classification to the selected objects.
+	 * @param classifier the pixel classifier
+	 * @param measurementID
+	 */
+	public static void addPixelClassifierMeasurements(PixelClassifier classifier, String measurementID) {
+		var imageData = (ImageData<BufferedImage>)getCurrentImageData();
+		PixelClassifierTools.addMeasurementsToSelectedObjects(imageData, classifier, measurementID);
+	}
+	
+	/**
+	 * Create detection objects based upon the output of a pixel classifier, applied to selected objects.
+	 * If no objects are selected, objects are created across the entire image.
+	 * 
+	 * @param classifierName the name of the pixel classifier
+	 * @param minArea the minimum area of connected regions to retain
+	 * @param minHoleArea the minimum area of connected 'hole' regions to retain
+     * @param options additional options to control how objects are created
+	 * @see #loadPixelClassifier(String)
+	 */
+	public static void createDetectionsFromPixelClassifier(
+			String classifierName, double minArea, double minHoleArea, String... options) {
+		createDetectionsFromPixelClassifier(loadPixelClassifier(classifierName), minArea, minHoleArea, options);
+	}
+
+	/**
+	 * Create detection objects based upon the output of a pixel classifier, applied to selected objects.
+	 * If no objects are selected, objects are created across the entire image.
+	 * 
+	 * @param classifier the pixel classifier
+	 * @param minArea the minimum area of connected regions to retain
+	 * @param minHoleArea the minimum area of connected 'hole' regions to retain
+     * @param options additional options to control how objects are created
+	 */
+	public static void createDetectionsFromPixelClassifier(
+			PixelClassifier classifier, double minArea, double minHoleArea, String... options) {
+		var imageData = (ImageData<BufferedImage>)getCurrentImageData();
+		PixelClassifierTools.createDetectionsFromPixelClassifier(imageData, classifier, minArea, minHoleArea, parseCreateObjectOptions(options));
+	}
+	
+	private static CreateObjectOptions[] parseCreateObjectOptions(String... names) {
+		if (names == null || names.length == 0)
+			return new CreateObjectOptions[0];
+		var objectOptions = new HashSet<CreateObjectOptions>();
+		for (var optionName : names) {
+			try {
+				var option = CreateObjectOptions.valueOf(optionName);
+				objectOptions.add(option);
+			} catch (Exception e) {
+				logger.warn("Could not parse option {}", optionName);
+			}
+		}
+		return objectOptions.toArray(CreateObjectOptions[]::new);
+	}
+	 
+	
+	/**
+	 * Create annotation objects based upon the output of a pixel classifier, applied to selected objects.
+	 * If no objects are selected, objects are created across the entire image.
+	 * 
+	 * @param classifierName the name of the pixel classifier
+	 * @param minArea the minimum area of connected regions to retain
+	 * @param minHoleArea the minimum area of connected 'hole' regions to retain
+     * @param options additional options to control how objects are created
+	 * @see #loadPixelClassifier(String)
+	 */
+	public static void createAnnotationsFromPixelClassifier(
+			String classifierName, double minArea, double minHoleArea, String... options) {
+		createAnnotationsFromPixelClassifier(loadPixelClassifier(classifierName), minArea, minHoleArea, options);
+	}
+
+	/**
+	 * Create annotation objects based upon the output of a pixel classifier, applied to selected objects.
+	 * If no objects are selected, objects are created across the entire image.
+	 * 
+	 * @param classifier the pixel classifier
+	 * @param minArea the minimum area of connected regions to retain
+	 * @param minHoleArea the minimum area of connected 'hole' regions to retain
+     * @param options additional options to control how objects are created
+	 */
+	public static void createAnnotationsFromPixelClassifier(
+			PixelClassifier classifier, double minArea, double minHoleArea, String... options) {
+		var imageData = (ImageData<BufferedImage>)getCurrentImageData();
+		PixelClassifierTools.createAnnotationsFromPixelClassifier(imageData, classifier, minArea, minHoleArea, parseCreateObjectOptions(options));
+	}
+	
+	
+	/**
+	 * Classify detections according to the prediction of the pixel corresponding to the detection centroid using a {@link PixelClassifier}.
+	 * If the detections are cells, the nucleus ROI is used where possible.
+	 * 
+	 * @param classifier the pixel classifier
+	 */
+	public static void classifyDetectionsByCentroid(PixelClassifier classifier) {
+		var imageData = (ImageData<BufferedImage>)getCurrentImageData();
+		PixelClassifierTools.classifyDetectionsByCentroid(imageData, classifier);
+	}
+	
+	/**
+	 * Classify detections according to the prediction of the pixel corresponding to the detection centroid using a {@link PixelClassifier}.
+	 * If the detections are cells, the nucleus ROI is used where possible.
+	 * 
+	 * @param classifierName name of the pixel classifier
+	 */
+	public static void classifyDetectionsByCentroid(String classifierName) {
+		classifyDetectionsByCentroid(loadPixelClassifier(classifierName));
 	}
 	
 }

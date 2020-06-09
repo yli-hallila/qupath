@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.gui.images.servers;
 
 import java.awt.image.BandedSampleModel;
@@ -8,6 +29,8 @@ import java.awt.image.Raster;
 import java.awt.image.SampleModel;
 import java.awt.image.WritableRaster;
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -17,6 +40,7 @@ import org.slf4j.LoggerFactory;
 import qupath.lib.color.ColorModelFactory;
 import qupath.lib.common.ColorTools;
 import qupath.lib.display.ChannelDisplayInfo;
+import qupath.lib.display.SingleChannelDisplayInfo;
 import qupath.lib.images.servers.ImageChannel;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerMetadata;
@@ -24,6 +48,8 @@ import qupath.lib.images.servers.PixelType;
 import qupath.lib.images.servers.TransformingImageServer;
 import qupath.lib.images.servers.ImageServerBuilder.ServerBuilder;
 import qupath.lib.io.GsonTools;
+import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectReader;
 import qupath.lib.regions.RegionRequest;
 
 /**
@@ -33,7 +59,7 @@ import qupath.lib.regions.RegionRequest;
  * 
  * @author Pete Bankhead
  */
-public class ChannelDisplayTransformServer extends TransformingImageServer<BufferedImage> {
+public class ChannelDisplayTransformServer extends TransformingImageServer<BufferedImage> implements PathObjectReader {
 	
 	private static Logger logger = LoggerFactory.getLogger(ChannelDisplayTransformServer.class);
 	
@@ -42,7 +68,12 @@ public class ChannelDisplayTransformServer extends TransformingImageServer<Buffe
 	
 	private ColorModel colorModel;
 	
-	
+	/**
+	 * Create an {@link ImageServer} for which the channels are created dynamically from a list of {@linkplain ChannelDisplayInfo ChannelDisplayInfos}.
+	 * @param server the server providing the underlying data
+	 * @param channels {@link ChannelDisplayInfo} objects defining how the pixels from the wrapped server should be converted to channels in the new server
+	 * @return
+	 */
 	public static ImageServer<BufferedImage> createColorTransformServer(ImageServer<BufferedImage> server, List<ChannelDisplayInfo> channels) {
 		return new ChannelDisplayTransformServer(server, channels);
 	}
@@ -82,13 +113,13 @@ public class ChannelDisplayTransformServer extends TransformingImageServer<Buffe
 		float[] pxFloat = null;
 		int b = 0;
 		for (ChannelDisplayInfo channel : channels) {
-			if (channel instanceof ChannelDisplayInfo.SingleChannelDisplayInfo) {
+			if (channel instanceof SingleChannelDisplayInfo) {
 				if (raster == null) {
 					SampleModel model = new BandedSampleModel(DataBuffer.TYPE_FLOAT, width, height, nChannels());
 					raster = Raster.createWritableRaster(model, null);
 				}
 				if (raster.getTransferType() == DataBuffer.TYPE_FLOAT) {
-					pxFloat = ((ChannelDisplayInfo.SingleChannelDisplayInfo)channel).getValues(img, 0, 0, width, height, pxFloat);
+					pxFloat = ((SingleChannelDisplayInfo)channel).getValues(img, 0, 0, width, height, pxFloat);
 					raster.setSamples(0, 0, width, height, b, pxFloat);
 					b++;
 				} else {
@@ -122,6 +153,14 @@ public class ChannelDisplayTransformServer extends TransformingImageServer<Buffe
 	@Override
 	public ImageServerMetadata getOriginalMetadata() {
 		return metadata;
+	}
+
+	@Override
+	public Collection<PathObject> readPathObjects() throws IOException {
+		var server = getWrappedServer();
+		if (server instanceof PathObjectReader)
+			return ((PathObjectReader)server).readPathObjects();
+		return Collections.emptyList();
 	}
 	
 

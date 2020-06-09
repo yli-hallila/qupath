@@ -4,25 +4,26 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
 package qupath.lib.projects;
 
+import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -78,25 +79,32 @@ public class ProjectIO {
 	 * @param fileProject
 	 * @param cls
 	 * @return
+	 * @throws IOException 
 	 */
+	@SuppressWarnings("unchecked")
 	public static <T> Project<T> loadProject(final File fileProject, final Class<T> cls) throws IOException {
-		try (Reader fileReader = new BufferedReader(new FileReader(fileProject))){
-			Gson gson = new Gson();
-			JsonObject element = gson.fromJson(fileReader, JsonObject.class);
-			// Didn't have the foresight to add a version number from the start...
-			String version = element.has("version") ? element.get("version").getAsString() : null;
-			if (version == null || Arrays.asList("v0.2.0-m2", "v0.2.0-m1").contains(version)) {
-				throw new IllegalArgumentException("Older-style project is not compatible with QuPath " + GeneralTools.getVersion());
-//				return LegacyProject.readFromFile(fileProject, cls);
+		if (cls.equals(BufferedImage.class)) {
+			logger.debug("Loading project from {}", fileProject);
+			try (Reader fileReader = new BufferedReader(new FileReader(fileProject))){
+				Gson gson = new Gson();
+				JsonObject element = gson.fromJson(fileReader, JsonObject.class);
+				// Didn't have the foresight to add a version number from the start...
+				String version = element.has("version") ? element.get("version").getAsString() : null;
+				if (version == null || Arrays.asList("v0.2.0-m2", "v0.2.0-m1").contains(version)) {
+					throw new IllegalArgumentException("Older-style project is not compatible with QuPath " + GeneralTools.getVersion());
+	//				return LegacyProject.readFromFile(fileProject, cls);
+				}
+				return (Project<T>)DefaultProject.loadFromFile(fileProject);
 			}
-			return (Project<T>)DefaultProject.loadFromFile(fileProject);
-		}
+		} else
+			throw new IllegalArgumentException("Cannot load project with generic class " + cls);
 	}
 	
 
 	/**
 	 * Get the default extension for a QuPath project file.
 	 * 
+	 * @param includePeriod 
 	 * @return
 	 */
 	public static String getProjectExtension(boolean includePeriod) {

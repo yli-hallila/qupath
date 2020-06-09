@@ -1,23 +1,23 @@
 /*-
  * #%L
- * This file is part of a QuPath extension.
+ * This file is part of QuPath.
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -34,11 +34,13 @@ import org.slf4j.LoggerFactory;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.StringProperty;
+import qupath.lib.gui.ActionTools;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.extensions.QuPathExtension;
-import qupath.lib.gui.helpers.DisplayHelpers;
-import qupath.lib.gui.panels.PreferencePanel;
+import qupath.lib.gui.panes.PreferencePane;
 import qupath.lib.gui.prefs.PathPrefs;
+import qupath.lib.gui.tools.MenuTools;
 import qupath.lib.images.writers.ome.OMEPyramidWriterCommand;
 
 /**
@@ -58,7 +60,7 @@ public class BioFormatsOptionsExtension implements QuPathExtension {
 		// Request Bio-Formats version - if null, Bio-Formats is missing & we can't install the extension
 		bfVersion = BioFormatsServerBuilder.getBioFormatsVersion();
 		if (bfVersion == null) {
-			DisplayHelpers.showErrorMessage("Bio-Formats extension",
+			Dialogs.showErrorMessage("Bio-Formats extension",
 						"The Bio-Formats extension is installed, but 'bioformats_package.jar' is missing!\n\n" + 
 						"Please make sure both .jar files are copied to the QuPath extensions folder.");
 			return;
@@ -66,10 +68,12 @@ public class BioFormatsOptionsExtension implements QuPathExtension {
 			logger.info("Bio-Formats version {}", bfVersion);
 		}
 		
-		
-		QuPathGUI.addMenuItems(
+		var actionWriter = ActionTools.createAction(new OMEPyramidWriterCommand(qupath), "OME TIFF");
+		actionWriter.setLongText("Write regions as OME-TIFF images. This supports writing image pyramids.");
+		actionWriter.disabledProperty().bind(qupath.imageDataProperty().isNull());
+		MenuTools.addMenuItems(
 				qupath.getMenu("File>Export images...", true),
-				QuPathGUI.createCommandAction(new OMEPyramidWriterCommand(qupath), "OME TIFF"));
+				actionWriter);
 		
 		
 		
@@ -77,7 +81,7 @@ public class BioFormatsOptionsExtension implements QuPathExtension {
 		
 		// Create persistent properties
 		BooleanProperty enableBioformats = PathPrefs.createPersistentPreference("bfEnableBioformats", options.bioformatsEnabled());
-		BooleanProperty useParallelization = PathPrefs.createPersistentPreference("bfUseParallization", options.requestParallelization());
+		BooleanProperty useParallelization = PathPrefs.createPersistentPreference("bfUseParallelization", options.requestParallelization());
 		IntegerProperty memoizationTimeMillis = PathPrefs.createPersistentPreference("bfMemoizationTimeMS", options.getMemoizationTimeMillis());
 //		BooleanProperty parallelizeMultichannel = PathPrefs.createPersistentPreference("bfParallelizeMultichannel", options.requestParallelizeMultichannel());
 
@@ -110,7 +114,7 @@ public class BioFormatsOptionsExtension implements QuPathExtension {
 		skipExtensions.addListener((v, o, n) -> fillCollectionWithTokens(n, options.getSkipAlwaysExtensions()));
 		
 		// Add preferences to QuPath GUI
-		PreferencePanel prefs = QuPathGUI.getInstance().getPreferencePanel();
+		PreferencePane prefs = QuPathGUI.getInstance().getPreferencePane();
 		prefs.addPropertyPreference(enableBioformats, Boolean.class, "Enable Bio-Formats", "Bio-Formats", "Allow QuPath to use Bio-Formats for image reading");
 		prefs.addPropertyPreference(useParallelization, Boolean.class, "Enable Bio-Formats tile parallelization", "Bio-Formats", "Enable reading image tiles in parallel when using Bio-Formats");
 //		prefs.addPropertyPreference(parallelizeMultichannel, Boolean.class, "Enable Bio-Formats channel parallelization (experimental)", "Bio-Formats", "Request multiple image channels in parallel, even if parallelization of tiles is turned off - "

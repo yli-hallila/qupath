@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.images.servers;
 
 import java.awt.image.BandedSampleModel;
@@ -22,7 +43,7 @@ import qupath.lib.regions.RegionRequest;
  * @author Pete Bankhead
  *
  */
-public class ConcatChannelsImageServer extends TransformingImageServer<BufferedImage> {
+class ConcatChannelsImageServer extends TransformingImageServer<BufferedImage> {
 	
 	private ImageServerMetadata originalMetadata;
 	private List<ImageServer<BufferedImage>> allServers = new ArrayList<>();
@@ -33,16 +54,20 @@ public class ConcatChannelsImageServer extends TransformingImageServer<BufferedI
 	 * The order of entries in the collection determines the order in which the channels will be appended.
 	 * <p>
 	 * The main server is used to determine the metadata. If the main server is also inside the 
-	 * collection, then it will be inserted at the corresponding location in the collection; 
-	 * otherwise it will be the first server (i.e. first channels).
+	 * collection, then it will be inserted at the corresponding location in the collection.
+	 * Otherwise, its pixels may not be shown.
+	 * <p>
+	 * (This is a change from earlier QuPath v0.2.0 milestones, where the server would be inserted 
+	 * at the first position - but this was problematic since it required equality tests to work).
 	 * 
 	 * @param server
 	 * @param imageServers
 	 */
-	public ConcatChannelsImageServer(ImageServer<BufferedImage> server, Collection<ImageServer<BufferedImage>> imageServers) {
+	ConcatChannelsImageServer(ImageServer<BufferedImage> server, Collection<ImageServer<BufferedImage>> imageServers) {
 		super(server);
-		if (!imageServers.contains(server))
-			allServers.add(0, server);
+		//
+//		if (!imageServers.contains(server))
+//			allServers.add(0, server);
 		allServers.addAll(imageServers);
 		
 		var channels = new ArrayList<ImageChannel>();
@@ -93,11 +118,18 @@ public class ConcatChannelsImageServer extends TransformingImageServer<BufferedI
 		int nBands = 0;
 		for (var server : allServers) {
 			var img = server.readBufferedImage(request);
-			premultiplied = img.isAlphaPremultiplied();
-			nBands += img.getRaster().getNumBands();
-			rasters.add(img.getRaster());
+			if (img == null) {
+				rasters.add(null);
+				nBands += server.nChannels();
+			} else {
+				premultiplied = img.isAlphaPremultiplied();
+				nBands += img.getRaster().getNumBands();
+				rasters.add(img.getRaster());
+			}
 		}
-		var first = rasters.get(0);
+		var first = rasters.stream().filter(r -> r != null).findFirst().orElse(null);
+		if (first == null)
+			return null;
 		int width = first.getWidth();
 		int height = first.getHeight();
 		
@@ -112,6 +144,8 @@ public class ConcatChannelsImageServer extends TransformingImageServer<BufferedI
 		float[] samples = new float[width * height];
 		int currentBand = 0;
 		for (var temp : rasters) {
+			if (temp == null)
+				continue;
 			int w = Math.min(width, temp.getWidth());
 			int h = Math.min(height, temp.getHeight());
 			for (int b = 0; b < temp.getNumBands(); b++) {

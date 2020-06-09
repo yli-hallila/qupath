@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -47,8 +47,15 @@ import org.slf4j.LoggerFactory;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalCause;
+import com.google.common.cache.Weigher;
+
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalCause;
 
 import qupath.lib.awt.common.AwtTools;
+import qupath.lib.common.ThreadTools;
+import qupath.lib.gui.images.stores.TileWorker;
 import qupath.lib.common.ThreadTools;
 import qupath.lib.gui.images.stores.SizeEstimator;
 import qupath.lib.gui.images.stores.TileWorker;
@@ -59,10 +66,10 @@ import qupath.lib.regions.RegionRequest;
 
 /**
  * A generic ImageRegionStore.
- * 
+ *
  * 
  * @author Pete Bankhead
- * @param <T> 
+ * @param <T>
  *
  */
 abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
@@ -70,7 +77,7 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 	private static final int DEFAULT_THUMBNAIL_WIDTH = 1000;
 	
 	private final static Logger logger = LoggerFactory.getLogger(AbstractImageRegionStore.class);
-	
+
 	// Collection of SwingWorkers used to request image tiles
 	private List<TileWorker<T>> workers = Collections.synchronizedList(new ArrayList<>());
 	
@@ -92,13 +99,17 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 	 * Maximum size of thumbnail, in any dimension.
 	 */
 	private int maxThumbnailSize;
-	
+
 	/**
 	 * Minimum size of thumbnail, in any dimension.
 	 */
 	private int minThumbnailSize = 16;
 
-	
+	/**
+	 * Maximum tile cache size, in bytes
+	 */
+	private long tileCacheSizeBytes;
+
 	private TileRequestManager manager = new TileRequestManager(10);
 	
 	// Create two threadpools: a larger one for images that need to be fetched (e.g. from disk, cloud storage), and a smaller one
@@ -106,16 +117,24 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 	// repainting performance
 	private ExecutorService pool = Executors.newFixedThreadPool(Math.max(8, Math.min(Runtime.getRuntime().availableProcessors() * 4, 32)), ThreadTools.createThreadFactory("region-store-", false));
 	private ExecutorService poolLocal = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), ThreadTools.createThreadFactory("region-store-local-", false));
-	
-	
+
+
 
 	protected AbstractImageRegionStore(final SizeEstimator<T> sizeEstimator, final int thumbnailSize, final long tileCacheSizeBytes) {
 		this.maxThumbnailSize = thumbnailSize;
-		
+		this.tileCacheSizeBytes = tileCacheSizeBytes;
+
+		// Because Guava uses integer weights, and we sometimes have *very* large images, we convert our size estimates KB
+		Weigher<RegionRequest, T> weigher = (var r, var t) -> (int)Long.min(Integer.MAX_VALUE, sizeEstimator.getApproxImageSize(t)/1024);
+		long maxWeight = Long.max(1, tileCacheSizeBytes / 1024);
+		// If concurrency > 1, the maximum size for an individual tile becomes maxWeight/concurrencyLevel
+		// This makes it more difficult to tune the cache size when working with large, non-pyramidal images
+		int concurrencyLevel = 1;
 		Cache<RegionRequest, T> originalCache = CacheBuilder.newBuilder()
-				.weigher((RegionRequest k, T v) -> (int)sizeEstimator.getApproxImageSize(v))
-				.maximumWeight(tileCacheSizeBytes)
+				.weigher(weigher)
+				.maximumWeight(maxWeight)
 				.softValues()
+				.concurrencyLevel(concurrencyLevel)
 //				.recordStats()
 				.removalListener(n -> {
 //					System.err.println(n.getKey() + " (" + cache.size() + ")");
@@ -126,13 +145,14 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 		cache = originalCache.asMap();
 
 		Cache<RegionRequest, T> originalThumbnailCache = CacheBuilder.newBuilder()
-				.weigher((RegionRequest k, T v) -> (int)sizeEstimator.getApproxImageSize(v))
-				.maximumWeight(tileCacheSizeBytes)
+				.weigher(weigher)
+				.concurrencyLevel(1)
+				.maximumWeight(maxWeight)
 				.softValues()
 				.build();
-		
+
 		thumbnailCache = originalThumbnailCache.asMap();
-		
+
 //		cache = new DefaultRegionCache<>(sizeEstimator, tileCacheSizeBytes);
 //		thumbnailCache = new DefaultRegionCache<>(sizeEstimator, tileCacheSizeBytes/4);
 	}
@@ -142,9 +162,17 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 		this(sizeEstimator, DEFAULT_THUMBNAIL_WIDTH, tileCacheSizeBytes);
 	}
 
-	
 	/**
-	 * 
+	 * Get the tile cache size, in bytes.
+	 * Image tiles larger than this cannot be cached.
+	 * @return
+	 */
+	public long getTileCacheSize() {
+		return tileCacheSizeBytes;
+	}
+
+	/**
+	 *
 	 * @param width
 	 * @param height
 	 * @return
@@ -155,11 +183,11 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 		double minDim = Math.min(width, height);
 		if (minDim > minThumbnailSize) {
 			double maxDownsample = minDim / minThumbnailSize;
-			return Math.max(1, Math.min((double)maxDim / maxThumbnailSize, maxDownsample));				
+			return Math.max(1, Math.min((double)maxDim / maxThumbnailSize, maxDownsample));
 		}
 		return 1.0;
 	}
-	
+
 
 	RegionRequest getThumbnailRequest(final ImageServer<T> server, final int zPosition, final int tPosition) {
 		// Determine thumbnail size
@@ -172,7 +200,7 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 		return RegionRequest.createInstance(server.getPath(), downsample, 0, 0, server.getWidth(), server.getHeight(), zPosition, tPosition);
 	}
 	
-	
+
 	/* (non-Javadoc)
 	 * @see qupath.lib.images.stores.ImageRegionStore#getCachedThumbnail(qupath.lib.images.servers.ImageServer, int, int)
 	 */
@@ -247,9 +275,9 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 				tiles.put(entry.getKey(), entry.getValue());
 		}
 		return tiles;
-	}	
-	
-	
+	}
+
+
 	static boolean isTiledImageServer(ImageServer<?> server) {
 		return server.getPreferredDownsamples().length > 1;
 //		return server.getWidth() > PathPrefs.maxNonWholeTiledImageLength() || server.getHeight() > PathPrefs.maxNonWholeTiledImageLength();
@@ -320,6 +348,8 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 	 * 	- null, if this is the value stored in the TiledImageCache (i.e. the tile has previously been fetched, and there is no image corresponding to the request)
 	 * @param server
 	 * @param request
+	 * @param cache
+	 * @param ensureTileReturned
 	 * @return
 	 */
 	protected synchronized Object requestImageTile(final ImageServer<T> server, final RegionRequest request, final Map<RegionRequest, T> cache, final boolean ensureTileReturned) {
@@ -477,21 +507,21 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 		clearCacheForRequestOverlap(cache, request);
 	}
 	
-	
-	
+
+
 	private synchronized void clearCacheForServer(Map<RegionRequest, T> map, ImageServer<?> server) {
 		String serverPath = server.getPath();
 		List<RegionRequest> keys = map.keySet().stream().filter(k -> k.getPath().equals(serverPath)).collect(Collectors.toList());
 		for (var key : keys)
 			map.remove(key);
 	}
-	
+
 	private synchronized void clearCacheForRequestOverlap(Map<RegionRequest, T> map, RegionRequest request) {
 		List<RegionRequest> keys = map.keySet().stream().filter(k -> request.overlapsRequest(k)).collect(Collectors.toList());
 		for (var key : keys)
 			map.remove(key);
 	}
-	
+
 	
 	/* (non-Javadoc)
 	 * @see qupath.lib.images.stores.ImageRegionStore#close()
@@ -640,7 +670,7 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 			this.zPosition = zPosition;
 			this.tPosition = tPosition;
 			this.zSeparation = 0;
-			this.maxZSeparation = Math.min(server.nZSlices()-1, maxZSeparation); // Used for requests that go along z dimension
+			this.maxZSeparation = server == null ? 0 : Math.min(server.nZSlices()-1, maxZSeparation); // Used for requests that go along z dimension
 			updateRequests();
 		}
 		
@@ -658,6 +688,8 @@ abstract class AbstractImageRegionStore<T> implements ImageRegionStore<T> {
 		void updateRequestsForZ(final int z, final double downsample, final boolean stopBeforeDownsample) {
 //			System.out.println("REQUESTING: " + z + ", " + clipShape);
 			// Add tile requests in ascending order of resolutions, to support (faster) progressive image display
+			if (server == null)
+				return;
 			boolean firstLoop = true;
 			double[] downsamples = server.getPreferredDownsamples();
 			Arrays.sort(downsamples);

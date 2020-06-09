@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -49,8 +49,7 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.commands.interfaces.PathCommand;
-import qupath.lib.gui.helpers.DisplayHelpers;
+import qupath.lib.gui.tools.GuiTools;
 
 /**
  * Command to show license info for QuPath and any third-party dependencies.
@@ -58,20 +57,11 @@ import qupath.lib.gui.helpers.DisplayHelpers;
  * @author Pete Bankhead
  *
  */
-public class ShowLicensesCommand implements PathCommand {
+class ShowLicensesCommand {
 
 	final private static Logger logger = LoggerFactory.getLogger(ShowLicensesCommand.class);
 
-	private QuPathGUI qupath;
-
-	public ShowLicensesCommand(final QuPathGUI qupath) {
-		this.qupath = qupath;
-	}
-
-	@Override
-	public void run() {
-
-		logger.trace("Running 'Show licenses' command");
+	public static Stage createLicensesDialog(QuPathGUI qupath) {
 
 		// Create a suitable String to show for QuPath generally
 		StringBuilder sbQuPath = new StringBuilder();
@@ -140,7 +130,7 @@ public class ShowLicensesCommand implements PathCommand {
 		dialog.initModality(Modality.APPLICATION_MODAL);
 		dialog.setTitle("Licenses");
 		dialog.setScene(new Scene(tabPane));
-		dialog.show();
+		return dialog;
 	}
 
 
@@ -162,7 +152,7 @@ public class ShowLicensesCommand implements PathCommand {
 	 * @param dirBase
 	 * @return
 	 */
-	private Pane createLicenseTreePane(final File dirBase) {
+	private static Pane createLicenseTreePane(final File dirBase) {
 		TreeView<File> tree = new TreeView<>();
 		tree.setRoot(new LicenseFileTreeItem(dirBase));
 		tree.setShowRoot(false);
@@ -182,7 +172,7 @@ public class ShowLicensesCommand implements PathCommand {
 		Button btnThirdParty = new Button("Open licenses directory");
 		File dirLicenses = dirBase;
 		btnThirdParty.setOnAction(e -> {
-			DisplayHelpers.openFile(dirLicenses);
+			GuiTools.openFile(dirLicenses);
 		});
 		btnThirdParty.setMaxWidth(Double.MAX_VALUE);
 		

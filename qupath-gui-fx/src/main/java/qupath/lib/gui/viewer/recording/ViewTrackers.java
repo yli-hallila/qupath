@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.gui.viewer.recording;
 
 import java.awt.Dimension;
@@ -10,8 +31,7 @@ import java.io.PrintWriter;
 import java.util.Scanner;
 
 import qupath.lib.common.GeneralTools;
-import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.helpers.DisplayHelpers;
+import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.viewer.QuPathViewer;
 
 /**
@@ -19,7 +39,7 @@ import qupath.lib.gui.viewer.QuPathViewer;
  * @author Pete Bankhead
  *
  */
-public class ViewTrackers {
+class ViewTrackers {
 
 	/**
 	 * Create a new default ViewTracker, without any eye tracking involved.
@@ -217,10 +237,10 @@ public class ViewTrackers {
 
 	static void handleExport(final ViewTracker tracker) {
 		if (tracker.isEmpty()) {
-			DisplayHelpers.showErrorMessage("Tracking export", "Tracker is empty - nothing to export!");
+			Dialogs.showErrorMessage("Tracking export", "Tracker is empty - nothing to export!");
 			return;
 		}
-		File fileExport = QuPathGUI.getSharedDialogHelper().promptToSaveFile(null, null, null, "QuPath tracking data (csv)", "csv");
+		File fileExport = Dialogs.promptToSaveFile(null, null, null, "QuPath tracking data (csv)", "csv");
 		if (fileExport == null)
 			return;
 		
@@ -237,7 +257,7 @@ public class ViewTrackers {
 	}
 
 	static boolean handleImport(final ViewTracker tracker) {
-		File fileImport = QuPathGUI.getSharedDialogHelper().promptForFile(null, null, "QuPath tracking data (csv)", new String[]{"csv"});
+		File fileImport = Dialogs.promptForFile(null, null, "QuPath tracking data (csv)", new String[]{"csv"});
 		if (fileImport == null)
 			return false;
 		
@@ -254,7 +274,7 @@ public class ViewTrackers {
 		}
 		
 		if (content == null) {
-			DisplayHelpers.showErrorMessage("View tracking import", "Unable to read " + fileImport);
+			Dialogs.showErrorMessage("View tracking import", "Unable to read " + fileImport);
 			return false;
 		}
 		tracker.resetRecording();
@@ -262,7 +282,7 @@ public class ViewTrackers {
 			parseSummaryString(content, null, tracker);
 			return true;
 		} catch (Exception e) {
-			DisplayHelpers.showErrorMessage("View tracking import", "Unable to read tracking data from " + fileImport);
+			Dialogs.showErrorMessage("View tracking import", "Unable to read tracking data from " + fileImport);
 			e.printStackTrace();
 		}
 		return false;

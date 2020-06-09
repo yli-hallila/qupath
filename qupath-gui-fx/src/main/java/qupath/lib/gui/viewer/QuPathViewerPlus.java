@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -29,6 +29,7 @@ import java.awt.image.BufferedImage;
 
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
+import javafx.beans.value.ChangeListener;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
@@ -41,9 +42,10 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.text.TextAlignment;
-import qupath.lib.gui.helpers.ColorToolsFX;
 import qupath.lib.gui.images.stores.DefaultImageRegionStore;
 import qupath.lib.gui.prefs.PathPrefs;
+import qupath.lib.gui.tools.ColorToolsFX;
+import qupath.lib.gui.tools.CommandFinderTools;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 
@@ -56,6 +58,10 @@ public class QuPathViewerPlus extends QuPathViewer {
 
 	private ViewerPlusDisplayOptions viewerDisplayOptions;
 	
+	private ChangeListener<Boolean> locationListener = (v, o, n) -> setLocationVisible(n);
+	private ChangeListener<Boolean> overviewListener = (v, o, n) -> setOverviewVisible(n);
+	private ChangeListener<Boolean> scalebarListener = (v, o, n) -> setScalebarVisible(n);
+
 	private AnchorPane basePane = new AnchorPane();
 	
 	private ImageOverview overview = new ImageOverview(this);
@@ -70,7 +76,15 @@ public class QuPathViewerPlus extends QuPathViewer {
 	private int padding = 10;
 	
 	
-	public QuPathViewerPlus(final ImageData<BufferedImage> imageData, final DefaultImageRegionStore regionStore, final OverlayOptions overlayOptions, final ViewerPlusDisplayOptions viewerDisplayOptions) {
+	/**
+	 * Create a new viewer.
+	 * @param imageData image data to show within the viewer
+	 * @param regionStore store used to tile caching
+	 * @param overlayOptions overlay options to control the viewer display
+	 * @param viewerDisplayOptions viewer options to control additional panes and labels
+	 */
+	public QuPathViewerPlus(final ImageData<BufferedImage> imageData, final DefaultImageRegionStore regionStore, final OverlayOptions overlayOptions,
+			final ViewerPlusDisplayOptions viewerDisplayOptions) {
 		super(imageData, regionStore, overlayOptions);
 		
 		
@@ -127,24 +141,33 @@ public class QuPathViewerPlus extends QuPathViewer {
 		sliderZ.valueProperty().bindBidirectional(zPositionProperty());
 //		sliderZ.setOpaque(false);
 		sliderZ.setVisible(false);
-		sliderZ.setTooltip(new Tooltip("Change z-slice"));
-		AnchorPane.setLeftAnchor(sliderZ, (double)padding);
-		AnchorPane.setTopAnchor(sliderZ, (double)padding*2.0);
-
+		var tooltipZ = new Tooltip("Change z-slice");
+		tooltipZ.textProperty().bind(Bindings.createStringBinding(() -> {
+			return "Z-slice (" + zPositionProperty().get() + ")";
+		}, zPositionProperty()));
+		sliderZ.setTooltip(tooltipZ);
+		sliderZ.rotateProperty().bind(Bindings.createDoubleBinding(() -> {
+			if (PathPrefs.invertZSliderProperty().get())
+				return 180.0;
+			return 0.0;
+		}, PathPrefs.invertZSliderProperty()));
 		
 		// Add the t-slider
 		sliderT.valueProperty().bindBidirectional(tPositionProperty());
 //		sliderT.setOpaque(false);
 		sliderT.setVisible(false);
-		sliderT.setTooltip(new Tooltip("Change time point"));
+		var tooltipT = new Tooltip("Change time point");
+		tooltipT.textProperty().bind(Bindings.createStringBinding(() -> {
+			return "Time point (" + tPositionProperty().get() + ")";
+		}, tPositionProperty()));
+		sliderT.setTooltip(tooltipT);
 		
-		AnchorPane.setLeftAnchor(sliderT, padding*2.0);
-		AnchorPane.setTopAnchor(sliderT, (double)padding);
-
+		// Set sliders' position so they make space for command bar (only if needed!)
+		var commandBarDisplay = CommandFinderTools.commandBarDisplayProperty().getValue();
+		setSlidersPosition(!commandBarDisplay.equals(CommandFinderTools.CommandBarDisplay.NEVER));
 
 		basePane.getChildren().addAll(sliderZ, sliderT);
 
-		
 		updateSliders();
 		
 		zPositionProperty().addListener(v -> updateLocationString());
@@ -156,9 +179,9 @@ public class QuPathViewerPlus extends QuPathViewer {
 		setOverviewVisible(viewerDisplayOptions.getShowOverview());
 		setScalebarVisible(viewerDisplayOptions.getShowScalebar());
 		
-		viewerDisplayOptions.showLocationProperty().addListener((e, o, n) -> setLocationVisible(n));
-		viewerDisplayOptions.showOverviewProperty().addListener((e, o, n) -> setOverviewVisible(n));
-		viewerDisplayOptions.showScalebarProperty().addListener((e, o, n) -> setScalebarVisible(n));
+		viewerDisplayOptions.showLocationProperty().addListener(locationListener);
+		viewerDisplayOptions.showOverviewProperty().addListener(overviewListener);
+		viewerDisplayOptions.showScalebarProperty().addListener(scalebarListener);
 	}
 	
 	
@@ -171,7 +194,7 @@ public class QuPathViewerPlus extends QuPathViewer {
 			sliderZ.setVisible(true);
 		} else
 			sliderZ.setVisible(false);	
-		
+				
 		if (server != null && server.nTimepoints() > 1) {
 			setSliderRange(sliderT, getTPosition(), 0, server.nTimepoints()-1);
 			sliderT.setVisible(true);
@@ -184,6 +207,7 @@ public class QuPathViewerPlus extends QuPathViewer {
 		slider.setMin(min);
 		slider.setMax(max);
 		slider.setMajorTickUnit(1);
+		slider.setMinorTickCount(0);
 		slider.setSnapToTicks(true);
 		slider.setShowTickMarks(false);
 		slider.setShowTickLabels(false);
@@ -211,6 +235,10 @@ public class QuPathViewerPlus extends QuPathViewer {
 		panelLocation.setVisible(showLocation);
 	}
 
+	/**
+	 * Returns true if the cursor location is visible, false otherwise.
+	 * @return
+	 */
 	public boolean isLocationVisible() {
 		return panelLocation.isVisible();
 	}
@@ -219,6 +247,10 @@ public class QuPathViewerPlus extends QuPathViewer {
 		scalebar.setVisible(scalebarVisible);
 	}
 
+	/**
+	 * Returns true if the scalebar is visible, false otherwise.
+	 * @return
+	 */
 	public boolean isScalebarVisible() {
 		return scalebar.isVisible();
 	}
@@ -227,18 +259,47 @@ public class QuPathViewerPlus extends QuPathViewer {
 		overview.setVisible(overviewVisible);
 	}
 
+	/**
+	 * Returns true if the image overview is visible, false otherwise.
+	 * @return
+	 */
 	public boolean isOverviewVisible() {
 		return overview.isVisible();
 	}
+	
+	/**
+	 * Sets the Z & T sliders' position to allow space for command bar
+	 * @param down
+	 */
+	public void setSlidersPosition(boolean down) {
+		double slidersTopPadding = (double)padding + (down ? 20 : 0);
+		
+		// Set Z sliders' position
+		AnchorPane.setTopAnchor(sliderZ, (double)padding + slidersTopPadding);
+		AnchorPane.setLeftAnchor(sliderZ, (double)padding);
 
+		// Set T sliders' position
+		AnchorPane.setTopAnchor(sliderT, slidersTopPadding);
+		AnchorPane.setLeftAnchor(sliderT, (double)padding*2);
+	}
+	
+	@Override
+	public void closeViewer() {
+		super.closeViewer();
+		viewerDisplayOptions.showLocationProperty().removeListener(locationListener);
+		viewerDisplayOptions.showOverviewProperty().removeListener(overviewListener);
+		viewerDisplayOptions.showScalebarProperty().removeListener(scalebarListener);
+		
+	}
 
 	// TODO: Make location string protected?
 	void updateLocationString() {
 		String s = null;
 		if (labelLocation != null && hasServer())
-			s = getLocationString(useCalibratedLocationString());
+			s = getFullLocationString(useCalibratedLocationString());
 		if (s != null && s.length() > 0) {
 			labelLocation.setText(s);
+//			labelLocation.setTextAlignment(TextAlignment.CENTER);
 			panelLocation.setOpacity(1);
 		} else {
 			panelLocation.setOpacity(0);
@@ -246,7 +307,7 @@ public class QuPathViewerPlus extends QuPathViewer {
 	}
 
 	
-	public boolean useCalibratedLocationString() {
+	private boolean useCalibratedLocationString() {
 		return useCalibratedLocationString.get();
 	}
 
@@ -259,7 +320,7 @@ public class QuPathViewerPlus extends QuPathViewer {
 		// Ensure the scalebar color is set, if required
 		Bounds boundsFX = scalebar.getNode().getBoundsInParent();
 		Rectangle2D bounds = new Rectangle2D.Double(boundsFX.getMinX(), boundsFX.getMinY(), boundsFX.getMaxX(), boundsFX.getMaxY());
-		if (autoRecolorGridAndScalebar && imageWasUpdated) {
+		if (imageWasUpdated) {
 			if (getDisplayedClipShape(bounds).intersects(0, 0, getServerWidth(), getServerHeight())) {
 				scalebar.setTextColor(getSuggestedOverlayColorFX());
 			}
@@ -268,12 +329,6 @@ public class QuPathViewerPlus extends QuPathViewer {
 			}
 		}
 	}
-		
-	
-	public ViewerPlusDisplayOptions getViewerDisplayOptions() {
-		return viewerDisplayOptions;
-	}
-	
 
 	@Override
 	public void setDownsampleFactor(double downsampleFactor, double cx, double cy) {
@@ -287,6 +342,5 @@ public class QuPathViewerPlus extends QuPathViewer {
 		if (overview != null)
 			overview.repaint();
 	}
-	
-	
+
 }

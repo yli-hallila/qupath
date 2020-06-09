@@ -4,24 +4,26 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
 package qupath.lib.regions;
+
+import java.util.Collection;
 
 import qupath.lib.roi.interfaces.ROI;
 
@@ -87,6 +89,38 @@ public class ImageRegion {
 		int x2 = (int)Math.ceil(pathROI.getBoundsX() + pathROI.getBoundsWidth());
 		int y2 = (int)Math.ceil(pathROI.getBoundsY() + pathROI.getBoundsHeight());
 		return ImageRegion.createInstance(x1, y1, x2-x1, y2-y1, pathROI.getZ(), pathROI.getT());
+	}
+	
+	/**
+	 * Create the smallest region that completely contains the specified ROIs.
+	 * @param rois
+	 * @return
+	 */
+	public static ImageRegion createInstance(final Collection<? extends ROI> rois) {
+		if (rois.isEmpty())
+			return new ImageRegion(0, 0, 0, 0, 0, 0);
+		if (rois.size() == 1)
+			return createInstance(rois.iterator().next());
+		double xMin = Double.POSITIVE_INFINITY;
+		double xMax = Double.NEGATIVE_INFINITY;
+		double yMin = Double.POSITIVE_INFINITY;
+		double yMax = Double.NEGATIVE_INFINITY;
+		ImagePlane plane = null;
+		for (var roi : rois) {
+			if (plane == null)
+				plane = roi.getImagePlane();
+			else if (plane.getT() != roi.getT() || plane.getZ() != roi.getZ())
+				throw new IllegalArgumentException("Failed to create ImageRegion for multiple ROIs, ImagePlanes do not match!");
+			xMin = Math.min(xMin, roi.getBoundsX());
+			yMin = Math.min(yMin, roi.getBoundsY());
+			xMax = Math.max(xMax, roi.getBoundsX() + roi.getBoundsWidth());
+			yMax = Math.max(yMax, roi.getBoundsY() + roi.getBoundsHeight());
+		}
+		int x1 = (int)Math.floor(xMin);
+		int y1 = (int)Math.floor(yMin);
+		int x2 = (int)Math.ceil(xMax);
+		int y2 = (int)Math.ceil(yMax);
+		return ImageRegion.createInstance(x1, y1, x2-x1, y2-y1, plane.getZ(), plane.getT());
 	}
 	
 	/**

@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.classifiers.pixel;
 
 import java.util.ArrayList;
@@ -31,9 +52,6 @@ public class PixelClassifierMetadata {
 	private int inputHeight = -1;
 	private int inputNumChannels = 3;
 	
-	private int outputWidth = -1;
-	private int outputHeight = -1;
-	
 	private ImageServerMetadata.ChannelType outputType = ImageServerMetadata.ChannelType.CLASSIFICATION;
 	private List<ImageChannel> outputChannels;
 	private Map<Integer, PathClass> classificationLabels;
@@ -65,6 +83,7 @@ public class PixelClassifierMetadata {
 
     /**
      * Requested width of input image, or -1 if the classifier is not fussy
+     * @return 
      */
     public int getInputWidth() {
     	return inputWidth;
@@ -72,6 +91,7 @@ public class PixelClassifierMetadata {
 
     /**
      * Requested height of input image, or -1 if the classifier is not fussy
+     * @return 
      */
     public int getInputHeight() {
     	return inputHeight;
@@ -79,27 +99,15 @@ public class PixelClassifierMetadata {
 
     /**
      * Requested number of channels in input image; default is 3 (consistent with assuming RGB)
+     * @return 
      */
     public int getInputNumChannels() {
     	return inputNumChannels;
     }
 
     /**
-     * Output image width for a specified inputWidth, or -1 if the inputWidth is not specified
-     */
-    private int getOutputWidth() {
-    	return outputWidth;
-    }
-
-    /**
-     * Output image height for a specified inputHeight, or -1 if the inputHeight is not specified
-     */
-    private int getOutputHeight() {
-    	return outputHeight;
-    }
-
-    /**
      * Type of output; default is OutputType.Probability
+     * @return 
      */
     public ImageServerMetadata.ChannelType getOutputType() {
     	return outputType;
@@ -108,6 +116,7 @@ public class PixelClassifierMetadata {
     /**
      * List representing the names &amp; display colors for each output channel,
      * or for the output classifications if <code>outputType == OutputType.Classification</code>
+     * @return 
      */
     public synchronized List<ImageChannel> getOutputChannels() {
     	if (outputChannels == null && classificationLabels != null) {
@@ -139,8 +148,7 @@ public class PixelClassifierMetadata {
     	this.inputWidth = builder.inputWidth;
     	this.inputHeight = builder.inputHeight;
     	this.inputNumChannels = builder.inputNumChannels;
-    	this.outputWidth = builder.outputWidth;
-    	this.outputHeight = builder.outputHeight;
+    	this.classificationLabels = builder.classificationLabels;
     	this.outputType = builder.outputType;
     	this.outputChannels = builder.outputChannels;
 //    	this.strictInputSize = builder.strictInputSize;
@@ -160,11 +168,10 @@ public class PixelClassifierMetadata {
     	private int inputHeight = -1;
     	private int inputNumChannels = 3;
     	
-    	private int outputWidth = -1;
-    	private int outputHeight = -1;
-    	
     	private ImageServerMetadata.ChannelType outputType = ImageServerMetadata.ChannelType.CLASSIFICATION;
     	private List<ImageChannel> outputChannels = new ArrayList<>();
+    	
+    	private Map<Integer, PathClass> classificationLabels;
     	
     	/**
     	 * Build a new PixelClassifierMetadata object.
@@ -243,6 +250,16 @@ public class PixelClassifierMetadata {
     	 */
     	public Builder outputChannels(Collection<ImageChannel> channels) {
     		this.outputChannels.addAll(channels);
+    		return this;
+    	}
+    	
+    	/**
+    	 * Specify classification labels. This may be used instead of outputChannels.
+    	 * @param labels
+    	 * @return
+    	 */
+    	public Builder classificationLabels(Map<Integer, PathClass> labels) {
+    		this.classificationLabels = new LinkedHashMap<>(labels);
     		return this;
     	}
     	    	

@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -25,6 +25,7 @@ package qupath.lib.awt.common;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.Shape;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBuffer;
@@ -92,7 +93,7 @@ public class BufferedImageTools {
 	 * @param roi ROI for mask
 	 * @param xOrigin pixel x coordinate of the top left of the region to include in the mask.
 	 * @param yOrigin pixel y coordinate of the top left of the region to include in the mask.
-	 * @param downsample downsample factor to use when generating the mask, i.e. the amoutn to scale.
+	 * @param downsample downsample factor to use when generating the mask, i.e. the amount to scale.
 	 * @return
 	 */
 	public static BufferedImage createROIMask(final int width, final int height, final ROI roi, final double xOrigin, final double yOrigin, final double downsample) {
@@ -124,7 +125,7 @@ public class BufferedImageTools {
 	 * @param shape Shape for mask
 	 * @param xOrigin pixel x coordinate of the top left of the region to include in the mask.
 	 * @param yOrigin pixel y coordinate of the top left of the region to include in the mask.
-	 * @param downsample downsample factor to use when generating the mask, i.e. the amoutn to scale.
+	 * @param downsample downsample factor to use when generating the mask, i.e. the amount to scale.
 	 * @return
 	 */
 	public static BufferedImage createShapeMask(final int width, final int height, final Shape shape, final double xOrigin, final double yOrigin, final double downsample) {
@@ -150,8 +151,9 @@ public class BufferedImageTools {
 	 * <p>
 	 * Images that already have the same type are returned unchanged.
 	 * 
-	 * @param img
-	 * @return
+	 * @param img the input image
+	 * @param requestedType the type to which the image should be converted
+	 * @return the (possibly-new) output image
 	 * @see #is8bitColorType(int)
 	 */
 	public static BufferedImage ensureBufferedImageType(final BufferedImage img, int requestedType) {
@@ -163,6 +165,22 @@ public class BufferedImageTools {
 			return img2;
 		}
 		return img;
+	}
+	
+	/**
+	 * Convert an {@link Image} to a {@link BufferedImage} if necessary, or return the original image unchanged 
+	 * if it is already a {@link BufferedImage}.
+	 * @param image the image to (possible convert)
+	 * @return a {@link BufferedImage}
+	 */
+	public static BufferedImage ensureBufferedImage(Image image) {
+		if (image instanceof BufferedImage)
+			return (BufferedImage)image;
+		var imgBuf = new BufferedImage(image.getWidth(null), image.getWidth(null), BufferedImage.TYPE_INT_ARGB);
+		var g2d = imgBuf.createGraphics();
+		g2d.drawImage(image, 0, 0, null);
+		g2d.dispose();
+		return imgBuf;
 	}
 	
 	/**
@@ -386,6 +404,7 @@ public class BufferedImageTools {
 	 * Count the number of above-threshold pixels in a specified band of a raster, with optional mask.
 	 * 
 	 * @param raster the multi-band raster containing values to check
+	 * @param band the band (channel) to consider
 	 * @param threshold threshold value; pixels with values &gt; threshold this will be counted
 	 * @param rasterMask optional single-channel mask; if not null, corresponding pixels with 0 values in the mask will be skipped
 	 * @return

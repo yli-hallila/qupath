@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.images.writers.ome;
 
 import java.awt.image.BufferedImage;
@@ -19,8 +40,7 @@ import javafx.beans.property.ObjectProperty;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.common.ThreadTools;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.commands.interfaces.PathCommand;
-import qupath.lib.gui.helpers.DisplayHelpers;
+import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.images.ImageData;
@@ -40,8 +60,8 @@ import qupath.lib.regions.RegionRequest;
  * @author Pete Bankhead
  *
  */
-public class OMEPyramidWriterCommand implements PathCommand {
-	
+public class OMEPyramidWriterCommand implements Runnable {
+
 	private final static Logger logger = LoggerFactory.getLogger(OMEPyramidWriterCommand.class);
 	
 	private static ObjectProperty<CompressionType> defaultPyramidCompression = PathPrefs.createPersistentPreference(
@@ -107,7 +127,7 @@ public class OMEPyramidWriterCommand implements PathCommand {
 	public void run() {
 		
 		if (currentTask != null && !currentTask.isDone()) {
-			if (!DisplayHelpers.showConfirmDialog("OME Pyramid writer",
+			if (!Dialogs.showConfirmDialog("OME Pyramid writer",
 					"Do you want to stop the current export?"
 					))
 				// TODO: Delete exporting file?
@@ -118,9 +138,12 @@ public class OMEPyramidWriterCommand implements PathCommand {
 		}
 		
 		QuPathViewer viewer = qupath.getViewer();
+		int zPos = viewer.getZPosition();
+		int tPos = viewer.getTPosition();
+		
 		ImageData<BufferedImage> imageData = viewer.getImageData();
 		if (imageData == null) {
-			DisplayHelpers.showNoImageError("OME Pyramid writer");
+			Dialogs.showNoImageError("OME Pyramid writer");
 			return;
 		}
 		ImageServer<BufferedImage> server = imageData.getServer();
@@ -140,13 +163,13 @@ public class OMEPyramidWriterCommand implements PathCommand {
 		
 		// Set compression - with a sanity check for validity, defaulting to another comparable method if necessary
 		CompressionType compression = getDefaultPyramidCompression();
-		List<CompressionType> compatibleCompression = Arrays.stream(CompressionType.values()).filter(c -> c.supportsImage(server)).collect(Collectors.toList());
-		if (!compatibleCompression.contains(compression))
+		List<String> compatibleCompression = Arrays.stream(CompressionType.values()).filter(c -> c.supportsImage(server)).map(c -> c.toFriendlyString()).collect(Collectors.toList());
+		if (!compatibleCompression.contains(compression.toFriendlyString()))
 			compression = CompressionType.DEFAULT;
 		
 		
 		var params = new ParameterList()
-				.addChoiceParameter("compression", "Compression type", compression, compatibleCompression)
+				.addChoiceParameter("compression", "Compression type", compression.toFriendlyString(), compatibleCompression)
 				.addIntParameter("scaledDownsample", "Pyramidal downsample", scaledDownsample.get(), "", 1, 8,
 						"Amount to downsample each consecutive pyramidal level; use 1 to indicate the image should not be pyramidal")
 				.addIntParameter("tileSize", "Tile size", getDefaultTileSize(), "px", "Tile size for export (should be between 128 and 8192)")
@@ -162,10 +185,10 @@ public class OMEPyramidWriterCommand implements PathCommand {
 		params.setHiddenParameters(server.nTimepoints() == 1, "allT");
 		params.setHiddenParameters(singleTile, "tileSize", "parallelize");
 		
-		if (!DisplayHelpers.showParameterDialog("Export OME-TIFF", params))
+		if (!Dialogs.showParameterDialog("Export OME-TIFF", params))
 			return;
 		
-		compression = (CompressionType)params.getChoiceParameterValue("compression");
+		compression = CompressionType.fromFriendlyString((String)params.getChoiceParameterValue("compression"));
 		defaultPyramidCompression.set(compression);
 		
 		int downsampleScale = params.getIntParameterValue("scaledDownsample");
@@ -191,9 +214,14 @@ public class OMEPyramidWriterCommand implements PathCommand {
 		}
 
 		OMEPyramidWriter.Builder builder = new OMEPyramidWriter.Builder(server);
-		if (region != null)
+		if (region != null) {
 			builder = builder.region(region);
-		
+		} else {
+			if (server.nZSlices() > 1 && !doAllZ)
+				builder.zSlice(zPos);
+			if (server.nTimepoints() > 1 && !doAllT)
+				builder.timePoint(tPos);
+		}
 		
 		builder.compression(compression);
 		
@@ -217,7 +245,7 @@ public class OMEPyramidWriterCommand implements PathCommand {
 		
 		
 		// Prompt for file
-		File fileOutput = qupath.getDialogHelper().promptToSaveFile("Write pyramid", null, null, "OME TIFF pyramid", ".ome.tif");
+		File fileOutput = Dialogs.promptToSaveFile("Write pyramid", null, null, "OME TIFF pyramid", ".ome.tif");
 		if (fileOutput == null)
 			return;
 		String name = fileOutput.getName();
@@ -248,16 +276,16 @@ public class OMEPyramidWriterCommand implements PathCommand {
 		@Override
 		public void run() {
 			try {
-				DisplayHelpers.showInfoNotification("OME Pyramid writer", "Exporting to " + path + " - \nplease keep QuPath running until export is complete!");
+				Dialogs.showInfoNotification("OME Pyramid writer", "Exporting to " + path + " - \nplease keep QuPath running until export is complete!");
 				long startTime = System.currentTimeMillis();
 				writer.writeImage(path);
 				long endTime = System.currentTimeMillis();
 				logger.info(String.format("OME TIFF export to {} complete in %.1f seconds", (endTime - startTime)/1000.0), path);
-				DisplayHelpers.showInfoNotification("OME Pyramid writer", "OME TIFF export complete!");
+				Dialogs.showInfoNotification("OME Pyramid writer", "OME TIFF export complete!");
 			} catch (ClosedByInterruptException e) {
 				logger.warn("OME Pyramid writer closed by interrupt (possibly due to user cancelling it)", e);
 			} catch (Exception e) {
-				DisplayHelpers.showErrorMessage("OME Pyramid writer", e);
+				Dialogs.showErrorMessage("OME Pyramid writer", e);
 			} finally {
 				writer = null;
 			}

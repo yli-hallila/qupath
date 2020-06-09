@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -30,6 +30,8 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import org.locationtech.jts.geom.Geometry;
 
 import qupath.lib.common.GeneralTools;
 import qupath.lib.geom.Point2;
@@ -61,7 +63,9 @@ public class AreaROI extends AbstractPathROI implements Serializable {
 	private static final long serialVersionUID = 1L;
 	
 	transient List<MutableVertices> vertices;
-	
+
+	transient Geometry geometry;
+
 	// We potentially spend a lot of time drawing polygons & assessing whether or not to draw them...
 	// By caching the bounds this can be speeded up
 	transient private ClosedShapeStatistics stats = null;
@@ -313,6 +317,7 @@ public class AreaROI extends AbstractPathROI implements Serializable {
 		
 		private final float[][] x;
 		private final float[][] y;
+		@SuppressWarnings("unused")
 		private final String name;
 		private final int c, z, t;
 		
@@ -342,7 +347,19 @@ public class AreaROI extends AbstractPathROI implements Serializable {
 		}
 		
 	}
+	
+	@Override
+	public Geometry getGeometry() {
+		if (geometry == null) {
+			synchronized(this) {
+				if (geometry == null)
+					geometry = super.getGeometry();
+			}
+		}
+		return geometry;
+	}
 
+	@SuppressWarnings("deprecation")
 	@Override
 	public Shape getShape() {
 		return new AWTAreaROI(this).getShape();

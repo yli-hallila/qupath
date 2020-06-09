@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -79,6 +79,8 @@ public class EllipseROI extends AbstractPathBoundedROI implements Serializable {
 	
 	/**
 	 * Query if the width and height of the ellipse bounding box are the same, optionally using 'non-square' pixels.
+	 * @param pixelWidth 
+	 * @param pixelHeight 
 	 * @return
 	 */
 	public boolean isCircle(double pixelWidth, double pixelHeight) {
@@ -147,6 +149,25 @@ public class EllipseROI extends AbstractPathBoundedROI implements Serializable {
 		return new Ellipse2D.Double(x, y, x2-x, y2-y);
 	}
 	
+//	@Override
+//	public double getMaxDiameter() {
+//		return Math.max(getBoundsWidth(), getBoundsHeight());
+//	}
+//	
+//	@Override
+//	public double getMinDiameter() {
+//		return Math.min(getBoundsWidth(), getBoundsHeight());
+//	}
+//	
+//	@Override
+//	public double getScaledMaxDiameter(double pixelWidth, double pixelHeight) {
+//		return Math.max(getBoundsWidth()*pixelWidth, getBoundsHeight()*pixelHeight);
+//	}
+//	
+//	@Override
+//	public double getScaledMinDiameter(double pixelWidth, double pixelHeight) {
+//		return Math.min(getBoundsWidth()*pixelWidth, getBoundsHeight()*pixelHeight);
+//	}
 	
 	private Object writeReplace() {
 		return new SerializationProxy(this);

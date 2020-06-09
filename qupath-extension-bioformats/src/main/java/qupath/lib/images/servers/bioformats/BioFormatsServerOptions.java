@@ -1,28 +1,30 @@
 /*-
  * #%L
- * This file is part of a QuPath extension.
+ * This file is part of QuPath.
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
 package qupath.lib.images.servers.bioformats;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -58,6 +60,9 @@ public class BioFormatsServerOptions {
 //	private boolean requestParallelizeMultichannel = false;
 	private String pathMemoization;
 	
+	// Bio-Formats supports reader customization through key-value pairs
+	private Map<String, String> readerOptions = new LinkedHashMap<>();
+	
 //	private boolean requestChannelZCorrectionVSI = false;
 	
 	private BioFormatsServerOptions() {}
@@ -78,6 +83,50 @@ public class BioFormatsServerOptions {
 	public void setPathMemoization(final String pathMemoization) {
 		this.pathMemoization = pathMemoization;
 	}
+	
+	/**
+	 * Get a map representing additional arguments that should be passed to readers.
+	 * This method returns a copy of the map, and therefore changes will not automatically be reflected in 
+	 * the options until these are passed to {@link #setReaderOptions(Map)}.
+	 * 
+	 * @return the additional arguments currently requested when opening images
+	 * @see #clearReaderOptions()
+	 * @see #setReaderOptions(Map)
+	 */
+	public synchronized  Map<String, String> getReaderOptions() {
+		return new LinkedHashMap<>(readerOptions);
+	}
+	
+	/**
+	 * Clear all reader options, returning these to their defaults.
+	 * 
+	 * @see #getReaderOptions()
+	 * @see #setReaderOptions(Map)
+	 */
+	public synchronized  void clearReaderOptions() {
+		readerOptions.clear();
+	}
+
+	/**
+	 * Set additional arguments that should be passed to viewers.
+	 * Example:
+	 * <pre>
+	 * 	BioFormatsServerOptions.setReaderOptions(Map.of("zeissczi.autostitch", "false"));
+	 * </pre>
+	 * Note: options are passed to every server, even when irrelevant for the particular server type.
+	 * Therefore they can end up being stored unnecessarily in projects and server paths.
+	 * For that reason it best practice to call {@link #clearReaderOptions()} after options are no longer required.
+	 * 
+	 * @param options the arguments to pass when opening new readers
+	 * 
+	 * @see #clearReaderOptions()
+	 * @see #getReaderOptions()
+	 */
+	public synchronized void setReaderOptions(Map<String, String> options) {
+		this.readerOptions.clear();
+		if (options != null && !options.isEmpty())
+			this.readerOptions.putAll(options);
+	}
 
 	/**
 	 * Get the static instance of BioFormatsServerOptions, available to servers being constructed.
@@ -97,6 +146,7 @@ public class BioFormatsServerOptions {
 
 	/**
 	 * Set whether Bio-Formats should be enabled or disabled (in favor of other readers).
+	 * @param bioformatsEnabled 
 	 */
 	public void setBioformatsEnabled(final boolean bioformatsEnabled) {
 		this.bioformatsEnabled = bioformatsEnabled;
@@ -112,6 +162,7 @@ public class BioFormatsServerOptions {
 
 	/**
 	 * Set the number of milliseconds that must elapse when opening an image before a memoization file is generated.
+	 * @param memoizationTimeMillis 
 	 */
 	public void setMemoizationTimeMillis(final int memoizationTimeMillis) {
 		this.memoizationTimeMillis = memoizationTimeMillis;

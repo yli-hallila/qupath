@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -25,10 +25,8 @@ package qupath.lib.gui.commands;
 
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
+import javafx.beans.value.ObservableValue;
 import javafx.util.Duration;
-import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.ViewerManager;
-import qupath.lib.gui.commands.interfaces.PathCommand;
 import qupath.lib.gui.viewer.QuPathViewer;
 
 /**
@@ -37,13 +35,13 @@ import qupath.lib.gui.viewer.QuPathViewer;
  * @author Pete Bankhead
  *
  */
-public class ZoomCommand implements PathCommand {
+class ZoomCommand implements Runnable {
 	
-	private ViewerManager<?> qupath;
+	private ObservableValue<? extends QuPathViewer> viewerValue;
 	private int zoomAmount;
 
-	public ZoomCommand(final ViewerManager<?> qupath, final int zoomAmount) {
-		this.qupath = qupath;
+	public ZoomCommand(final ObservableValue<? extends QuPathViewer> viewerValue, final int zoomAmount) {
+		this.viewerValue = viewerValue;
 		this.zoomAmount = zoomAmount;
 	}
 
@@ -51,7 +49,7 @@ public class ZoomCommand implements PathCommand {
 	
 	@Override
 	public void run() {
-		QuPathViewer viewer = qupath.getViewer();
+		QuPathViewer viewer = viewerValue.getValue();
 		if (viewer != null) {
 			if (timer != null)
 				timer.stop();
@@ -67,24 +65,15 @@ public class ZoomCommand implements PathCommand {
 			timer.setCycleCount(15);
 			timer.playFromStart();
 		}
-//			viewer.zoomIn(zoomAmount);
 	}
 	
 	
-	public static class ZoomIn extends ZoomCommand {
-
-		public ZoomIn(final QuPathGUI qupath) {
-			super(qupath, -10);
-		}
-				
+	public static ZoomCommand createZoomInCommand(final ObservableValue<? extends QuPathViewer> viewerValue) {
+		return new ZoomCommand(viewerValue, -10);
 	}
 
-	public static class ZoomOut extends ZoomCommand {
-
-		public ZoomOut(final QuPathGUI qupath) {
-			super(qupath, 10);
-		}
-				
+	public static ZoomCommand createZoomOutCommand(final ObservableValue<? extends QuPathViewer> viewerValue) {
+		return new ZoomCommand(viewerValue, 10);
 	}
-	
+
 }

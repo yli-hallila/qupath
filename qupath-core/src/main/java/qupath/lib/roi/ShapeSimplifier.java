@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -27,8 +27,10 @@ import java.awt.Shape;
 import java.awt.geom.Path2D;
 import java.awt.geom.PathIterator;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.Set;
 
 import qupath.lib.geom.Point2;
 import qupath.lib.regions.ImagePlane;
@@ -61,6 +63,23 @@ public class ShapeSimplifier {
 	 * @param altitudeThreshold
 	 */
 	public static void simplifyPolygonPoints(final List<Point2> points, final double altitudeThreshold) {
+		
+		if (points.size() <= 1)
+			return;
+		
+		// Remove duplicates first
+		var iter = points.iterator();
+		Point2 lastPoint = iter.next();
+		while (iter.hasNext()) {
+			var nextPoint = iter.next();
+			if (nextPoint.equals(lastPoint))
+				iter.remove();
+			else
+				lastPoint = nextPoint;
+		}
+		if (lastPoint.equals(points.get(0)))
+			iter.remove();
+		
 		
 		if (points.size() <= 3)
 			return;
@@ -96,6 +115,7 @@ public class ShapeSimplifier {
 		
 		double maxArea = 0;
 		int minSize = Math.max(n / 100, 3);
+		Set<Point2> toRemove = new HashSet<>();
 		while (queue.size() > minSize) {
 			PointWithArea pwa = queue.poll();
 //			logger.info("BEFORE: " + pwa + " (counter " + counter + ")");
@@ -111,7 +131,8 @@ public class ShapeSimplifier {
 				maxArea = pwa.getArea();
 			
 			// Remove the point & update accordingly
-			points.remove(pwa.getPoint());
+//			points.remove(pwa.getPoint());
+			toRemove.add(pwa.getPoint());
 			
 			pwaPrevious = pwa.getPrevious();
 			PointWithArea pwaNext = pwa.getNext();
@@ -128,6 +149,7 @@ public class ShapeSimplifier {
 			
 //			logger.info(pwa);
 		}
+		points.removeAll(toRemove);
 	}
 	
 	

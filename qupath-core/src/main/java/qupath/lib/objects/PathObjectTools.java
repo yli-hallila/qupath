@@ -4,50 +4,62 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
 package qupath.lib.objects;
 
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Line2D;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Map.Entry;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.prep.PreparedGeometry;
 import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
+import org.locationtech.jts.index.strtree.STRtree;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import qupath.lib.geom.Point2;
+import qupath.lib.measurements.MeasurementList;
 import qupath.lib.objects.classes.PathClass;
+import qupath.lib.objects.classes.PathClassFactory;
+import qupath.lib.objects.classes.PathClassTools;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.objects.hierarchy.TMAGrid;
+import qupath.lib.regions.ImagePlane;
 import qupath.lib.regions.ImageRegion;
 import qupath.lib.roi.LineROI;
+import qupath.lib.roi.PointsROI;
 import qupath.lib.roi.RoiTools;
-import qupath.lib.roi.PolylineROI;
 import qupath.lib.roi.ROIs;
 import qupath.lib.roi.interfaces.ROI;
 
@@ -178,47 +190,16 @@ public class PathObjectTools {
 	 * @return
 	 */
 	public static int countDescendants(final PathObject pathObject) {
-		int count = pathObject.nChildObjects();
-		for (PathObject childObject : pathObject.getChildObjectsAsArray())
-			count += countDescendants(childObject);
-		return count;
-	}
-
-	/**
-	 * Count the descendants of a PathObject recursively, limited to a specific class.
-	 * 
-	 * @param pathObject
-	 * @return
-	 */
-	public static int countChildren(final PathObject pathObject, final Class<? extends PathObject> cls, final boolean allDescendents) {
-		int count = 0;
-		for (PathObject childObject : pathObject.getChildObjectsAsArray()) {
-			if (cls.isAssignableFrom(childObject.getClass()))
-				count++;
-			if (childObject.hasChildren() && allDescendents)
-				count += countChildren(childObject, cls, allDescendents);
-		}
-		return count;
+//		int count = pathObject.nChildObjects();
+//		for (PathObject childObject : pathObject.getChildObjectsAsArray())
+//			count += countDescendants(childObject);
+//		if (count > 0)
+//			System.err.println(count);
+//		return count;
+		return pathObject.nDescendants();
 	}
 
 	
-
-	/**
-	 * Count the descendants of a PathObject recursively, limited to a specific PathClass.
-	 * 
-	 * @param pathObject
-	 * @return
-	 */
-	public static int countChildren(final PathObject pathObject, final PathClass pathClass, final boolean allDescendents) {
-		int count = 0;
-		for (PathObject childObject : pathObject.getChildObjectsAsArray()) {
-			if (pathClass.equals(childObject.getPathClass()))
-				count++;
-			if (childObject.hasChildren() && allDescendents)
-				count += countChildren(childObject, pathClass, allDescendents);
-		}
-		return count;
-	}
 
 	/**
 	 * Test whether one ROI is can completely contain a second ROI.
@@ -233,6 +214,7 @@ public class PathObjectTools {
 	 * @param childROI
 	 * @return
 	 */
+	@Deprecated
 	public static boolean containsROI(final ROI parentROI, final ROI childROI) {
 		// Check for nulls... just to be sure
 		if (parentROI == null || childROI == null || !parentROI.isArea() || childROI.isEmpty() || parentROI.isEmpty())
@@ -271,9 +253,12 @@ public class PathObjectTools {
 		
 		// Check shapes
 		for (Point2 p : childROI.getAllPoints()) {
-			if (!childROI.contains(p.getX(), p.getY()))
+			if (!parentROI.contains(p.getX(), p.getY()))
 				return false;
 		}
+		
+		if (parentROI.isArea() && childROI.isArea())
+			return parentROI.getGeometry().covers(childROI.getGeometry());
 		
 //		List<Point> points = parentArea.getPolygonPoints();
 //		for (Point p : childROI.getPolygonPoints()) {
@@ -368,6 +353,7 @@ public class PathObjectTools {
 	 * @param childObject
 	 * @return
 	 */
+	@Deprecated
 	public static boolean containsObject(PathObject parentObject, PathObject childObject) {
 		if (parentObject == null || childObject == null)
 			return false;
@@ -446,6 +432,64 @@ public class PathObjectTools {
 		}
 		return null;
 	}
+	
+	
+	/**
+	 * Convert a collection of PathObjects to Point annotations, based on ROI centroids, and add the points to the hierarchy.
+	 * 
+	 * @param hierarchy the object hierarchy containing the objects, and to which the points should be added
+	 * @param pathObjects input objects; these are expected to have ROIs
+	 * @param preferNucleus if true, request the nucleus ROI from cell objects where possible; if false, request the outer ROI. 
+	 * 					    This has no effect if the object is not a cell, or does not have two ROIs.
+	 * @param deleteObjects if true, delete the objects from the input collection after point conversion; if false, retain both original objects and points
+	 * 
+	 * @see #convertToPoints(Collection, boolean)
+	 */
+	public static void convertToPoints(PathObjectHierarchy hierarchy, Collection<PathObject> pathObjects, boolean preferNucleus, boolean deleteObjects) {
+		var points = convertToPoints(pathObjects, preferNucleus);
+		if (deleteObjects)
+			hierarchy.removeObjects(pathObjects, true);
+		hierarchy.addPathObjects(points);
+	}
+	
+	
+	/**
+	 * Convert a collection of PathObjects to Point annotations, based on ROI centroids.
+	 * Each output annotation contains all points corresponding to input objects with the same classification.
+	 * Consequently, the size of the output collection is equal to the number of distinct classifications 
+	 * found among the input objects.
+	 * 
+	 * @param pathObjects input objects; these are expected to have ROIs
+	 * @param preferNucleus if true, request the nucleus ROI from cell objects where possible; if false, request the outer ROI. 
+	 * 					    This has no effect if the object is not a cell, or does not have two ROIs.
+	 * @return a collection of annotations with point ROIs
+	 * 
+	 * @see #convertToPoints(PathObjectHierarchy, Collection, boolean, boolean)
+	 */
+	public static Collection<PathObject> convertToPoints(Collection<PathObject> pathObjects, boolean preferNucleus) {
+		// Create Points lists for each class
+		Map<PathClass, List<Point2>> pointsMap = new HashMap<>();
+		for (PathObject pathObject : pathObjects) {
+			PathClass pathClass = pathObject.getPathClass();
+			List<Point2> points = pointsMap.get(pathClass);
+			if (points == null) {
+				points = new ArrayList<>();
+				pointsMap.put(pathClass, points);
+			}
+			var roi = PathObjectTools.getROI(pathObject, preferNucleus);
+			points.add(new Point2(roi.getCentroidX(), roi.getCentroidY()));
+		}
+		
+		// Create & add annotation objects to hierarchy
+		List<PathObject> annotations = new ArrayList<>();
+		for (Entry<PathClass, List<Point2>> entry : pointsMap.entrySet()) {
+			PathObject pointObject = PathObjects.createAnnotationObject(ROIs.createPointsROI(entry.getValue(), ImagePlane.getDefaultPlane()));
+			pointObject.setPathClass(entry.getKey());
+			annotations.add(pointObject);
+		}
+		return annotations;
+	}
+	
 	
 	/**
 	 * Check if a hierarchy contains a specified PathObject.
@@ -547,7 +591,7 @@ public class PathObjectTools {
 	 * @param pathObject
 	 * @return
 	 */
-	public static List<PathObject> getAncenstorList(final PathObject pathObject) {
+	public static List<PathObject> getAncestorList(final PathObject pathObject) {
 		List<PathObject> ancestors = new ArrayList<>();
 		PathObject parent = pathObject;
 		while (parent != null) {
@@ -557,6 +601,31 @@ public class PathObjectTools {
 		return ancestors;
 	}
 
+	/**
+	 * Swap the name and {@link PathClass} of an object.
+	 * This can be used as a simple way to preserve a classification that might be required later.
+	 * @param pathObject the object to adjust
+	 * @param includeColor optionally set the color of the object to the color of the classification
+	 */
+	public static void swapNameAndClass(PathObject pathObject, boolean includeColor) {
+		var pathClass = pathObject.getPathClass();
+		var name = pathObject.getName();
+		var color = pathObject.getColorRGB();
+		if (name == null)
+			pathObject.setPathClass(null);
+		else
+			pathObject.setPathClass(PathClassFactory.getPathClass(name, color));
+		if (pathClass == null) {
+			pathObject.setName(null);
+			if (includeColor)
+				pathObject.setColorRGB(null);
+		} else {
+			pathObject.setName(pathClass.toString());
+			if (includeColor)
+				pathObject.setColorRGB(pathClass.getColor());				
+		}
+	}
+	
 	/**
 	 * Parse a string input representing potential TMA core labels.
 	 * 
@@ -663,15 +732,24 @@ public class PathObjectTools {
 	 * @return
 	 */
 	public static Collection<PathObject> getDescendantObjects(PathObject pathObject, Collection<PathObject> pathObjects, Class<? extends PathObject> cls) {
+		if (pathObject == null || !pathObject.hasChildren())
+			return pathObjects == null ? Collections.emptyList() : pathObjects;
+		
 		if (pathObjects == null)
 			pathObjects = new ArrayList<>();
-		if (pathObject == null || !pathObject.hasChildren())
-			return pathObjects;
+		if (cls == null)
+			return pathObject.getDescendantObjects(pathObjects);
 		addPathObjectsRecursively(pathObject.getChildObjectsAsArray(), pathObjects, cls);
 		return pathObjects;
+		
+		// Alternative method (doesn't require a new array to be created every time child objects are requested)
+//		List<PathObject> buffer = new ArrayList<>();
+//		pathObject.getChildObjects(buffer);
+//		addPathObjectsRecursively(buffer, pathObjects, cls);
+//		return pathObjects;
 	}
 	
-	private static void addPathObjectsRecursively(PathObject[]pathObjectsInput, Collection<PathObject> pathObjects, Class<? extends PathObject> cls) {
+	private static void addPathObjectsRecursively(PathObject[] pathObjectsInput, Collection<PathObject> pathObjects, Class<? extends PathObject> cls) {
 		for (PathObject childObject : pathObjectsInput) {
 			if (cls == null || cls.isInstance(childObject)) {
 				pathObjects.add(childObject);
@@ -679,6 +757,428 @@ public class PathObjectTools {
 			if (childObject.hasChildren())
 				addPathObjectsRecursively(childObject.getChildObjectsAsArray(), pathObjects, cls);
 		}
+	}
+	
+//	private static void addPathObjectsRecursively(Collection<PathObject> pathObjectsInput, Collection<PathObject> pathObjects, Class<? extends PathObject> cls) {
+//		Collection<PathObject> buffer = null;
+//		for (PathObject childObject : pathObjectsInput) {
+//			if (cls == null || cls.isInstance(childObject)) {
+//				pathObjects.add(childObject);
+//			}
+//			if (childObject.hasChildren()) {
+//				if (buffer == null)
+//					buffer = new ArrayList<>();
+//				else
+//					buffer.clear();
+//				childObject.getChildObjects(buffer);
+//				addPathObjectsRecursively(buffer, pathObjects, cls);
+//			}
+//		}
+//	}
+	
+	
+//	/**
+//	 * Split annotations containing multi-point ROIs into separate single-point ROIs.
+//	 * 
+//	 * @param hierarchy the object hierarchy
+//	 * @param selectedOnly if true, consider only annotations that are currently selected; if false, consider all point annotations in the hierarchy
+//	 * @return true if changes are made to the hierarchy, false otherwise
+//	 */
+//	public static boolean splitPoints(PathObjectHierarchy hierarchy, boolean selectedOnly) {
+//		if (hierarchy == null) {
+//			logger.debug("No hierarchy available, cannot split points!");
+//			return false;
+//		}
+//		return splitPoints(hierarchy, selectedOnly ? hierarchy.getSelectionModel().getSelectedObjects() : hierarchy.getAnnotationObjects());
+//	}
+//
+//	/**
+//	 * Split annotations containing multi-point ROIs into separate single-point ROIs.
+//	 * 
+//	 * @param hierarchy the object hierarchy
+//	 * @param pathObjects a collection of point annotations to split; non-points and non-annotations will be ignored
+//	 * @return pathObjects if changes are made to the hierarchy, false otherwise
+//	 */
+//	public static boolean splitPoints(PathObjectHierarchy hierarchy, Collection<PathObject> pathObjects) {
+//		var points = pathObjects.stream().filter(p -> p.isAnnotation() && p.getROI().isPoint() && p.getROI().getNumPoints() > 1).collect(Collectors.toList());
+//		if (points.isEmpty()) {
+//			logger.debug("No (multi)point ROIs available to split!");			
+//			return false;
+//		}
+//		List<PathObject> newObjects = new ArrayList<>();
+//		for (PathObject pathObject : points) {
+//			ROI p = pathObject.getROI();
+//			ImagePlane plane = p.getImagePlane();
+//			PathClass pathClass = pathObject.getPathClass();
+//			for (Point2 p2 : p.getAllPoints()) {
+//				PathObject temp = PathObjects.createAnnotationObject(ROIs.createPointsROI(p2.getX(), p2.getY(), plane), pathClass);
+//				newObjects.add(temp);
+//			}
+//		}
+//		hierarchy.removeObjects(points, true);
+//		hierarchy.addPathObjects(newObjects);
+//		// Reset the selection
+//		hierarchy.getSelectionModel().clearSelection();
+//		return true;
+//	}
+	
+	/**
+	 * Merge point annotations sharing the same {@link PathClass} and {@link ImagePlane} as the selected annotations,
+	 * creating multi-point annotations for all matching points and removing the (previously-separated) annotations.
+	 * 
+	 * @param hierarchy object hierarchy to modify
+	 * @return true if changes are made to the hierarchy, false otherwise
+	 */
+	public static boolean mergePointsForSelectedObjectClasses(PathObjectHierarchy hierarchy) {
+		var pathClasses = hierarchy.getSelectionModel().getSelectedObjects().stream()
+				.filter(p -> p.isAnnotation() && p.getROI().isPoint())
+				.map(p -> p.getPathClass())
+				.collect(Collectors.toSet());
+		boolean changes = false;
+		for (PathClass pathClass : pathClasses)
+			changes = changes || mergePointsForClass(hierarchy, pathClass);
+		return changes;
+	}
+	
+	/**
+	 * Merge point annotations sharing the same {@link PathClass} and {@link ImagePlane}, 
+	 * creating multi-point annotations for all matching points and removing the (previously-separated) annotations.
+	 * 
+	 * @param hierarchy object hierarchy to modify
+	 * @return true if changes are made to the hierarchy, false otherwise
+	 */
+	public static boolean mergePointsForAllClasses(PathObjectHierarchy hierarchy) {
+		if (hierarchy == null)
+			return false;
+		var pathClasses = hierarchy.getAnnotationObjects().stream()
+			.filter(p -> p.getROI().isPoint())
+			.map(p -> p.getPathClass())
+			.collect(Collectors.toSet());
+		boolean changes = false;
+		for (PathClass pathClass : pathClasses)
+			changes = changes || mergePointsForClass(hierarchy, pathClass);
+		return changes;
+	}
+	
+	/**
+	 * Merge point annotations with the specified {@link PathClass} sharing the same {@link ImagePlane}, 
+	 * creating a single multi-point annotation for all matching points and removing the (previously-separated) annotations.
+	 * 
+	 * @param hierarchy object hierarchy to modify
+	 * @param pathClass classification for annotations to merge
+	 * @return true if changes are made to the hierarchy, false otherwise
+	 * 
+	 * @see #mergePointsForAllClasses(PathObjectHierarchy)
+	 */
+	public static boolean mergePointsForClass(PathObjectHierarchy hierarchy, PathClass pathClass) {
+		var map = hierarchy.getAnnotationObjects().stream()
+				.filter(p -> p.getROI().isPoint() && p.getPathClass() == pathClass)
+				.collect(Collectors.groupingBy(p -> p.getROI().getImagePlane()));
+		
+		List<PathObject> toRemove = new ArrayList<>();
+		List<PathObject> toAdd = new ArrayList<>();
+		for (var entry : map.entrySet()) {
+			List<PathObject> objectsToMerge = entry.getValue();
+			if (objectsToMerge.size() <= 1)
+				continue;
+			// Create new points object
+			List<Point2> pointsList = new ArrayList<>();
+			for (PathObject temp : objectsToMerge) {
+				pointsList.addAll(((PointsROI)temp.getROI()).getAllPoints());
+			}
+			var points = ROIs.createPointsROI(pointsList, entry.getKey());
+			toAdd.add(PathObjects.createAnnotationObject(points, pathClass));
+			toRemove.addAll(objectsToMerge);
+		}
+		if (toAdd.isEmpty() && toRemove.isEmpty())
+			return false;
+		hierarchy.removeObjects(toRemove, true);
+		hierarchy.addPathObjects(toAdd);
+		return true;
+	}
+	
+	/**
+	 * Standardize the classifications for a collection of objects.
+	 * This involves sorting the names of derived classes alphabetically, and removing duplicates.
+	 * 
+	 * @param pathObjects collection of objects with classifications that should be standardized
+	 * @return true if changes were made, false otherwise
+	 */
+	public static boolean standardizeClassifications(Collection<PathObject> pathObjects) {
+		return standardizeClassifications(pathObjects, Comparator.naturalOrder());
+	}
+	
+	/**
+	 * Standardize the classifications for a collection of objects.
+	 * This involves sorting the names of derived classes, and removing duplicates.
+	 * 
+	 * @param pathObjects collection of objects with classifications that should be standardized
+	 * @param comparator comparator to use when sorting
+	 * @return true if changes were made, false otherwise
+	 */
+	public static boolean standardizeClassifications(Collection<PathObject> pathObjects, Comparator<String> comparator) {
+		int nChanges = 0;
+		Map<PathClass, PathClass> map = new HashMap<>();
+		for (var pathObject : pathObjects) {
+			var pathClass = pathObject.getPathClass();
+			if (pathClass == null)
+				continue;
+			PathClass pathClassNew;
+			if (!map.containsKey(pathClass)) {
+				pathClassNew =
+						PathClassTools.sortNames(
+							PathClassTools.uniqueNames(pathClass),
+						comparator);
+				map.put(pathClass, pathClassNew);
+			} else
+				pathClassNew = map.get(pathClass);
+			
+			if (!pathClass.equals(pathClassNew)) {
+				pathObject.setPathClass(pathClassNew);
+				nChanges++;
+			}
+		}
+		return nChanges > 0;		
+	}
+	
+	
+	/**
+	 * Create a(n optionally) transformed version of a {@link PathObject}.
+	 * <p>
+	 * Note: only detections (including tiles and cells) and annotations are supported by this method.
+	 * Other object types (e.g. TMA cores) result in an {@link UnsupportedOperationException} being thrown.
+	 * 
+	 * @param pathObject the object to transform; this will be unchanged
+	 * @param transform optional affine transform; if {@code null}, this effectively acts to duplicate the object
+	 * @param copyMeasurements if true, the measurement list of the new object will be populated with the measurements of pathObject
+	 * 
+	 * @return a duplicate of pathObject, with affine transform applied to the object's ROI(s) if required
+	 */
+	public static PathObject transformObject(PathObject pathObject, AffineTransform transform, boolean copyMeasurements) {
+		ROI roi = maybeTransformROI(pathObject.getROI(), transform);
+		PathClass pathClass = pathObject.getPathClass();
+		PathObject newObject;
+		if (pathObject instanceof PathCellObject) {
+			ROI roiNucleus = maybeTransformROI(((PathCellObject)pathObject).getNucleusROI(), transform);
+			newObject = PathObjects.createCellObject(roi, roiNucleus, pathClass, null);
+		} else if (pathObject instanceof PathTileObject) {
+			newObject = PathObjects.createTileObject(roi, pathClass, null);			
+		} else if (pathObject instanceof PathDetectionObject) {
+			newObject = PathObjects.createDetectionObject(roi, pathClass, null);			
+		} else if (pathObject instanceof PathAnnotationObject) {
+			newObject = PathObjects.createAnnotationObject(roi, pathClass, null);			
+		} else
+			throw new UnsupportedOperationException("Unable to transform object " + pathObject);
+		if (copyMeasurements && !pathObject.getMeasurementList().isEmpty()) {
+			MeasurementList measurements = pathObject.getMeasurementList();
+			for (int i = 0; i < measurements.size(); i++) {
+				String name = measurements.getMeasurementName(i);
+				double value = measurements.getMeasurementValue(i);
+				newObject.getMeasurementList().addMeasurement(name, value);
+			}
+			newObject.getMeasurementList().close();
+		}
+		return newObject;
+	}
+	
+	private static ROI maybeTransformROI(ROI roi, AffineTransform transform) {
+		if (roi == null || transform == null || transform.isIdentity())
+			return roi;
+		return RoiTools.transformROI(roi, transform);
+	}
+	
+	
+	/**
+	 * Duplicate all the selected objects in a hierarchy.
+	 * 
+	 * @param hierarchy the hierarchy containing the objects to duplicate
+	 * @return true if the hierarchy is changed, false otherwise
+	 */
+	public static boolean duplicateAllSelectedObjects(PathObjectHierarchy hierarchy) {
+		return duplicateSelectedObjects(hierarchy, null);
+	}
+	
+	/**
+	 * Duplicate the selected annotation objects. Selected objects that are not annotations will be ignored.
+	 * 
+	 * @param hierarchy the hierarchy containing the objects to duplicate
+	 * @return true if the hierarchy is changed, false otherwise
+	 */
+	public static boolean duplicateSelectedAnnotations(PathObjectHierarchy hierarchy) {
+		return duplicateSelectedObjects(hierarchy, p -> p.isAnnotation());
+	}
+	
+	/**
+	 * Duplicate the selected objects 
+	 * 
+	 * @param hierarchy the hierarchy containing the objects to duplicate
+	 * @param predicate optional predicate (may be null) used to filter out invalid selected options that should not be duplicated
+	 * @return true if the hierarchy is changed, false otherwise
+	 */
+	public static boolean duplicateSelectedObjects(PathObjectHierarchy hierarchy, Predicate<PathObject> predicate) {
+		if (predicate == null)
+			return duplicateObjects(hierarchy, new ArrayList<>(hierarchy.getSelectionModel().getSelectedObjects()));
+		var list = hierarchy.getSelectionModel().getSelectedObjects()
+				.stream()
+				.filter(predicate)
+				.collect(Collectors.toList());
+		return duplicateObjects(hierarchy, list);
+	}
+	
+	/**
+	 * Duplicate the specified objects.
+	 * @param hierarchy hierarchy containing the objects to duplicate
+	 * @param pathObjects objects that should be duplicated
+	 * @return true if the hierarchy is changed, false otherwise
+	 */
+	public static boolean duplicateObjects(PathObjectHierarchy hierarchy, Collection<PathObject> pathObjects) {
+		var map = pathObjects
+				.stream()
+				.collect(Collectors.toMap(p -> p,
+						p -> PathObjectTools.transformObject(p, null, true)));
+		if (map.isEmpty()) {
+			logger.error("No selected objects to duplicate!");
+			return false;
+		}
+		// Add objects using the default add method (not trying to resolve location)
+		hierarchy.addPathObjects(map.values());
+//		// Add objects, inserting with the same parents as the originals
+//		for (var entry : map.entrySet()) {
+//			entry.getKey().getParent().addPathObject(entry.getValue());
+//		}
+		// Conceivably we might not have a hierarchy.
+		// If we do, fire update and try to retain the same selected object (if it was already selected)
+		if (hierarchy != null) {
+			PathObject currentMainObject = hierarchy.getSelectionModel().getSelectedObject();
+			hierarchy.fireHierarchyChangedEvent(PathObjectTools.class);
+	//		hierarchy.addPathObjects(map.values());
+			hierarchy.getSelectionModel().setSelectedObjects(map.values(), map.getOrDefault(currentMainObject, null));
+		}
+		return true;
+	}
+	
+	
+	/**
+	 * Resolve overlapping objects by size, retaining the object with the larger ROI and discarding the object with the smaller ROI.
+	 * 
+	 * @param pathObjects input object collection, which may contain overlapping objects
+	 * @param overlapTolerance amount of overlap to permit; recommended value is 0, see {@link #removeOverlaps(Collection, Comparator, double)}
+	 * @return output collection of objects, which should have smaller overlapping objects removed
+	 */
+	public static Collection<PathObject> removeOverlapsBySize(Collection<? extends PathObject> pathObjects, double overlapTolerance) {
+		return removeOverlaps(pathObjects, Comparator.comparingDouble((PathObject p) -> getROI(p, false).getArea()).reversed(), overlapTolerance);
+	}
+	
+	/**
+	 * Resolve overlapping object by location, retaining the object closest to the image 'origin' and discarding the object further away.
+	 * Note that this is determined using first the bounding box, then the centroid.
+	 * This is a simpler (and faster) criterion than measuring distance to the original from the ROI itself.
+	 * 
+	 * @param pathObjects input object collection, which may contain overlapping objects
+	 * @param overlapTolerance amount of overlap to permit; recommended value is 0, see {@link #removeOverlaps(Collection, Comparator, double)}
+	 * @return output collection of objects, which should have smaller overlapping objects removed
+	 */
+	public static Collection<PathObject> removeOverlapsByLocation(Collection<? extends PathObject> pathObjects, double overlapTolerance) {
+		// Sort according to bounding box, then centroid, then area
+		return removeOverlaps(pathObjects,
+				Comparator.comparingDouble((PathObject p) -> p.getROI().getBoundsY())
+				.thenComparing((PathObject p) -> p.getROI().getBoundsX())
+				.thenComparing((PathObject p) -> p.getROI().getCentroidY())
+				.thenComparing((PathObject p) -> p.getROI().getCentroidX())
+				.thenComparing((PathObject p) -> getROI(p, false).getArea()),
+				overlapTolerance);
+	}
+
+	
+	/**
+	 * Resolve overlaps, discarding one and keeping the other.
+	 * It assumes that the objects have been sorted so that 'preferred' objects occur first.
+	 * <p>
+	 * 'How overlapping' can be controlled by the {@code overlapTolerance}, where an overlap will be removed
+	 * <ul>
+	 * <li>if {@code overlapTolerance > 0} and the area of the intersection between ROIs is {@code < overlapTolerance} (an absolute comparison)
+	 * <li>if {@code overlapTolerance < 0} and the proportion of the smaller ROI intersecting the larger ROI is {@code < -overlapTolerance} (a relative comparison)
+	 * <li>if {@code overlapTolerance == 0} and there is any non-zero area intersection between ROIs
+	 * </ul>
+	 * For example, {@code overlapTolerance == 10} will require at least 10 pixels between ROIs to intersect to be considered an overlap,
+	 * while {@code overlapTolerance == 0.01} will require at least 1% of the area of the smaller ROI to intersect.
+	 * <p>
+	 * It is recommended to keep {@code overlapTolerance == 0} in most instances to remove all overlaps.
+	 * This is also less computationally expensive because it means intersection areas do not need to be calculated.
+	 * 
+	 * @param pathObjects input object collection, which may contain overlapping objects
+	 * @param comparator comparator, which determines which object is retained when overlaps are found.
+	 *                   Considering the collection to be sorted by the comparator, the 'first' object is the one that will be kept.
+	 * @param overlapTolerance amount of overlap to permit
+	 * @return collection of objects, which should have smaller overlapping objects removed
+	 */
+	public static Collection<PathObject> removeOverlaps(Collection<? extends PathObject> pathObjects, Comparator<PathObject> comparator, double overlapTolerance) {
+		
+		if (overlapTolerance != 0 && overlapTolerance <= -1.0) {
+			logger.warn("A non-zero overlapTolerance <= -1.0 has no effect! Returning the same objects.");
+			return new ArrayList<>(pathObjects);
+		}
+		
+		// Start off by assuming we'll keep everything
+		Collection<PathObject> output = new LinkedHashSet<>(pathObjects);
+		
+		// Identify the objects we can potentially deal with (i.e. with area ROIs)
+		List<PathObject> list = new ArrayList<>();
+		for (PathObject pathObject : pathObjects) {
+			if (pathObject.hasROI() && pathObject.getROI().isArea())
+				list.add(pathObject);
+		}
+		Collections.sort(list, comparator);
+		
+		// Create a spatial index
+		var quadTree = new STRtree();
+		var geomMap = new HashMap<PathObject, Geometry>();
+		var planeMap = new HashMap<PathObject, ImagePlane>();
+		for (PathObject pathObject : list) {
+			var roi = PathObjectTools.getROI(pathObject, false);
+			var geom = roi.getGeometry();
+			quadTree.insert(geom.getEnvelopeInternal(), pathObject);
+			geomMap.put(pathObject, geom);
+			planeMap.put(pathObject, roi.getImagePlane());
+		}
+		
+		// Identify what needs to be removed
+		Set<PathObject> toRemove = new HashSet<>();
+		for (PathObject pathObject : list) {
+			if (toRemove.contains(pathObject))
+				continue;
+			var geom = geomMap.get(pathObject);
+			var plane = planeMap.get(pathObject);
+			@SuppressWarnings("unchecked")
+			List<PathObject> potentialOverlaps = (List<PathObject>)quadTree.query(geom.getEnvelopeInternal());
+			for (PathObject p : potentialOverlaps) {
+				if (p == pathObject || toRemove.contains(p))
+					continue;
+				var planeP = planeMap.get(p);
+				if (plane.getZ() != planeP.getZ() || plane.getT() != planeP.getT())
+					continue;
+				var geomP = geomMap.get(p);
+				// We allow 'touches', since this involves no area intersection
+				if (!geom.intersects(geomP) || geom.touches(geomP))
+					continue;
+				if (overlapTolerance != 0) {
+					try {
+						var overlap = geom.intersection(geomP).getArea();
+						double tol = overlapTolerance;
+						if (overlapTolerance < 0) {
+							tol = Math.min(geom.getArea(), geom.getArea()) * (-overlapTolerance);
+						}
+						if (overlap < tol)
+							continue;
+					} catch (Exception e) {
+						logger.warn("Exception attempting to apply overlap tolerance: " + e.getLocalizedMessage(), e);
+					}
+				}
+				toRemove.add(p);
+			}
+		}
+		output.removeAll(toRemove);
+		return output;
 	}
 	
 }

@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.gui.viewer.tools;
 
 import java.awt.geom.Point2D;
@@ -8,7 +29,6 @@ import org.slf4j.LoggerFactory;
 
 import javafx.scene.input.MouseEvent;
 import qupath.lib.gui.prefs.PathPrefs;
-import qupath.lib.gui.viewer.ModeWrapper;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathROIObject;
 import qupath.lib.roi.PolygonROI;
@@ -16,13 +36,9 @@ import qupath.lib.roi.PolylineROI;
 import qupath.lib.roi.RoiEditor;
 import qupath.lib.roi.interfaces.ROI;
 
-public abstract class AbstractPolyROITool extends AbstractPathROITool {
+abstract class AbstractPolyROITool extends AbstractPathROITool {
 	
 	private final static Logger logger = LoggerFactory.getLogger(AbstractPolyROITool.class);
-	
-	AbstractPolyROITool(ModeWrapper modes) {
-		super(modes);
-	}
 
 	boolean isFreehandPolyROI = false;
 
@@ -32,6 +48,7 @@ public abstract class AbstractPolyROITool extends AbstractPathROITool {
 		super.mousePressed(e);
 		
 		// If we double-clicked a polygon, we're done with it
+		var viewer = getViewer();
 		PathObject currentObject = viewer == null ? null : viewer.getSelectedObject();
 		if (currentObject != null && e.getClickCount() == 1) {
 			RoiEditor editor = viewer.getROIEditor();
@@ -42,8 +59,7 @@ public abstract class AbstractPolyROITool extends AbstractPathROITool {
 				((PathROIObject)currentObject).setROI(roiUpdated);
 			}
 			viewer.repaint();
-		}
-		else {
+		} else {
 			commitObjectToHierarchy(e, currentObject);
 		}
 		
@@ -57,12 +73,19 @@ public abstract class AbstractPolyROITool extends AbstractPathROITool {
 	public void mouseReleased(MouseEvent e) {
 		super.mouseReleased(e);
 		
+		var viewer = getViewer();
 		PathObject currentObject = viewer.getSelectedObject();
 		ROI currentROI = currentObject == null ? null : currentObject.getROI();
 		if (isFreehandPolyROI) {
 			if (isPolyROI(currentROI) && currentROI.isEmpty()) {
 				isFreehandPolyROI = false;
-			} else if (PathPrefs.enableFreehandTools()) {
+			} else if (PathPrefs.enableFreehandToolsProperty().get()) {
+				RoiEditor editor = viewer.getROIEditor();
+				Point2D p2 = mouseLocationToImage(e, true, requestPixelSnapping());
+				ROI roiUpdated = editor.setActiveHandlePosition(p2.getX(), p2.getY(), viewer.getDownsampleFactor(), e.isShiftDown());
+				if (currentObject != null && currentObject.getROI() != roiUpdated && currentObject instanceof PathROIObject) {
+					((PathROIObject)currentObject).setROI(roiUpdated);
+				}
 				commitObjectToHierarchy(e, currentObject);
 //				completePolygon(e);
 			}
@@ -74,6 +97,7 @@ public abstract class AbstractPolyROITool extends AbstractPathROITool {
 	public void mouseMoved(MouseEvent e) {
 		super.mouseMoved(e);
 		
+		var viewer = getViewer();
 		ROI currentROI = viewer.getCurrentROI();
 		RoiEditor editor = viewer.getROIEditor();
 		
@@ -96,6 +120,7 @@ public abstract class AbstractPolyROITool extends AbstractPathROITool {
             return;
         }
 
+		var viewer = getViewer();
 		ROI currentROI = viewer.getCurrentROI();
 		RoiEditor editor = viewer.getROIEditor();
 		

@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -636,27 +636,6 @@ public class SubcellularDetection extends AbstractInteractivePlugin<BufferedImag
 		 * @return
 		 */
 		public int nChannels() {
-			return imageData.getServer().nChannels();
-		}
-
-		/**
-		 * Get the number of available channels, optionally discounting any 'residual' or hematoxylin channels if color deconvolution should be used.
-		 * 
-		 * @return
-		 */
-		public int nChannels(final boolean skipHematoxylin, final boolean skipResidual) {
-			ColorDeconvolutionStains stains = imageData.getColorDeconvolutionStains();
-			if (stains != null) {
-				int n = 0;
-				for (int i = 1; i <= 3; i++) {
-					if (skipResidual && stains.getStain(i).isResidual())
-						continue;
-					if (skipHematoxylin && ColorDeconvolutionStains.isHematoxylin(stains.getStain(i)))
-						continue;
-					n++;
-				}
-				return n;
-			}
 			return imageData.getServer().nChannels();
 		}
 

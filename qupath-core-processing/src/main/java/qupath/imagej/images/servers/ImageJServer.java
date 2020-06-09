@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -39,7 +39,9 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
@@ -49,8 +51,10 @@ import ij.CompositeImage;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
+import ij.gui.Roi;
 import ij.measure.Calibration;
 import ij.plugin.Duplicator;
+import ij.plugin.ImageInfo;
 import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 import ij.process.FloatProcessor;
@@ -66,6 +70,9 @@ import qupath.lib.images.servers.ImageServerBuilder;
 import qupath.lib.images.servers.ImageServerBuilder.ServerBuilder;
 import qupath.lib.images.servers.ImageServerMetadata;
 import qupath.lib.images.servers.PixelType;
+import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjectReader;
+import qupath.lib.objects.PathObjects;
 import qupath.lib.regions.RegionRequest;
 
 /**
@@ -74,7 +81,7 @@ import qupath.lib.regions.RegionRequest;
  * @author Pete Bankhead
  *
  */
-public class ImageJServer extends AbstractImageServer<BufferedImage> {
+public class ImageJServer extends AbstractImageServer<BufferedImage> implements PathObjectReader {
 	
 	final private static Logger logger = LoggerFactory.getLogger(ImageJServer.class);
 	
@@ -112,10 +119,10 @@ public class ImageJServer extends AbstractImageServer<BufferedImage> {
 			else
 				allowedMemory = maxMemory / 8;
 			if ((imp.getNFrames() == 1 && imp.getNSlices() == 1) || nBytes < allowedMemory) {
-				logger.info("Opening {} fully, estimated {} MB (max memory {} MB)", uri, nBytes / (1024L * 1024L), maxMemory / (1024L * 1024L));
+				logger.debug("Opening {} fully, estimated {} MB (max memory {} MB)", uri, nBytes / (1024L * 1024L), maxMemory / (1024L * 1024L));
 				imp = IJ.openImage(path);
 			} else {
-				logger.info("Opening {} as virtual stack, estimated {} MB (max memory {} MB)", uri, nBytes / (1024L * 1024L), maxMemory / (1024L * 1024L));
+				logger.debug("Opening {} as virtual stack, estimated {} MB (max memory {} MB)", uri, nBytes / (1024L * 1024L), maxMemory / (1024L * 1024L));
 			}
 		}
 		if (imp == null)
@@ -160,24 +167,55 @@ public class ImageJServer extends AbstractImageServer<BufferedImage> {
 		}
 
 		List<ImageChannel> channels;
+		boolean is2D = imp.getNFrames() == 1 && imp.getNSlices() == 1;
 		if (isRGB)
 			channels = ImageChannel.getDefaultRGBChannels();
-		else if (imp instanceof CompositeImage) {
-			CompositeImage impComp = (CompositeImage)imp;
-			channels = new ArrayList<ImageChannel>();
-			for (int channel = 0; channel < imp.getNChannels(); channel++) {
-				LUT lut = impComp.getChannelLut(channel+1);
-				int ind = lut.getMapSize()-1;
-				String name = impComp.getStack().getSliceLabel(channel + 1);
-				// Use slice label if it is a non-empty single line for a 2D image
-				if (name == null || impComp.getNFrames() > 1 || impComp.getNSlices() > 1 || name.isBlank() || name.contains("\n"))
-					name = "Channel " + (channel + 1);
-				channels.add(
-						ImageChannel.getInstance(name, lut.getRGB(ind))
-						);
+		else {
+			String[] sliceLabels = null;
+			int nChannels = imp.getNChannels();
+			
+			// See if we have slice labels that could plausibly act as channel names
+			// For this, they must be non-null and unique for a 2D image
+			if (is2D && nChannels == imp.getStackSize()) {
+				sliceLabels = new String[nChannels];
+				Set<String> sliceLabelSet = new HashSet<>();
+				for (int s = 1; s <= nChannels; s++) {
+					String sliceLabel = imp.getStack().getSliceLabel(s);
+					if (sliceLabel != null && is2D) {
+						sliceLabel = sliceLabel.split("\\R", 2)[0];
+						if (!sliceLabel.isBlank()) {
+							sliceLabels[s-1] = sliceLabel;
+							sliceLabelSet.add(sliceLabel);
+						}
+					}
+				}
+				if (sliceLabelSet.size() < nChannels)
+					sliceLabels = null;
 			}
-		} else
-			channels = ImageChannel.getDefaultChannelList(imp.getNChannels());
+			
+			// Get default channels
+			channels = new ArrayList<>(ImageChannel.getDefaultChannelList(imp.getNChannels()));
+			
+			// Try to update the channel names and/or colors from ImageJ if we can
+			if (sliceLabels != null || imp instanceof CompositeImage) {
+				for (int channel = 0; channel < imp.getNChannels(); channel++) {
+					String name = channels.get(channel).getName();
+					Integer color = channels.get(channel).getColor();
+					if (imp instanceof CompositeImage) {
+						LUT lut = ((CompositeImage)imp).getChannelLut(channel+1);
+						int ind = lut.getMapSize()-1;
+						color = lut.getRGB(ind);
+					}
+					if (sliceLabels != null) {
+						name = sliceLabels[channel];
+					}
+					channels.set(
+							channel,
+							ImageChannel.getInstance(name, color)
+							);
+				}
+			}
+		}
 		
 		this.args = args;
 		var builder = new ImageServerMetadata.Builder() //, uri.normalize().toString())
@@ -204,6 +242,46 @@ public class ImageJServer extends AbstractImageServer<BufferedImage> {
 		
 //		if ((!isRGB() && nChannels() > 1) || getBitsPerPixel() == 32)
 //			throw new IOException("Sorry, currently only RGB & single-channel 8 & 16-bit images supported using ImageJ server");
+	}
+	
+	
+	@Override
+	public Collection<PathObject> readPathObjects() {
+		var roi = imp.getRoi();
+		var overlay = imp.getOverlay();
+		if (roi == null && (overlay == null || overlay.size() == 0))
+			return Collections.emptyList();
+		var list = new ArrayList<PathObject>();
+		if (roi != null) {
+			list.add(roiToAnnotation(roi));
+		}
+		if (overlay != null) {
+			for (var r : overlay.toArray())
+				list.add(roiToAnnotation(r));
+		}
+		return list;
+	}
+	
+	private PathObject roiToAnnotation(Roi roiIJ) {
+		// Note that because we are reading from the ImagePlus directly, we have to avoid using any calibration information
+		var roi = IJTools.convertToROI(roiIJ, 0, 0, 1, IJTools.getImagePlane(roiIJ, imp));
+		var annotation = PathObjects.createAnnotationObject(roi);
+		annotation.setLocked(true);
+		IJTools.calibrateObject(annotation, roiIJ);
+		return annotation;
+	}
+	
+	
+	/**
+	 * Get a String representing the image metadata.
+	 * <p>
+	 * Currently, this reflects the contents of the ImageJ 'Show info' command, which is tied to the 'current' slice 
+	 * and therefore not complete for all slices of a multichannel/multidimensional image.
+	 * This behavior may change in the future.
+	 * @return a String representing image metadata in ImageJ's own form
+	 */
+	public String dumpMetadata() {
+		return new ImageInfo().getImageInfo(imp);
 	}
 	
 	@Override

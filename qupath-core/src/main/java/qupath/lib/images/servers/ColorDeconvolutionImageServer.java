@@ -1,3 +1,24 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.images.servers;
 
 import java.awt.image.BandedSampleModel;
@@ -39,9 +60,10 @@ class ColorDeconvolutionImageServer extends TransformingImageServer<BufferedImag
 	
 	private ColorDeconvolutionStains stains;
 	private List<ColorTransformMethod> methods;
-	private List<StainVector> stainVectors;
+	private int[] stainNumbers;
 	private ImageServerMetadata metadata;
-	private ColorModel colorModel;
+	private transient List<StainVector> stainVectors;
+	private transient ColorModel colorModel;
 
 	public ColorDeconvolutionImageServer(ImageServer<BufferedImage> server, ColorDeconvolutionStains stains, int... stainNumbers) {
 		super(server);
@@ -50,8 +72,11 @@ class ColorDeconvolutionImageServer extends TransformingImageServer<BufferedImag
 		this.methods = new ArrayList<>();
 		if (stainNumbers.length == 0)
 			stainNumbers = new int[] {1, 2, 3};
+		this.stainNumbers = stainNumbers;
+		
 		List<ImageChannel> channels = new ArrayList<>();
 		StringBuilder sb = new StringBuilder();
+		stainVectors = new ArrayList<>();
 		for (int s : stainNumbers) {
 			if (s < 1 || s > 3) {
 				logger.warn("Invalid stain number {}, must be >= 1 and <= 3 (i.e. 'one-based')", s);
@@ -81,8 +106,6 @@ class ColorDeconvolutionImageServer extends TransformingImageServer<BufferedImag
 		}
 		this.stainVectors = Collections.unmodifiableList(stainVectors);
 		
-		this.colorModel = ColorModelFactory.getProbabilityColorModel32Bit(channels);
-		
 		metadata = new ImageServerMetadata.Builder(server.getMetadata())
 //				.path(String.format("%s, %s (%s)", server.getPath(), stains.toString(), sb.toString()))
 				.pixelType(PixelType.FLOAT32)
@@ -92,12 +115,18 @@ class ColorDeconvolutionImageServer extends TransformingImageServer<BufferedImag
 				.build();
 	}
 	
+	private ColorModel getColorModel() {
+		if (colorModel == null)
+			this.colorModel = ColorModelFactory.getProbabilityColorModel32Bit(getMetadata().getChannels());
+		return colorModel;
+	}
+	
 	/**
 	 * Returns null (does not support ServerBuilders).
 	 */
 	@Override
 	protected ServerBuilder<BufferedImage> createServerBuilder() {
-		return null;
+		return new ImageServers.ColorDeconvolutionServerBuilder(getMetadata(), getWrappedServer().getBuilder(), stains, stainNumbers);
 	}
 	
 	/**
@@ -121,12 +150,20 @@ class ColorDeconvolutionImageServer extends TransformingImageServer<BufferedImag
 	 * @return
 	 */
 	public List<StainVector> getStainVectors() {
+		if (stainVectors == null) {
+			var list = new ArrayList<StainVector>();
+			for (int s : stainNumbers)
+				list.add(stains.getStain(s));
+			this.stainVectors = Collections.unmodifiableList(list);
+		}
 		return stainVectors;
 	}
 	
 	@Override
 	public BufferedImage readBufferedImage(final RegionRequest request) throws IOException {
 		BufferedImage img = getWrappedServer().readBufferedImage(request);
+		if (img == null)
+			return null;
 		
 		int w = img.getWidth();
 		int h = img.getHeight();
@@ -143,7 +180,7 @@ class ColorDeconvolutionImageServer extends TransformingImageServer<BufferedImag
 			ColorTransformer.getTransformedPixels(rgb, methods.get(b), pixels, stains);			
 			raster.setSamples(0, 0, img.getWidth(), img.getHeight(), b, pixels);
 		}
-		return new BufferedImage(colorModel, Raster.createWritableRaster(model, buffer, null), false, null);
+		return new BufferedImage(getColorModel(), Raster.createWritableRaster(model, buffer, null), false, null);
 		
 //		WritableRaster raster = WritableRaster.createInterleavedRaster(DataBuffer.TYPE_FLOAT, img.getWidth(), img.getHeight(), 1, null);
 //		ColorTransformer.getTransformedPixels(rgb, method, pixels, stains);

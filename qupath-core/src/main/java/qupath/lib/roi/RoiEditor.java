@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -63,9 +63,11 @@ public class RoiEditor {
 	private MutablePoint activeHandle;
 	
 	private boolean isTranslating = false;
+	private ROI roiTranslateOrigin;
 	private MutablePoint pTranslateOrigin;
 	private MutablePoint pTranslateCurrent;
-	
+	private boolean translateSnapToPixel;
+
 	transient private RoiHandleAdjuster<?> adjuster;
 	
 	// Don't instantiate directly - implementation may change
@@ -132,14 +134,17 @@ public class RoiEditor {
 	 *
 	 * @param x
 	 * @param y
+	 * @param snapToPixel if true, request that translations snap to pixel coordinates
 	 * @return
 	 */
-	public boolean startTranslation(double x, double y) {
+	public boolean startTranslation(double x, double y, boolean snapToPixel) {
 		if (pathROI == null)
 			return false;
 		pTranslateOrigin = new MutablePoint(x, y);
 		pTranslateCurrent = new MutablePoint(x, y);
 		isTranslating = true;
+		roiTranslateOrigin = pathROI;
+		translateSnapToPixel = snapToPixel;
 		return true;
 	}
 	
@@ -163,7 +168,11 @@ public class RoiEditor {
 		
 		double dx = x - pTranslateCurrent.getX();
 		double dy = y - pTranslateCurrent.getY();
-		
+//		if (snapToPixel) {
+//			dx = Math.round(dx);
+//			dy = Math.round(dy);
+//		}
+
 		// Optionally constrain translation to keep within specified bounds (e.g. the image itself)
 		Rect constrainBounds = new Rect(constrainRegion.getX(), constrainRegion.getY(), constrainRegion.getWidth(), constrainRegion.getHeight());
 		if (constrainBounds != null) {
@@ -177,13 +186,14 @@ public class RoiEditor {
 			else if (bounds.getMaxY() + dy >= constrainBounds.getMaxY())
 				dy = constrainBounds.getMaxY() - bounds.getMaxY() - 1;
 		}
-		
+
+		pTranslateCurrent.setLocation(pTranslateCurrent.getX() + dx, pTranslateCurrent.getY() + dy);
+
 		if (dx == 0 && dy == 0)
 			return pathROI;
 
 //		pathROI = ((TranslatableROI)pathROI).translate(dx, dy);
 		setROI(pathROI.translate(dx, dy), false);
-		pTranslateCurrent.setLocation(x, y);
 //		// TODO: Fix the inelegance... setting the ROI this way off translating, so we need to turn it back on again...
 //		pTranslateStart = new MutablePoint(x, y);
 		return pathROI;
@@ -197,15 +207,25 @@ public class RoiEditor {
 	 */
 	public boolean finishTranslation() {
 		boolean displacement = isTranslating && pTranslateOrigin.distanceSq(pTranslateCurrent) > 0;
-		isTranslating = false;
-		pTranslateOrigin = null;
-		pTranslateCurrent = null;
+		if (displacement && translateSnapToPixel && roiTranslateOrigin != null) {
+			// If we want to snap to pixel translations, we return to the original and move it all in one go
+			double dx = Math.round(pTranslateCurrent.getX() - pTranslateOrigin.getX());
+			double dy = Math.round(pTranslateCurrent.getY() - pTranslateOrigin.getY());
+			isTranslating = false;
+			pTranslateOrigin = null;
+			pTranslateCurrent = null;
+			setROI(roiTranslateOrigin.translate(dx, dy), false);
+		} else {
+			isTranslating = false;
+			pTranslateOrigin = null;
+			pTranslateCurrent = null;
+		}
 		return displacement;
 	}
 	
 	
 	/**
-	 * Query if a ROI is currently being translated through thsi editor.
+	 * Query if a ROI is currently being translated through this editor.
 	 * @return
 	 */
 	public boolean isTranslating() {
@@ -661,7 +681,7 @@ public class RoiEditor {
 		public PolygonROI requestNewHandle(double x, double y) {
 			if (activeHandle == null)
 				return roi; // Can only add if there is an active handle - distance to this will be used
-			
+
 			// Move the active handle if it is very close to the requested region
 			// (removed)
 
@@ -731,7 +751,7 @@ public class RoiEditor {
 				return roi;
 			activeHandle.setLocation(xNew, yNew);
 			roi = new PolylineROI(createPoint2List(handles), roi.getImagePlane());
-//			System.out.println("UPDATED HANDLES: " + handles.size() + ", " + roi.nVertices());
+//			System.out.println("UPDATED HANDLES: " + handles.size() + ", " + roi.getNumPoints());
 			return roi;
 		}
 
@@ -747,12 +767,18 @@ public class RoiEditor {
 
 			// Move the active handle if it is very close to the requested region
 			// (removed)
-
+			
 			// Don't add a handle at almost the sample place as an existing handle
-			if (handles.size() >= 2 && activeHandle == handles.get(handles.size() - 1) && handles.get(handles.size() - 2).distanceSq(x, y) < 4) {
+			if (handles.size() >= 2 && activeHandle == handles.get(handles.size() - 1) &&
+					(handles.get(handles.size() - 2).distanceSq(x, y) < 0.5)) {
 				return roi;
 			}
-			
+
+//			// Don't add a handle at almost the sample place as an existing handle
+//			if (handles.size() >= 2 && activeHandle == handles.get(handles.size() - 1) && handles.get(handles.size() - 2).distanceSq(x, y) < 0.5) {
+//				return roi;
+//			}
+
 //			// If we have 2 points, which are identical, shift instead of creating
 //			if (handles.size() >= 2 && activeHandle == handles.get(handles.size() - 1) && activeHandle.distanceSq(handles.get(handles.size() - 2)) < 0.000001) {
 //				System.err.println("UPDATING HANDLE");

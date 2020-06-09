@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -34,6 +34,7 @@ import ij.process.ShortProcessor;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBuffer;
 import java.io.IOException;
+import java.io.OutputStream;
 
 import qupath.imagej.tools.IJTools;
 import qupath.lib.images.PathImage;
@@ -60,7 +61,7 @@ abstract class AbstractWriterIJ implements ImageWriter<BufferedImage> {
 	}
 
 	@Override
-	public boolean suportsImageType(ImageServer<BufferedImage> server) {
+	public boolean supportsImageType(ImageServer<BufferedImage> server) {
 		return true;
 	}
 
@@ -94,6 +95,10 @@ abstract class AbstractWriterIJ implements ImageWriter<BufferedImage> {
 
 	@Override
 	public void writeImage(BufferedImage img, String pathOutput) throws IOException {
+		writeImage(createImagePlus(img), pathOutput);
+	}
+	
+	ImagePlus createImagePlus(BufferedImage img) {
 		ImageProcessor ip;
 		if (img.getSampleModel().getNumBands() == 1) {
 			int type = img.getSampleModel().getDataType();
@@ -105,7 +110,29 @@ abstract class AbstractWriterIJ implements ImageWriter<BufferedImage> {
 				ip = new FloatProcessor(img.getWidth(), img.getHeight(), img.getRaster().getPixel(0, 0, (float[])null));
 		} else
 			ip = new ColorProcessor(img);
-		writeImage(new ImagePlus("", ip), pathOutput);
+		return new ImagePlus("", ip);
+	}
+	
+	@Override
+	public void writeImage(ImageServer<BufferedImage> server, RegionRequest region, OutputStream stream)
+			throws IOException {
+		PathImage<ImagePlus> pathImage = IJTools.convertToImagePlus(server, region);
+		if (pathImage == null)
+			throw new IOException("Unable to extract region from from " + server.getPath());
+		writeImage(pathImage.getImage(), stream);
+	}
+
+	@Override
+	public void writeImage(BufferedImage img, OutputStream stream) throws IOException {
+		writeImage(createImagePlus(img), stream);
+	}
+
+	@Override
+	public void writeImage(ImageServer<BufferedImage> server, OutputStream stream) throws IOException {
+		ImagePlus imp = IJTools.extractHyperstack(server, RegionRequest.createInstance(server));
+		if (imp == null)
+			throw new IOException("Unable to extract region from from " + server.getPath());
+		writeImage(imp, stream);
 	}
 	
 	@Override
@@ -116,5 +143,7 @@ abstract class AbstractWriterIJ implements ImageWriter<BufferedImage> {
 	public void writeImage(ImagePlus imp, String pathOutput) throws IOException {
 		IJ.save(imp, pathOutput);
 	}
+	
+	public abstract void writeImage(ImagePlus imp, OutputStream stream) throws IOException;
 
 }

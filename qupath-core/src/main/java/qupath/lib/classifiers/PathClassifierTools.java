@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -30,9 +30,11 @@ import java.io.ObjectInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -93,6 +95,72 @@ public class PathClassifierTools {
 			logger.warn("No objects classified!");
 	}
 
+	
+	/**
+	 * Create a mapping between {@linkplain PathObject PathObjects} and their current {@linkplain PathClass PathClasses}.
+	 * This can be useful to preserve a classification so that it may be reset later.
+	 * <p>
+	 * Note: classification probabilities are not retained using this approach.
+	 * @param pathObjects the objects containing classifications
+	 * @return a mapping between objects and their current classifications
+	 * @see #restoreClassificationsFromMap(Map)
+	 */
+	public static Map<PathObject, PathClass> createClassificationMap(Collection<? extends PathObject> pathObjects) {
+		Map<PathObject, PathClass> mapPrevious = new HashMap<>();
+		for (var pathObject : pathObjects) {
+			mapPrevious.put(pathObject, pathObject.getPathClass());
+		}
+		return mapPrevious;
+	}
+	
+	/**
+	 * Reassign classifications to objects, as were previously obtained using {@link #createClassificationMap(Collection)}.
+	 * 
+	 * @param classificationMap the map containing objects and the classifications that should be applied
+	 * @return a collection containing all objects with classifications that were changed. This can be used to fire update events.
+	 * @see #createClassificationMap(Collection)
+	 */
+	public static Collection<PathObject> restoreClassificationsFromMap(Map<PathObject, PathClass> classificationMap) {
+		var changed = new ArrayList<PathObject>();
+		for (var entry : classificationMap.entrySet()) {
+			var pathObject = entry.getKey();
+			var pathClass = entry.getValue();
+			if (pathClass == PathClassFactory.getPathClassUnclassified())
+				pathClass = null;
+			if (!Objects.equals(pathObject.getPathClass(), pathClass)) {
+				pathObject.setPathClass(pathClass);
+				changed.add(pathObject);
+			}
+		}
+		return changed;
+	}
+	
+//	/**
+//	 * Returns true if two {@linkplain PathClass PathClasses} are the same.
+//	 * This involves 
+//	 * @param pc1
+//	 * @param pc2
+//	 * @return
+//	 */
+//	public static boolean sameClassification(PathClass pc1, PathClass pc2) {
+//		return Objects.equals(
+//				getPathClassObject(pc1),
+//				getPathClassObject(pc2)
+//				);
+//	}
+//	
+//	/**
+//	 * Standardize a {@link PathClass}, ensuring that an instance of {@link PathClass} is returned.
+//	 * Effectively this means replacing {@code null} with {@link PathClassFactory#getPathClassUnclassified()}.
+//	 * 
+//	 * @param pathClass the {@link PathClass} to standardize
+//	 * @return an object-representation of this {@link PathClass}
+//	 */
+//	private static PathClass getPathClassObject(PathClass pathClass) {
+//		return pathClass == null ? PathClassFactory.getPathClassUnclassified() : pathClass;
+//	}
+	
+	
 	/**
 	 * Load a classifier that has previously been serialized to a file.
 	 * @param file
@@ -125,6 +193,7 @@ public class PathClassifierTools {
 	/**
 	 * Create a {@link PathObjectClassifier} that applies an array of classifiers, sequentially in order.
 	 * @param classifiers
+	 * @return 
 	 */
 	public static PathObjectClassifier createCompositeClassifier(final PathObjectClassifier... classifiers) {
 		return new CompositeClassifier(Arrays.asList(classifiers));
@@ -133,6 +202,7 @@ public class PathClassifierTools {
 	/**
 	 * Create a {@link PathObjectClassifier} that applies a collection of classifiers, sequentially in order.
 	 * @param classifiers
+	 * @return 
 	 */
 	public static PathObjectClassifier createCompositeClassifier(final Collection<PathObjectClassifier> classifiers) {
 		return new CompositeClassifier(classifiers);
@@ -179,7 +249,7 @@ public class PathClassifierTools {
 	 * @param pathObjects
 	 * @return
 	 */
-	public static Set<String> getAvailableFeatures(final Collection<PathObject> pathObjects) {
+	public static Set<String> getAvailableFeatures(final Collection<? extends PathObject> pathObjects) {
 		Set<String> featureSet = new LinkedHashSet<>();
 		// This has a small optimization that takes into consideration the fact that many objects share references to exactly the same MeasurementLists -
 		// so by checking the last list that was added, there is no need to bother the set to add the same thing again.
@@ -188,7 +258,7 @@ public class PathClassifierTools {
 			if (!pathObject.hasMeasurements())
 				continue;
 			List<String> list = pathObject.getMeasurementList().getMeasurementNames();
-			if (lastNames == null || !lastNames.equals(list))
+			if (lastNames != list)
 				featureSet.addAll(list);
 			lastNames = list;
 		}
@@ -197,6 +267,8 @@ public class PathClassifierTools {
 
 	/**
 	 * Get a set of the represented path classes, i.e. those with at least 1 manually-labelled object.
+	 * @param hierarchy 
+	 * @param cls 
 	 * 
 	 * @return
 	 */
@@ -258,14 +330,13 @@ public class PathClassifierTools {
 	 * @param measurementName measurement to threshold
 	 * @param thresholds either 1 or 3 thresholds, depending upon whether objects should be classified as Positive/Negative or Negative/1+/2+/3+
 	 */
-	public static void setIntensityClassifications(final Collection<PathObject> pathObjects, final String measurementName, final double... thresholds) {
-		for (PathObject pathObject : pathObjects)
-			setIntensityClassification(pathObject, measurementName, thresholds);
+	public static void setIntensityClassifications(final Collection<? extends PathObject> pathObjects, final String measurementName, final double... thresholds) {
+		pathObjects.parallelStream().forEach(p -> setIntensityClassification(p, measurementName, thresholds));
 	}
 
 	/**
 	 * Create a list of channels from classification labels.
-	 * Note that the labels must be &geq; 0 or else an {@link IllegalArgumentException} will be thrown.
+	 * Note that the labels must be &ge; 0 or else an {@link IllegalArgumentException} will be thrown.
 	 * It is also expected that the labels densely represent integer values from 0 up to some maximum, although this is 
 	 * not strictly enforced and channels will be generated from any missing labels.
 	 * 

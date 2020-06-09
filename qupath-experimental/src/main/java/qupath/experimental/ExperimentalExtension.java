@@ -1,60 +1,59 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.experimental;
 
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyCombination;
+import org.controlsfx.control.action.Action;
+
+import qupath.lib.gui.ActionTools;
+import qupath.lib.gui.ActionTools.ActionDescription;
+import qupath.lib.gui.ActionTools.ActionMenu;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.align.InteractiveImageAlignmentCommand;
 import qupath.lib.gui.extensions.QuPathExtension;
-import qupath.opencv.ml.pixel.features.ColorTransforms;
-import qupath.lib.gui.ml.commands.CreateRegionAnnotationsCommand;
-import qupath.lib.gui.ml.commands.ExportTrainingRegionsCommand;
-import qupath.lib.gui.ml.commands.PixelClassifierLoadCommand;
-import qupath.lib.gui.ml.commands.PixelClassifierCommand;
-import qupath.lib.gui.ml.commands.SimpleThresholdCommand;
-import qupath.lib.gui.ml.commands.SplitProjectTrainingCommand;
-import qupath.lib.io.GsonTools;
-import qupath.opencv.ml.pixel.PixelClassifiers;
-import qupath.opencv.ml.pixel.features.FeatureCalculators;
 
 /**
  * Extension to make more experimental commands present in the GUI.
  */
 public class ExperimentalExtension implements QuPathExtension {
 	
-	static {
-		GsonTools.getDefaultBuilder()
-			.registerTypeAdapterFactory(PixelClassifiers.getTypeAdapterFactory())
-			.registerTypeAdapterFactory(FeatureCalculators.getTypeAdapterFactory())
-			.registerTypeAdapter(ColorTransforms.ColorTransform.class, new ColorTransforms.ColorTransformTypeAdapter());
+	@SuppressWarnings("javadoc")
+	public class ExperimentalCommands {
+		
+		@ActionMenu("Analyze>Interactive image alignment")
+		@ActionDescription("Experimental command to interactively align images using an Affine transform. "
+				+ "This is currently not terribly useful in itself, but may be helpful as part of more complex scripting workflows.")
+		public final Action actionInteractiveAlignment;
+
+		private ExperimentalCommands(QuPathGUI qupath) {
+			var interactiveAlignment = new InteractiveImageAlignmentCommand(qupath);
+			actionInteractiveAlignment = qupath.createProjectAction(project -> interactiveAlignment.run());
+		}
+		
 	}
+	
 	
     @Override
     public void installExtension(QuPathGUI qupath) {
-    	
-//		PixelClassifiers.PixelClassifierTypeAdapterFactory.registerSubtype(OpenCVPixelClassifier.class);
-//		PixelClassifiers.PixelClassifierTypeAdapterFactory.registerSubtype(OpenCVPixelClassifierDNN.class);
-    	FeatureCalculators.initialize();
-    	
-        QuPathGUI.addMenuItems(
-                qupath.getMenu("Classify>Pixel classification", true),
-                QuPathGUI.createCommandAction(new PixelClassifierCommand(), "Train pixel classifier (experimental)", null, new KeyCodeCombination(KeyCode.P, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN)),
-                QuPathGUI.createCommandAction(new PixelClassifierLoadCommand(qupath), "Load pixel classifier (experimental)"),
-                QuPathGUI.createCommandAction(new SimpleThresholdCommand(qupath), "Create simple thresholder (experimental)")
-//                QuPathGUI.createCommandAction(new OpenCvClassifierCommand2(qupath), "Object classifier (experimental)")
-        );
-        QuPathGUI.addMenuItems(
-                qupath.getMenu("Analyze", true),
-                QuPathGUI.createCommandAction(new InteractiveImageAlignmentCommand(qupath), "Interactive image alignment (experimental)")
-        );
-        
-		QuPathGUI.addMenuItems(
-				qupath.getMenu("Extensions>AI", true),
-				QuPathGUI.createCommandAction(new SplitProjectTrainingCommand(qupath), "Split project train/validation/test"),
-				QuPathGUI.createCommandAction(new CreateRegionAnnotationsCommand(qupath), "Create region annotations"),
-				QuPathGUI.createCommandAction(new ExportTrainingRegionsCommand(qupath), "Export training regions")
-				);
-
+    	qupath.installActions(ActionTools.getAnnotatedActions(new ExperimentalCommands(qupath)));
     }
 
     @Override

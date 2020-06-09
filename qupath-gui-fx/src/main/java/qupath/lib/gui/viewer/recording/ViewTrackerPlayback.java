@@ -4,27 +4,26 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
 package qupath.lib.gui.viewer.recording;
 
 import java.awt.Dimension;
-import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.geom.Point2D;
 
@@ -117,10 +116,10 @@ class ViewTrackerPlayback {
 	
 	
 	static void resizeViewer(QuPathViewer viewer, Dimension newSize) {
-		if (viewer.getSize().equals(newSize))
+		if (DefaultViewTracker.getSize(viewer).equals(newSize))
 			return;
-		int dw = newSize.width - viewer.getWidth();
-		int dh = newSize.height - viewer.getHeight();
+		double dw = newSize.width - viewer.getView().getWidth();
+		double dh = newSize.height - viewer.getView().getHeight();
 //		System.out.println("DW: " + dw);
 		Window window = viewer.getView().getScene().getWindow();
 		window.setWidth(window.getWidth() + dw);
@@ -199,17 +198,17 @@ class ViewTrackerPlayback {
 		viewer.setCenterPixelLocation(imageBounds.x + imageBounds.width * .5, imageBounds.y + imageBounds.height * .5);
 		
 		
-		if (frame.hasCursorPosition()) {
-			Point2D p2d = viewer.imagePointToComponentPoint(frame.getCursorPosition(), null, false);
-			Point p = new Point((int)(p2d.getX() + .5), (int)(p2d.getY() + .5));
-			
-//			// TODO: Check displaying cursor position?
-//			SwingUtilities.convertPointToScreen(p, viewer);
-//			robot.mouseMove(p.x, p.y);
-			
-			// Drawing the cursor does not really work, because the viewer overrides it
-//			viewer.setCursor(Cursor.getPredefinedCursor(frame.getCursorType()));
-		}
+//		if (frame.hasCursorPosition()) {
+//			Point2D p2d = viewer.imagePointToComponentPoint(frame.getCursorPosition(), null, false);
+//			Point p = new Point((int)(p2d.getX() + .5), (int)(p2d.getY() + .5));
+//			
+////			// TODO: Check displaying cursor position?
+////			SwingUtilities.convertPointToScreen(p, viewer);
+////			robot.mouseMove(p.x, p.y);
+//			
+//			// Drawing the cursor does not really work, because the viewer overrides it
+////			viewer.setCursor(Cursor.getPredefinedCursor(frame.getCursorType()));
+//		}
 		
 		if (frame.hasEyePosition()) {
 			Point2D p2d = frame.getEyePosition();

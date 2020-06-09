@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -34,6 +34,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,7 +58,6 @@ import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.PixelCalibration;
 import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.PathObjects;
 import qupath.lib.objects.PathRootObject;
 import qupath.lib.objects.TMACoreObject;
@@ -116,7 +116,7 @@ public class SimpleTissueDetection2 extends AbstractDetectionPlugin<BufferedImag
 		params.addBooleanParameter("smoothImage", "Smooth image", true, "Apply 3x3 mean filter to (downsampled) image to reduce noise before thresholding");
 		params.addBooleanParameter("medianCleanup", "Cleanup with median filter", true, "Apply median filter to thresholded image to reduce small variations");
 		params.addBooleanParameter("dilateBoundaries", "Expand boundaries", false, "Apply 3x3 maximum filter to binary image to increase region sizes");
-		params.addBooleanParameter("smoothCoordinates", "Smooth coordinates", true, "Apply smmothing to region boundaries, to reduce 'blocky' appearance");
+		params.addBooleanParameter("smoothCoordinates", "Smooth coordinates", true, "Apply smoothing to region boundaries, to reduce 'blocky' appearance");
 		params.addBooleanParameter("excludeOnBoundary", "Exclude on boundary", false, "Discard detection regions that touch the image boundary");
 		
 		params.addBooleanParameter("singleAnnotation", "Single annotation", true, "Create a single annotation object from all (possibly-disconnected) regions");
@@ -274,6 +274,23 @@ public class SimpleTissueDetection2 extends AbstractDetectionPlugin<BufferedImag
 	
 	
 	private static List<PathObject> convertToPathObjects(ByteProcessor bp, double minArea, boolean smoothCoordinates, Calibration cal, double downsample, double maxHoleArea, boolean excludeOnBoundary, boolean singleAnnotation, ImagePlane plane, List<PathObject> pathObjects) {
+//		
+//		var roiIJ = new ThresholdToSelection().convert(bp);
+//		var roi = IJTools.convertToROI(roiIJ, cal, downsample, plane);
+//		roi = RoiTools.removeSmallPieces(roi, minArea, maxHoleArea);
+//		List<PathObject> annotations = new ArrayList<>();
+//		if (singleAnnotation)
+//			annotations.add(PathObjects.createAnnotationObject(roi));
+//		else {
+//			for (var roi2 : RoiTools.splitROI(roi)) {
+//				annotations.add(PathObjects.createAnnotationObject(roi2));				
+//			}
+//		}
+//		for (var annotation : annotations)
+//			annotation.setLocked(true);
+//		return annotations;
+//			
+		
 		List<PolygonRoi> rois = RoiLabeling.getFilledPolygonROIs(bp, Wand.FOUR_CONNECTED);
 		if (pathObjects == null)
 			pathObjects = new ArrayList<>(rois.size());
@@ -333,11 +350,12 @@ public class SimpleTissueDetection2 extends AbstractDetectionPlugin<BufferedImag
 					break;
 				
 				PathObject pathObject = pathObjects.get(ind);
+				var geom = PreparedGeometryFactory.prepare(pathObject.getROI().getGeometry());
 				areaList.clear();
 				Iterator<PathObject> iter = holes.iterator();
 				while (iter.hasNext()) {
 					PathObject hole = iter.next();
-					if (PathObjectTools.containsObject(pathObject, hole)) {
+					if (geom.covers(hole.getROI().getGeometry())) {
 						areaList.add(RoiTools.getArea(hole.getROI()));
 						iter.remove();
 					}

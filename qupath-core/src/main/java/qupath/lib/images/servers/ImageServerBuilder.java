@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -33,10 +33,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Helper class for creating ImageServers from a given URI and optional argument list.
  * 
  * @author Pete Bankhead
+ * @param <T> 
  *
  */
 public interface ImageServerBuilder<T> {
@@ -57,6 +61,7 @@ public interface ImageServerBuilder<T> {
 	 * @param uri
 	 * @param args optional String arguments that may be used by the builder.
 	 * @return
+	 * @throws Exception 
 	 */
 	public ImageServer<T> buildServer(URI uri, String... args) throws Exception;
 	
@@ -255,12 +260,15 @@ public interface ImageServerBuilder<T> {
 	 */
 	public static class DefaultImageServerBuilder<T> extends AbstractServerBuilder<T> {
 		
+		private static final Logger logger = LoggerFactory.getLogger(DefaultImageServerBuilder.class);
+		
 		private String providerClassName;
 		private URI uri;
 		private String[] args;
 		
 		private DefaultImageServerBuilder(String providerClassName, URI uri, String[] args, ImageServerMetadata metadata) {
 			super(metadata);
+			logger.trace("Creating default server builder for URI ", uri);
 			this.providerClassName = providerClassName;
 			this.uri = uri;
 			this.args = args;
@@ -313,14 +321,24 @@ public interface ImageServerBuilder<T> {
 
 		@Override
 		protected ImageServer<T> buildOriginal() throws Exception {
+			boolean failedWithRequestedProvider = false;
 			for (ImageServerBuilder<?> provider : ImageServerProvider.getInstalledImageServerBuilders()) {
 				if (provider.getClass().getName().equals(providerClassName)) {
 					ImageServer<T> server = (ImageServer<T>)provider.buildServer(uri, args);
 					if (server != null)
 						return server;
+					else
+						failedWithRequestedProvider = true;
 				}
 			}
-			throw new IOException("Unable to build ImageServer for " + uri + " (args=" + Arrays.asList(args) + ")");
+			String msg = "Unable to build ImageServer for " + uri + " (args=" + Arrays.asList(args) + ")";
+			if (providerClassName != null) {
+				if (!failedWithRequestedProvider)
+					msg += " - I couldn't find " + providerClassName;
+				else
+					msg += " with requested provider " + providerClassName;
+			}
+			throw new IOException(msg);
 		}
 		
 		@Override

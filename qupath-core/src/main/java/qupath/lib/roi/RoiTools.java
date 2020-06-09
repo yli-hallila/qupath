@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -25,6 +25,7 @@ package qupath.lib.roi;
 
 import java.awt.Rectangle;
 import java.awt.Shape;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Area;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
@@ -38,6 +39,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.util.AffineTransformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,10 +47,6 @@ import qupath.lib.awt.common.AwtTools;
 import qupath.lib.geom.ImmutableDimension;
 import qupath.lib.geom.Point2;
 import qupath.lib.regions.ImagePlane;
-import qupath.lib.roi.EllipseROI;
-import qupath.lib.roi.LineROI;
-import qupath.lib.roi.PolygonROI;
-import qupath.lib.roi.RectangleROI;
 import qupath.lib.roi.interfaces.ROI;
 
 /**
@@ -90,6 +88,7 @@ public class RoiTools {
 	 * @return
 	 */
 	public static ROI combineROIs(ROI shape1, ROI shape2, CombineOp op) {
+		logger.trace("Combining {} and {} with op {}", shape1, shape2, op);
 		// Check we can combine
 		if (!RoiTools.sameImagePlane(shape1, shape2))
 			throw new IllegalArgumentException("Cannot combine - shapes " + shape1 + " and " + shape2 + " do not share the same image plane");
@@ -115,9 +114,12 @@ public class RoiTools {
 	 * @param rois
 	 * @return
 	 */
-	public static ROI unionROIs(Collection<ROI> rois) {
+	public static ROI union(Collection<ROI> rois) {
+		logger.trace("Calculating union of {} ROIs", rois.size());
 		if (rois.isEmpty())
 			return ROIs.createEmptyROI();
+		if (rois.size() == 1)
+			return rois.iterator().next();
 		ImagePlane plane = rois.iterator().next().getImagePlane();
 		List<Geometry> geometries = new ArrayList<>();
 		for (var r : rois) {
@@ -136,9 +138,11 @@ public class RoiTools {
 	 * @param rois
 	 * @return
 	 */
-	public static ROI intersectROIs(Collection<ROI> rois) {
+	public static ROI intersection(Collection<ROI> rois) {
 		if (rois.isEmpty())
 			return ROIs.createEmptyROI();
+		if (rois.size() == 1)
+			return rois.iterator().next();
 		ImagePlane plane = rois.iterator().next().getImagePlane();
 		List<Geometry> geometries = new ArrayList<>();
 		for (var r : rois) {
@@ -154,65 +158,57 @@ public class RoiTools {
 		return GeometryTools.geometryToROI(first, plane);
 	}
 	
+	
+	/**
+	 * Apply an affine transform to a ROI, returning the result.
+	 * @param roi the ROI to transform
+	 * @param transform the affine transform to apply; if null or the identity transform, the original ROI is returned unchanged
+	 * @return the transformed ROI, or the original if no (non-identity) transform is specified
+	 */
+	public static ROI transformROI(ROI roi, AffineTransform transform) {
+		logger.trace("Applying affine transform {} to ROI {}", transform, roi);
+		if (roi == null || transform == null || transform.isIdentity())
+			return roi;
+		var t = GeometryTools.convertTransform(transform);
+		var geometry2 = t.transform(roi.getGeometry());
+		return GeometryTools.geometryToROI(geometry2, roi.getImagePlane());
+	}
+	
+	
 	/**
 	 * Intersect a collection of ROIs with a single parent ROI, returning all results that are valid.
+	 * Where possible, ROIs are returned unchanged.
 	 * 
 	 * @param parent the parent ROI, used to define the clip boundary
 	 * @param rois a collection of ROIs that should be intersected with parent
-	 * @return collection of intersected ROIs; this may be shorter than rois if some lie completely outside parent
+	 * @return list of intersected ROIs; this may be shorter than rois if some lie completely outside parent
 	 */
-	public static Collection<ROI> clipToROI(ROI parent, Collection<ROI> rois) {
+	public static List<ROI> clipToROI(ROI parent, Collection<ROI> rois) {
+		logger.trace("Clipping {} ROIs to {}", rois.size(), parent);
 		var geom = parent.getGeometry();
 		List<ROI> results = new ArrayList<>();
 		for (var r : rois) {
 			if (!sameImagePlane(parent, r))
 				continue;
 			var g = r.getGeometry();
-			if (geom.intersects(g)) {
+			// Quick check to see if we can use the ROI unchanged
+			if (geom.covers(g))
+				results.add(r);
+			else {
+				// Compute the intersection
 				g = geom.intersection(g);
-				results.add(GeometryTools.geometryToROI(g, parent.getImagePlane()));
+				// If we have a collection, we need to ensure homogeneity - intersections between two areas can result in lines occurring
+				g = GeometryTools.homogenizeGeometryCollection(geom.intersection(g));
+				// Return the intersection if it is non-null, and also avoids any 'collapse', e.g. an area becoming a line
+				if (!g.isEmpty()) {
+					var r2 = GeometryTools.geometryToROI(g, r.getImagePlane());
+					if (r.isArea() == r2.isArea() && r.isLine() == r2.isLine() && r.isPoint() == r2.isPoint())
+						results.add(r2);
+				}
 			}
 		}
 		return results;
 	}
-
-//	/**
-//	 * Compute two shape ROIs together, using the specified 'flatness' to handle curved segments.
-//	 * 
-//	 * @param shape1
-//	 * @param shape2
-//	 * @param op
-//	 * @param flatness
-//	 * @return
-//	 */
-//	public static PathShape combineROIs(PathShape shape1, PathShape shape2, CombineOp op, double flatness) {
-//		// Check we can combine
-//		if (!RoiTools.sameImagePlane(shape1, shape2))
-//			throw new IllegalArgumentException("Cannot combine - shapes " + shape1 + " and " + shape2 + " do not share the same image plane");
-//		Area area1 = getArea(shape1);
-//		Area area2 = getArea(shape2);
-//		
-//		// Do a quick check to see if a combination might be avoided
-//		if (op == CombineOp.INTERSECT) {
-//			if (area1.contains(area2.getBounds2D()))
-//				return shape2;
-//			if (area2.contains(area1.getBounds2D()))
-//				return shape1;
-//		} else if (op == CombineOp.ADD) {
-//			if (area1.contains(area2.getBounds2D()))
-//				return shape1;
-//			if (area2.contains(area1.getBounds2D()))
-//				return shape2;			
-//		}
-//		
-//		combineAreas(area1, area2, op);
-//		// I realise the following looks redundant... however direct use of the areas with the
-//		// brush tool led to strange artefacts appearing & disappearing... performing an additional
-//		// conversion seems to help
-//		//		area1 = new Area(new Path2D.Float(area1));
-//		// Return simplest ROI that works - prefer a rectangle or polygon over an area
-//		return getShapeROI(area1, shape1.getImagePlane(), flatness);
-//	}
 	
 	/**
 	 * Fill the holes of an Area ROI, or return the ROI unchanged if it contains no holes.
@@ -225,33 +221,19 @@ public class RoiTools {
 	}
 
 	/**
-	 * Remove small pieces from a {@link ROI}.
-	 * <p>
-	 * If the ROI is an area ROI this may be fragments that leave the ROI itself 
-	 * otherwise intact.  For other ROIs, if the area is &gt; minArea it will be returned, 
-	 * otherwise an empty ROI will be returned instead.
+	 * Remove small fragments and fill small holes of an area ROI.
 	 * 
-	 * @param roi
-	 * @param minArea
+	 * @param roi the ROI to refine
+	 * @param minAreaPixels the minimum size of a fragment to retain
+	 * @param minHoleAreaPixels the minimum size of a hole to retain, or -1 if all holes should be retained
 	 * @return
-	 */
-	static ROI removeSmallPieces(ROI roi, double minArea) {
-		if (roi.getArea() > minArea)
-			return roi;
-		return removeSmallPieces(roi, minArea, -1);
-	}
-
-	/**
-	 * Remove small pieces and fill small holes of an area ROI.
-	 * 
-	 * @param roi
-	 * @param minAreaPixels
-	 * @param minHoleAreaPixels
-	 * @return
+	 * @see GeometryTools#refineAreas(Geometry, double, double)
 	 */
 	public static ROI removeSmallPieces(ROI roi, double minAreaPixels, double minHoleAreaPixels) {
 		if (!roi.isArea())
-			throw new IllegalArgumentException("Only PathArea ROIs supported!");
+			throw new IllegalArgumentException("Only area ROIs supported!");
+		
+		logger.trace("Removing small pieces from {} (min = {}, max = {})", roi, minAreaPixels, minHoleAreaPixels);
 		
 		// We can't have holes if we don't have an AreaROI
 		if (roi instanceof RectangleROI || roi instanceof EllipseROI || roi instanceof LineROI || roi instanceof PolylineROI) {
@@ -272,9 +254,8 @@ public class RoiTools {
 
 
 	/**
-	 * Get a PathShape from an Area.
-	 * This will try to return a RectangleROI or PolygonROI if possible,
-	 * or AreaROI if neither of the other classes can adequately represent the area.
+	 * Get a {@link ROI} from an Area.
+	 * This will try to return a simple representation of the ROI if possible (e.g. a rectangle or polygon).
 	 * 
 	 * @param area
 	 * @param plane
@@ -290,36 +271,33 @@ public class RoiTools {
 		else if (area.isSingular() && (area.isPolygonal() || flatness > 0)) {
 			Path2D path = new Path2D.Float(area);
 			List<Point2> points = flatness > 0 ? RoiTools.getLinearPathPoints(path, path.getPathIterator(null, flatness)) : RoiTools.getLinearPathPoints(path, path.getPathIterator(null));
-			return new PolygonROI(points, plane);
-			//			if (area.isPolygonal())
-			//				return new PolygonROI(new Path2D.Float(area), c, z, t);
-			//			else if (flatness > 0) {
-			//				Path2D path = new Path2D.Float();
-			//				path.append(area.getPathIterator(null, flatness), false);
-			//				return new PolygonROI(path, c, z, t);
-			//			}
+			return ROIs.createPolygonROI(points, plane);
 		}
 		return ROIs.createAreaROI(area, plane);		
 	}
 	
 	
 	/**
-	 * Get circularity measurement for Area ROIs, calculated as 4 * PI * (area / perimeter^2).
+	 * Get circularity measurement for Area ROIs, calculated as {@code 4 * PI * (area / perimeter^2)}.
 	 * Non-area ROIs return Double.NaN.
 	 * <p>
 	 * This ranges between 0 (for a line) and 1 (for a circle).  Note that the pixel (i.e. not scaled) areas and perimeters are used.
-	 * @return
+	 * @param roi the ROI to measure
+	 * @return a circularity value, between 0 (a line) and 1 (a perfect circle)
 	 */
 	public static double getCircularity(ROI roi) {
 		return getCircularity(roi, 1, 1);
 	}
 
 	/**
-	 * Get circularity measurement for Area ROIs, with optional pixel calibration, calculated as 4 * PI * (area / perimeter^2).
+	 * Get circularity measurement for area ROIs, with optional pixel calibration, calculated as {@code 4 * PI * (area / perimeter^2)}.
 	 * Non-area ROIs return Double.NaN.
 	 * <p>
 	 * This ranges between 0 (for a line) and 1 (for a circle).  This version optionally allows non-square pixels to be used.
-	 * @return
+	 * @param roi the ROI to measure
+	 * @param pixelWidth the calibrated pixel width (use 1.0 for uncalibrated pixels)
+	 * @param pixelHeight the calibrated pixel height (use 1.0 for uncalibrated pixels)
+	 * @return a circularity value, between 0 (a line) and 1 (a perfect circle)
 	 */
 	public static double getCircularity(ROI roi, double pixelWidth, double pixelHeight) {
 		if (roi.isArea()) {
@@ -339,7 +317,7 @@ public class RoiTools {
 	 * 
 	 * @param shape
 	 * @param plane
-	 * @param flatness - can be used to prefer polygons, see Shape.getPathIterator(AffineTransform at, double flatness)
+	 * @param flatness - can be used to prefer polygons, see {@code Shape.getPathIterator(AffineTransform, double)}
 	 * @return
 	 */
 	public static ROI getShapeROI(Shape shape, ImagePlane plane, double flatness) {
@@ -388,9 +366,61 @@ public class RoiTools {
 			return ROIs.createLineROI(p1.getX(), p1.getY(), p2.getX(), p2.getY(), plane);
 		} else
 			// Handle polylines
-			return new PolylineROI(points, plane);
+			return ROIs.createPolylineROI(points, plane);
 	}
 
+	/**
+	 * Get the Euclidean distance between the centroids of two ROIs.
+	 * @param roi1 first ROI
+	 * @param roi2 second ROI
+	 * @return the distance between centroids
+	 */
+	public static double getCentroidDistance(ROI roi1, ROI roi2) {
+		return getCentroidDistance(roi1, roi2, 1.0, 1.0);
+	}
+	
+	/**
+	 * Get the calibrated Euclidean distance between the centroids of two ROIs using specified pixel sizes.
+	 * @param roi1 first ROI
+	 * @param roi2 second ROI
+	 * @param pixelWidth horizontal scale factor for pixels
+	 * @param pixelHeight vertical scale factor for pixels
+	 * @return the distance between centroids
+	 */
+	public static double getCentroidDistance(ROI roi1, ROI roi2, double pixelWidth, double pixelHeight) {
+		double dx = (roi1.getCentroidX() - roi2.getCentroidX()) * pixelWidth;
+		double dy = (roi1.getCentroidY() - roi2.getCentroidY()) * pixelHeight;
+		return Math.sqrt(dx*dx + dy*dy);
+	}
+	
+	/**
+	 * Get the Euclidean distance between the boundaries of two ROIs.
+	 * @param roi1 first ROI
+	 * @param roi2 second ROI
+	 * @return the distance between boundaries
+	 */
+	public static double getBoundaryDistance(ROI roi1, ROI roi2) {
+		return getBoundaryDistance(roi1, roi2, 1.0, 1.0);
+	}
+	
+	/**
+	 * Get the calibrated Euclidean distance between the boundaries of two ROIs using specified pixel sizes.
+	 * @param roi1 first ROI
+	 * @param roi2 second ROI
+	 * @param pixelWidth horizontal scale factor for pixels
+	 * @param pixelHeight vertical scale factor for pixels
+	 * @return the distance between boundaries
+	 */
+	public static double getBoundaryDistance(ROI roi1, ROI roi2, double pixelWidth, double pixelHeight) {
+		if (pixelWidth == pixelHeight) {
+			double pixelSize = pixelWidth;
+			return roi1.getGeometry().distance(roi2.getGeometry()) * pixelSize;
+		}
+		var transform = AffineTransformation.scaleInstance(pixelWidth, pixelHeight);
+		var g1 = transform.transform(roi1.getGeometry());
+		var g2 = transform.transform(roi2.getGeometry());
+		return g1.distance(g2);
+	}
 
 	/**
 	 * Create a {@link ROI} from an Shape.
@@ -411,7 +441,7 @@ public class RoiTools {
 
 
 	/**
-	 * Get a java.awt.Shape object representing a ROI.
+	 * Get a {@link Shape} object representing a ROI.
 	 * Previously this did more work; now it only calls {@link ROI#getShape()}
 	 * 
 	 * @param roi
@@ -426,7 +456,7 @@ public class RoiTools {
 
 
 	/**
-	 * Get a java.awt.geom.Area object representing a ROI.
+	 * Get an {@link Area} object representing a ROI.
 	 * 
 	 * @param roi
 	 * @return
@@ -450,6 +480,7 @@ public class RoiTools {
 	 * @return
 	 */
 	public static List<ROI> makeTiles(final ROI roi, final int tileWidth, final int tileHeight, final boolean trimToROI) {
+		// TODO: Convert to use JTS Geometries rather than AWT Areas.
 		// Create a collection of tiles
 		Rectangle bounds = AwtTools.getBounds(roi);
 		Area area = getArea(roi);
@@ -525,7 +556,7 @@ public class RoiTools {
 
 		List<ROI> pathROIs = new ArrayList<>();
 
-		Area area = getArea(pathArea);
+		Geometry area = pathArea.getGeometry();
 
 		double xMin = bounds.getMinX();
 		double yMin = bounds.getMinY();
@@ -537,6 +568,8 @@ public class RoiTools {
 		// Center the tiles
 		xMin = (int)(bounds.getCenterX() - (nx * w * .5));
 		yMin = (int)(bounds.getCenterY() - (ny * h * .5));
+		
+		var plane = parentROI.getImagePlane();
 
 		for (int yi = 0; yi < ny; yi++) {
 			for (int xi = 0; xi < nx; xi++) {
@@ -544,7 +577,8 @@ public class RoiTools {
 				double x = xMin + xi * w - overlap;
 				double y = yMin + yi * h - overlap;
 
-				Rectangle2D boundsTile = new Rectangle2D.Double(x, y, w + overlap*2, h + overlap*2);
+				var rect = ROIs.createRectangleROI(x, y, w + overlap*2, h + overlap*2, plane);
+				var boundsTile = rect.getGeometry();
 
 				//				double x = xMin + xi * w;
 				//				double y = yMin + yi * h;
@@ -553,24 +587,30 @@ public class RoiTools {
 				//					logger.info(boundsTile);
 				ROI pathROI = null;
 				if (area.contains(boundsTile))
-					pathROI = ROIs.createRectangleROI(boundsTile.getX(), boundsTile.getY(), boundsTile.getWidth(), boundsTile.getHeight(), parentROI.getImagePlane());
-				else if (pathArea instanceof RectangleROI) {
-					Rectangle2D bounds2 = boundsTile.createIntersection(bounds);
-					pathROI = ROIs.createRectangleROI(bounds2.getX(), bounds2.getY(), bounds2.getWidth(), bounds2.getHeight(), parentROI.getImagePlane());
-				}
+					pathROI = rect;
 				else {
 					if (!area.intersects(boundsTile))
 						continue;
-					Area areaTemp = new Area(boundsTile);
-					areaTemp.intersect(area);
+					Geometry areaTemp = boundsTile.intersection(area);
 					if (!areaTemp.isEmpty())
-						pathROI = ROIs.createAreaROI(areaTemp, parentROI.getImagePlane());					
+						pathROI = GeometryTools.geometryToROI(areaTemp, plane);
 				}
 				if (pathROI != null)
 					pathROIs.add(pathROI);
 			}
 		}
 		return pathROIs;
+	}
+	
+	
+	/**
+	 * Buffer the specified ROI, dilating (or eroding) by the specified distance.
+	 * @param roi the ROI to buffer
+	 * @param distance the distance to buffer, in pixels. If negative an erosion will be performed.
+	 * @return the modified ROI (which may be empty)
+	 */
+	public static ROI buffer(ROI roi, double distance) {
+		return GeometryTools.geometryToROI(roi.getGeometry().buffer(distance), roi.getImagePlane());
 	}
 	
 	
@@ -586,15 +626,25 @@ public class RoiTools {
 		if (roi instanceof RectangleROI || roi instanceof LineROI || roi instanceof EllipseROI) {
 			return Collections.singletonList(roi);
 		}
-		
-		var geometry = roi.getGeometry();
-		if (geometry.getNumGeometries() == 1)
-			return Collections.singletonList(roi);
 
 		var list = new ArrayList<ROI>();
 		var plane = ImagePlane.getPlane(roi);
-		for (int i = 0; i < geometry.getNumGeometries(); i++) {
-			list.add(GeometryTools.geometryToROI(geometry.getGeometryN(i), plane));
+		
+		if (roi.isPoint()) {
+			// Handle point ROIs
+			if (roi.getNumPoints() <= 1)
+				return Collections.singletonList(roi);
+			for (var p : roi.getAllPoints()) {
+				list.add(ROIs.createPointsROI(p.getX(), p.getY(), plane));
+			}
+		} else {
+			// Handle everything else
+			var geometry = roi.getGeometry();
+			if (geometry.getNumGeometries() == 1)
+				return Collections.singletonList(roi);
+			for (int i = 0; i < geometry.getNumGeometries(); i++) {
+				list.add(GeometryTools.geometryToROI(geometry.getGeometryN(i), plane));
+			}
 		}
 		return list;
 	}
@@ -628,7 +678,7 @@ public class RoiTools {
 
 		PathIterator iter = area.getPathIterator(null, 0.5);
 
-
+		var plane = ImagePlane.getPlaneWithChannel(c, z, t);
 		List<Point2> points = new ArrayList<>();
 
 
@@ -673,9 +723,9 @@ public class RoiTools {
 			// Add polygon if it has just been closed
 			if (closed) {
 				if (areaTempSigned < 0)
-					map.get(Boolean.FALSE).add(new PolygonROI(points));
+					map.get(Boolean.FALSE).add(ROIs.createPolygonROI(points, plane));
 				else if (areaTempSigned > 0)
-					map.get(Boolean.TRUE).add(new PolygonROI(points));
+					map.get(Boolean.TRUE).add(ROIs.createPolygonROI(points, plane));
 				// Zero indicates the shape is empty...
 			}
 			// Update the coordinates
@@ -687,11 +737,11 @@ public class RoiTools {
 		areaCached += areaTempSigned;
 		PolygonROI[][] polyOutput = new PolygonROI[2][];
 		if (areaCached < 0) {
-			polyOutput[0] = map.get(Boolean.TRUE).toArray(new PolygonROI[0]);
-			polyOutput[1] = map.get(Boolean.FALSE).toArray(new PolygonROI[0]);
+			polyOutput[0] = map.get(Boolean.TRUE).toArray(PolygonROI[]::new);
+			polyOutput[1] = map.get(Boolean.FALSE).toArray(PolygonROI[]::new);
 		} else {
-			polyOutput[0] = map.get(Boolean.FALSE).toArray(new PolygonROI[0]);
-			polyOutput[1] = map.get(Boolean.TRUE).toArray(new PolygonROI[0]);			
+			polyOutput[0] = map.get(Boolean.FALSE).toArray(PolygonROI[]::new);
+			polyOutput[1] = map.get(Boolean.TRUE).toArray(PolygonROI[]::new);			
 		}
 		//		areaCached = Math.abs(areaCached + areaTempSigned);
 
@@ -747,7 +797,7 @@ public class RoiTools {
 	//					points.add(points.get(0));
 					break;
 				default:
-					throw new RuntimeException("Invalid polygon " + path + " - only line connections are allowed");
+					throw new IllegalArgumentException("Invalid polygon " + path + " - only line connections are allowed");
 				};
 				iter.next();
 			}
@@ -803,65 +853,5 @@ public class RoiTools {
 	public static boolean isShapeROI(ROI roi) {
 		return roi != null && !roi.isPoint();
 	}
-
-
-//	/**
-//	 * Dilate or erode a ROI using a circular structuring element.
-//	 * 
-//	 * @param roi The ROI to dilate or erode.
-//	 * @param radius The radius of the structuring element to use.  If positive this will be a dilation, if negative an erosion.
-//	 * @return
-//	 */
-//	public static ROI roiMorphology(final ROI roi, final double radius) {
-//		// Much faster to use JTS...
-//		return (ROI)ConverterJTS.convertGeometryToROI(roi.getGeometry().buffer(radius), ImagePlane.getPlane(roi));
-////		return getShapeROI(shapeMorphology(getShape(roi), radius), roi.getC(), roi.getZ(), roi.getT());
-//	}
-	
-	
-	
-//	/**
-//	 * Query if a ROI represents a rectangle.
-//	 * <p>
-//	 * Note that this checks the representation of the ROI; it does <i>not<i/>
-//	 * check for polygons or other shapes that happen to define a rectangular shape.
-//	 * @param roi
-//	 * @return
-//	 */
-//	public static boolean isSimpleRectangle(final ROI roi) {
-//		return roi instanceof RectangleROI;
-//	}
-//
-//	/**
-//	 * Query if a ROI represents an ellipse.
-//	 * @param roi
-//	 * @return
-//	 */
-//	public static boolean isSimpleEllipse(final ROI roi) {
-//		return roi instanceof EllipseROI;
-//	}
-//
-//	/**
-//	 * Query if a ROI represents a simple closed polygon, without holes.
-//	 * <p>
-//	 * Note that this checks the representation of the ROI; it does <i>not<i/>
-//	 * check for more complex ROIs that may happen to define a simple polygonal shapes.
-//	 * @param roi
-//	 * @return
-//	 */
-//	public static boolean isSimplePolygon(final ROI roi) {
-//		return roi instanceof PolygonROI;
-//	}
-//
-//	/**
-//	 * Query if a ROI represents a simple (open) polyline.
-//	 * <p>
-//	 * Note that this checks the representation of the ROI; it returns false for (straight) Line ROIs.
-//	 * @param roi
-//	 * @return
-//	 */
-//	public static boolean isSimplePolyline(final ROI roi) {
-//		return roi instanceof PolylineROI;
-//	}
 
 }

@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -29,19 +29,25 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Type;
-import java.nio.file.Path;
+import java.math.BigDecimal;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -49,6 +55,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Scanner;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.Locale.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -322,18 +331,50 @@ public class GeneralTools {
 	/**
 	 * Try to convert a path to a URI.
 	 * <p>
-	 * This currently does a very simple check for http:/https:/file: at the beginning to see if it
-	 * can construct the URI directly; if not, it assumes the path refers to a local file (as it
-	 * generally did in QuPath 0.1.2 and earlier).
+	 * This currently does a very simple check for a known scheme at the beginning
+	 * ("http:", "https:" or ""file:") to see if it can construct the URI directly;
+	 * if not, it assumes the path refers to a local file (as it generally did in
+	 * QuPath 0.1.2 and earlier). This method does not encode special characters.
 	 *
 	 * @param path
 	 * @return
 	 * @throws URISyntaxException
+	 * @see #toEncodedURI(String path)
 	 */
 	public static URI toURI(String path) throws URISyntaxException {
 		if (path.startsWith("http:") || path.startsWith("https:") || path.startsWith("file:"))
 			return new URI(path);
 		return new File(path).toURI();
+	}
+
+	/**
+	 * Try to convert a path to an encoded URI.
+	 * <p>
+	 * URIs do not accept some characters (e.g. "|"). This method will perform a simple check for
+	 * {@code http:} and {@code https:} schemes at the beginning of the URI. It will then modify
+	 * the Query (@see <a href=https://docs.oracle.com/javase/tutorial/networking/urls/urlInfo.html>Query</a>)
+	 * to a valid form. Finally, a reconstructed valid URI is returned. Note: this method will
+	 * only encode the Query part of the URI (i.e. it will not handle Fragments).
+	 * <p>
+	 * E.g. "{@code https://host?query=first|second}" will return "{@code https://host?query%3Dfirst%7Csecond}".
+	 *
+	 * @param path
+	 * @return encodedURI
+	 * @throws URISyntaxException
+	 * @throws UnsupportedEncodingException
+	 * @throws MalformedURLException
+	 */
+	public static URI toEncodedURI(String path) throws URISyntaxException, UnsupportedEncodingException, MalformedURLException {
+		if (path.startsWith("http:") || path.startsWith("https:")) {
+			String urlQuery = new URL(path).getQuery();
+			if (urlQuery != null && !urlQuery.isEmpty()) {
+				String encodedQueryString = URLEncoder.encode(urlQuery, StandardCharsets.UTF_8);
+				String encodedURL = path.substring(0, path.lastIndexOf(urlQuery)) + urlQuery.replace(urlQuery, encodedQueryString);
+				return new URI(encodedURL);
+			}
+			return new URI(path);
+		}
+		return new URI(path);
 	}
 
 
@@ -524,12 +565,8 @@ public class GeneralTools {
 	 * String to represent um (but with the proper 'mu' symbol)
 	 */
 	public final static String SYMBOL_MICROMETER = '\u00B5' + "m";
-
-
-    public static String readFileAsString(Path path) throws IOException {
-        return readFileAsString(path.toString());
-    }
-
+	
+	
 	/**
 	 * Read the entire contents of a file into a single String.
 	 * 
@@ -572,7 +609,7 @@ public class GeneralTools {
 		for (String ext : extensions) {
 			if (!ext.startsWith("."))
 				ext = "." + ext;
-			if (pathLower.endsWith(ext))
+			if (pathLower.endsWith(ext.toLowerCase()))
 				return true;
 		}
 		return false;
@@ -633,6 +670,7 @@ public class GeneralTools {
 	 * @param url
 	 * @param timeoutMillis
 	 * @return
+	 * @throws IOException
 	 */
 	public static String readURLAsString(final URL url, final int timeoutMillis) throws IOException {
 		StringBuilder response = new StringBuilder();
@@ -676,5 +714,168 @@ public class GeneralTools {
 			total += v;
 		return total;
 	}
+
+
+	/**
+	 * Generate a name that is distinct from the names in an existing collection, while being based on a provided name.
+	 * <p>
+	 * This is useful, for example, when duplicating named items and requiring that the duplicates can be distinguished.
+	 * The precise way in which the name is derived is implementation-dependent, with the only requirement that it be
+	 * recognizably derived from the base name.
+	 * <p>
+	 * Currently, names are generated in the form {@code "base (i)"} where {@code i} is an integer.
+	 * <p>
+	 * Note that if the base already has the same form, any existing integer will be stripped away;
+	 * for example providing {@code "name (1)"} as the base will yield the output {@code "name (2)"},
+	 * (assuming this name does not already exist), rather than {@code "name (1) (1)"}.
+	 *
+	 * @param base the base from which the name should be derived
+	 * @param existingNames a collection of names that are already in use, and therefore must be avoided
+	 * @return the distinct name
+	 */
+	public static String generateDistinctName(String base, Collection<String> existingNames) {
+		if (!existingNames.contains(base))
+			return base;
+
+		// Check if we already end with a number, and if so strip that
+		if (Pattern.matches(".* (\\([\\d]+\\))$", base)) {
+			base = base.substring(0, base.lastIndexOf(" ("));
+		}
+
+		// Check for the highest number we currently have
+		int lastInd = 0;
+		var pattern = Pattern.compile(base + " \\(([\\d]+)\\)");
+		for (var existing : existingNames) {
+			var matcher = pattern.matcher(existing);
+			if (matcher.find())
+				lastInd = Math.max(lastInd, Integer.parseInt(matcher.group(1)));
+		}
+		return base + " (" + (lastInd + 1) + ")";
+	}
+
+
+	/**
+	 * Estimate the current available memory in bytes, based upon the JVM max and the memory currently used.
+	 * <p>
+	 * This may be used to help determine whether a memory-hungry operation should be attempted.
+	 *
+	 * @return the estimated unused memory in bytes
+	 */
+	public static long estimateAvailableMemory() {
+		System.gc();
+		return Runtime.getRuntime().maxMemory() - estimateUsedMemory();
+	}
+
+	/**
+	 * Estimate the current used memory.
+	 *
+	 * @return the estimated allocated memory in bytes
+	 */
+	public static long estimateUsedMemory() {
+		var runtime = Runtime.getRuntime();
+		return runtime.totalMemory() - runtime.freeMemory();
+	}
+
+	/**
+	 * Smart-sort a collection using the {@link Object#toString()} method applied to each element.
+	 * See {@link #smartStringSort(Collection, Function)} for more details.
+	 * @param <T>
+	 * @param collection collection to be sorted (results are retained in-place)
+	 * @see #smartStringSort(Collection, Function)
+	 */
+	public static <T> void smartStringSort(Collection<T> collection) {
+		smartStringSort(collection, T::toString);
+	}
+
+	/**
+	 * Smart-sort a collection after extracting a String representation of each element.
+	 * This differs from a 'normal' sort by splitting the String into lists of numeric and non-numeric parts,
+	 * and comparing corresponding elements separately.
+	 * This can sometimes give more intuitive results than a simple String sort, which would treat "10" as
+	 * 'less than' "2".
+	 * <p>
+	 * For example, applying a simple sort to the list {@code ["a1", "a2", "a10"]} will result in
+	 * {@code ["a1", "a10", "a2]}. Smart-sorting would leave the list unchanged.
+	 * <p>
+	 * Note: Currently this method considers only positive integer values, treating characters such as
+	 * '+', '-', ',', '.' and 'e' as distinct elements of text.
+	 * @param <T>
+	 * @param collection collection to be sorted (results are retained in-place)
+	 * @param extractor function used to convert each element of the collection to a String representation
+	 */
+	public static <T> void smartStringSort(Collection<T> collection, Function<T, String> extractor) {
+		for (var temp : collection)
+			System.err.println(new StringPartsSorter<T>(temp, temp.toString()));
+		var list = collection.stream().map(c -> new StringPartsSorter<>(c, extractor.apply(c))).sorted().map(s -> s.obj).collect(Collectors.toList());
+		collection.clear();
+		collection.addAll(list);
+	}
+
+	/**
+	 * Comparator for smart String sorting.
+	 * Note: This comparator is very inefficient. Where possible {@link #smartStringSort(Collection, Function)} should
+	 * be used instead.
+	 * @return a String comparator that parses integers from within the String so they may be compared by value
+	 */
+	public static Comparator<String> smartStringComparator() {
+		return (String s1, String s2) -> new StringPartsSorter<>(s1, s1).compareTo(new StringPartsSorter<>(s2, s2));
+	}
+
+	/**
+	 * Helper class for smart-sorting.
+	 * @param <T>
+	 */
+	private static class StringPartsSorter<T> implements Comparable<StringPartsSorter<T>> {
+
+		private final static Pattern PATTERN = Pattern.compile("(\\d+)");
+
+		private T obj;
+		private List<Object> parts;
+
+		StringPartsSorter(T obj, String s) {
+			this.obj = obj;
+			if (s == null)
+				s = Objects.toString(obj);
+			// Break the string into numeric & non-numeric parts
+			var matcher = PATTERN.matcher(s);
+			parts = new ArrayList<>();
+			int next = 0;
+			while (matcher.find()) {
+				int s1 = matcher.start();
+				if (s1 > next) {
+					parts.add(s.substring(next, s1));
+				}
+				parts.add(new BigDecimal(matcher.group()));
+				next = matcher.end();
+			}
+			if (next < s.length())
+				parts.add(s.substring(next));
+		}
+
+		@Override
+		public int compareTo(StringPartsSorter<T> s2) {
+			int n = Math.min(parts.size(), s2.parts.size());
+			for (int i = 0; i < n; i++) {
+				var p1 = parts.get(i);
+				var p2 = s2.parts.get(i);
+				int comp = 0;
+				if (p1 instanceof BigDecimal && p2 instanceof BigDecimal) {
+					comp = ((BigDecimal)p1).compareTo((BigDecimal)p2);
+				} else {
+					comp = p1.toString().compareTo(p2.toString());
+				}
+				if (comp != 0)
+					return comp;
+			}
+			return Integer.compare(parts.size(), s2.parts.size());
+		}
+
+		@Override
+		public String toString() {
+			return "[" + parts.stream().map(p -> p.toString()).collect(Collectors.joining(", ")) + "]";
+		}
+
+	}
+
 
 }

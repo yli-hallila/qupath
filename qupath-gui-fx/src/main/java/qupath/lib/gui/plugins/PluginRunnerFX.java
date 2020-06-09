@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -47,7 +47,7 @@ import javafx.scene.text.TextAlignment;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.helpers.PaneToolsFX;
+import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.images.ImageData;
 import qupath.lib.plugins.CommandLinePluginRunner;
 import qupath.lib.plugins.PathTask;
@@ -63,7 +63,7 @@ import qupath.lib.regions.ImageRegion;
  */
 public class PluginRunnerFX extends AbstractPluginRunner<BufferedImage> {
 
-	final private static Logger logger = LoggerFactory.getLogger(PluginRunnerFX.class);
+	private final static Logger logger = LoggerFactory.getLogger(PluginRunnerFX.class);
 	
 	// Time to delay QuPath viewer repaints when running plugin tasks
 	private static long repaintDelayMillis = 2000;
@@ -71,6 +71,10 @@ public class PluginRunnerFX extends AbstractPluginRunner<BufferedImage> {
 	private QuPathGUI qupath;
 	//		private ImageData<BufferedImage> imageData; // Consider reinstating - at least as an option
 
+	/**
+	 * Constructor.
+	 * @param qupath the QuPath instance
+	 */
 	public PluginRunnerFX(final QuPathGUI qupath) {
 		super();
 		this.qupath = qupath;
@@ -232,10 +236,10 @@ public class PluginRunnerFX extends AbstractPluginRunner<BufferedImage> {
 			GridPane panel;
 			if (maxProgress > 1) {
 				progressBar = new ProgressBar();
-				panel = PaneToolsFX.createRowGridControls(progressLabel, progressBar);
+				panel = PaneTools.createRowGridControls(progressLabel, progressBar);
 			} else {
 				progressLabel.setTextAlignment(TextAlignment.CENTER);
-				panel = PaneToolsFX.createRowGridControls(progressLabel);
+				panel = PaneTools.createRowGridControls(progressLabel);
 			}
 			if (mayCancel) {
 				Button btnCancel = new Button("Cancel");

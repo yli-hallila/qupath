@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -112,7 +112,7 @@ public abstract class PathObject implements Externalizable {
 	 * Subclasses should override this method to support locking or unlocking.
 	 * Default implementation always returns true.
 	 *
-	 * return true if the object is locked and should not be modified.
+	 * @return true if the object is locked and should not be modified.
 	 */
 	public boolean isLocked() {
 		return true;
@@ -451,14 +451,34 @@ public abstract class PathObject implements Externalizable {
 	
 	/**
 	 * Total number of child objects.
-	 * <p>
-	 * Note that this is the size of the child object list - it does not check descendents recursively.
-	 * @return
+	 * Note that this is the size of the child object list - it does not check descendants recursively.
+	 *
+	 * @return the number of direct child objects
+	 * @see #nDescendants()
 	 */
 	public int nChildObjects() {
 		return childList == null ? 0 : childList.size();
 	}
 	
+	/**
+	 * Total number of descendant objects.
+	 * This involves counting objects recursively; to get the number of direct child object only
+	 * see {@link #nChildObjects()}.
+	 *
+	 * @return the number of child objects, plus the number of each child object's descendants
+	 * @see #nChildObjects()
+	 */
+	public int nDescendants() {
+		if (childList == null || childList.isEmpty())
+			return 0;
+		synchronized (this) {
+			int total = 0;
+			for (var child : childList)
+				total += 1 + child.nDescendants();
+			return total;
+		}
+	}
+
 	/**
 	 * Check if this object has children, or if its child object list is empty.
 	 * @return
@@ -571,6 +591,41 @@ public abstract class PathObject implements Externalizable {
 		return cachedUnmodifiableChildren;
 	}
 	
+	/**
+	 * Get a collection containing all child objects.
+	 *
+	 * @param children optional collection to which the children should be added
+	 * @return collection containing all child object (the same as {@code children} if provided)
+	 */
+	public synchronized Collection<PathObject> getChildObjects(Collection<PathObject> children) {
+		if (children == null)
+			return getChildObjects();
+		if (childList == null || childList.isEmpty())
+			return Collections.emptyList();
+		children.addAll(childList);
+		return children;
+	}
+
+	/**
+	 * Get a collection containing all descendant objects.
+	 *
+	 * @param descendants optional collection to which the descendants should be added
+	 * @return collection containing all descendant object (the same as {@code descendants} if provided)
+	 */
+	public synchronized Collection<PathObject> getDescendantObjects(Collection<PathObject> descendants) {
+		if (childList == null || childList.isEmpty())
+			return Collections.emptyList();
+		if (descendants == null)
+			descendants = new ArrayList<>();
+//		descendants.addAll(childList);
+		for (var child : childList) {
+			descendants.add(child);
+			if (child.hasChildren())
+				child.getDescendantObjects(descendants);
+		}
+		return descendants;
+	}
+
 	/**
 	 * Get a defensive copy of child objects as an array.
 	 * Why? Well perhaps you want to iterate through it and {@link #getChildObjects()} may result in synchronization problems if
@@ -719,7 +774,8 @@ public abstract class PathObject implements Externalizable {
 	 * 
 	 * @param key
 	 * @param value
-	 * 
+	 * @return
+	 *
 	 * @see #retrieveMetadataValue
 	 */
 	protected Object storeMetadataValue(final String key, final String value) {

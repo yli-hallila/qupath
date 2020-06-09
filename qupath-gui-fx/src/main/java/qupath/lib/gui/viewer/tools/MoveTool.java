@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -38,7 +38,6 @@ import javafx.scene.input.MouseEvent;
 import javafx.util.Duration;
 import qupath.lib.awt.common.AwtTools;
 import qupath.lib.gui.prefs.PathPrefs;
-import qupath.lib.gui.viewer.ModeWrapper;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.PathObject;
@@ -61,34 +60,26 @@ public class MoveTool extends AbstractPathTool {
 	
 	final static private Logger logger = LoggerFactory.getLogger(MoveTool.class);
 
+	private static boolean requestDynamicDragging = true;
+	
 	private Point2D pDragging;
 	private double dx, dy; // Last dragging displacements
 	private long lastDragTimestamp; // Used to determine if the user has stopped dragging (but may not yet have release the mouse button)
 	
-	private ViewerMover mover;
-	
-	
-	public MoveTool(final ModeWrapper modes) {
-		super(modes);
-	}
-
-	
-	@Override
-	public void registerTool(final QuPathViewer viewer) {
-		super.registerTool(viewer);
-		mover = new ViewerMover(viewer);
-	}
-	
+	private ViewerMover mover;	
 	
 	@Override
 	public void mousePressed(MouseEvent e) {
 		
-		mover.stopMoving();
+		if (mover != null)
+			mover.stopMoving();
 		
 		super.mousePressed(e);
 		
 		if (!e.isPrimaryButtonDown() || e.isConsumed())
             return;
+		
+		var viewer = getViewer();
 		
 		boolean snapping = false;
 		Point2D p = mouseLocationToImage(e, false, snapping);
@@ -105,7 +96,7 @@ public class MoveTool extends AbstractPathTool {
 				selected = tryToSelect(xx, yy, e.getClickCount()-2, false);
 			e.consume();
 			pDragging = null;
-			if (!selected && PathPrefs.getDoubleClickToZoom()) {
+			if (!selected && PathPrefs.doubleClickToZoomProperty().get()) {
 				double downsample = viewer.getDownsampleFactor();
 				if (e.isAltDown() || e.isShortcutDown())
 					downsample *= 2;
@@ -131,10 +122,11 @@ public class MoveTool extends AbstractPathTool {
 			
 			// Set the current parent object based on the first click
 			PathObject currentObject = viewer.getSelectedObject();
-			PathObject parent = currentObject == null ? null : currentObject.getParent();
-			if (parent != null && parent.isDetection())
-				parent = null;
-			setCurrentParent(viewer.getHierarchy(), parent, currentObject);
+//			PathObject parent = currentObject == null ? null : currentObject.getParent();
+//			if (parent != null && parent.isDetection())
+//				parent = null;
+//			setConstrainedAreaParent(viewer.getHierarchy(), parent, currentObject);
+			setConstrainedAreaParent(viewer.getHierarchy(), xx, yy, Collections.singleton(currentObject));
 			
 			// See if we can get a handle to edit the ROI
 			// Don't want to edit detections / TMA cores
@@ -145,7 +137,7 @@ public class MoveTool extends AbstractPathTool {
 				if (editor.getROI() == currentROI) {
 					// 1.5 increases the range; the handle radius alone is too small a distance, especially if the handles are painted as squares -
 					// because 1.5 >~ sqrt(2) it ensures that at least the entire square is 'active' (and a bit beyond it)
-					double search = viewer.getMaxROIHandleSize() * 1.5;
+					double search = viewer.getMaxROIHandleSize() * 0.75;
 //					if (snapping && search < 1)
 //						search = 1;
 					if (editor.grabHandle(xx, yy, search, e.isShiftDown()))
@@ -154,7 +146,7 @@ public class MoveTool extends AbstractPathTool {
 				if (!e.isConsumed() && canAdjust(currentObject) &&
 						(RoiTools.areaContains(currentROI, xx, yy) || getSelectableObjectList(xx, yy).contains(currentObject))) {
 					// If we have a translatable ROI, try starting translation
-					if (editor.startTranslation(xx, yy))
+					if (editor.startTranslation(xx, yy, PathPrefs.usePixelSnappingProperty().get() && currentROI.isArea()))
 						e.consume();
 				}
 				if (e.isConsumed()) {
@@ -165,11 +157,11 @@ public class MoveTool extends AbstractPathTool {
 		}
 		
 		// Store point for drag-to-pan
-        pDragging = mouseLocationToImage(e, false, true);
+        pDragging = p;
 //        viewer.setDoFasterRepaint(true); // Turn on if dragging is too slow
 	}
 	
-	public static boolean canAdjust(PathObject pathObject) {
+	private static boolean canAdjust(PathObject pathObject) {
 		return (pathObject != null && pathObject.isEditable());
 //		return (pathObject != null && !(pathObject instanceof PathDetectionObject) && pathObject.hasROI() && !GeneralHelpers.containsClass(pathObject.getPathObjectList(), PathDetectionObject.class));
 	}
@@ -178,7 +170,8 @@ public class MoveTool extends AbstractPathTool {
 	@Override
 	public void mouseDragged(MouseEvent e) {
 		
-		mover.stopMoving();
+		if (mover != null)
+			mover.stopMoving();
 		
 		super.mouseDragged(e);
 		
@@ -186,15 +179,21 @@ public class MoveTool extends AbstractPathTool {
             return;
 
 		// Handle ROIs if the spacebar isn't down
+		var viewer = getViewer();
 		if (!viewer.isSpaceDown()) {
 			
 			RoiEditor editor = viewer.getROIEditor();
-			Point2D p = mouseLocationToImage(e, true, requestPixelSnapping() &&
-					editor.hasROI() && editor.getROI().isArea());
+			Point2D p = mouseLocationToImage(e, true, false);
 
 			// Try moving handle
 			if (editor != null && editor.hasActiveHandle()) {
-				ROI updatedROI = editor.setActiveHandlePosition(p.getX(), p.getY(), viewer.getDownsampleFactor()/2.0, e.isShiftDown());
+				double x = p.getX();
+				double y = p.getY();
+				if (PathPrefs.usePixelSnappingProperty().get() && editor.getROI() != null && editor.getROI().isArea()) {
+					x = (int)x;
+					y = (int)y;
+				}
+				ROI updatedROI = editor.setActiveHandlePosition(x, y, viewer.getDownsampleFactor()/2.0, e.isShiftDown());
 				if (updatedROI == null)
 					// This shouldn't occur...?
 					logger.warn("Updated ROI is null! Will be skipped...");
@@ -269,6 +268,7 @@ public class MoveTool extends AbstractPathTool {
 		if (e.isConsumed())
 			return;
 		
+		var viewer = getViewer();
 		RoiEditor editor = viewer.getROIEditor();
 		if (editor != null && (editor.hasActiveHandle() || editor.isTranslating())) {
 			boolean roiChanged = (editor.isTranslating() && editor.finishTranslation()) || editor.hasActiveHandle();
@@ -294,9 +294,13 @@ public class MoveTool extends AbstractPathTool {
 				} else if (pathObject != null) {
 					// Handle ROI changes only if required
 					if (roiChanged) {
+						var updatedROI = editor.getROI();
+						if (pathObject.getROI() != updatedROI && pathObject instanceof PathROIObject)
+							((PathROIObject)pathObject).setROI(updatedROI);
+						
 //						PathObject parentPrevious = pathObject.getParent();
 						hierarchy.removeObjectWithoutUpdate(pathObject, true);
-						if (getCurrentParent() == null || !PathPrefs.getClipROIsForHierarchy() || e.isShiftDown())
+						if (getCurrentParent() == null || !PathPrefs.clipROIsForHierarchyProperty().get() || e.isShiftDown())
 							hierarchy.addPathObject(pathObject);
 						else
 							hierarchy.addPathObjectBelowParent(getCurrentParent(), pathObject, true);
@@ -313,7 +317,8 @@ public class MoveTool extends AbstractPathTool {
 		
 		
 		// Optionally continue a dragging movement until the canvas comes to a standstill
-		if (pDragging != null && PathPrefs.requestDynamicDragging() && System.currentTimeMillis() - lastDragTimestamp < 100 && (dx*dx + dy*dy > viewer.getDownsampleFactor())) {
+		if (pDragging != null && requestDynamicDragging && System.currentTimeMillis() - lastDragTimestamp < 100 && (dx*dx + dy*dy > viewer.getDownsampleFactor())) {
+			mover = new ViewerMover(viewer);
 			mover.startMoving(dx, dy, false);
 		} else
 	        viewer.setDoFasterRepaint(false);
@@ -338,6 +343,7 @@ public class MoveTool extends AbstractPathTool {
 		super.mouseMoved(e);
 		
 		// We don't want to change a waiting cursor unnecessarily
+		var viewer = getViewer();
 		Cursor cursorType = viewer.getCursor();
 		if (cursorType == Cursor.WAIT)
 			return;
@@ -352,7 +358,7 @@ public class MoveTool extends AbstractPathTool {
 		// Check if we should have a panning or moving cursor, changing if required
 		ROI currentROI = viewer.getCurrentROI();
 		if (currentROI != null && canAdjust(viewer.getSelectedObject())) {
-			Point2D p2 = mouseLocationToImage(e, true, requestPixelSnapping());
+			Point2D p2 = mouseLocationToImage(e, true, false);
 			double xx = p2.getX();
 			double yy = p2.getY();
 			if (RoiTools.areaContains(currentROI, xx, yy)) {
@@ -368,7 +374,9 @@ public class MoveTool extends AbstractPathTool {
 	
 	
 	
-	
+	/**
+	 * Helper class for panning a {@link QuPathViewer} (reasonably) smoothly.
+	 */
 	public static class ViewerMover {
 		
 		private QuPathViewer viewer;
@@ -380,7 +388,10 @@ public class MoveTool extends AbstractPathTool {
 		private double dx, dy; // Last dragging displacements
 		private boolean constantVelocity = false;
 		
-		
+		/**
+		 * Constructor.
+		 * @param viewer the viewer that will be controlled by this object
+		 */
 		public ViewerMover(final QuPathViewer viewer) {
 			this.viewer = viewer;
 		}
@@ -415,6 +426,7 @@ public class MoveTool extends AbstractPathTool {
 		 * Start moving, with initial velocity given by dx and dy.
 		 * @param dx
 		 * @param dy
+		 * @param constantVelocity 
 		 */
 		public void startMoving(final double dx, final double dy, final boolean constantVelocity) {
 			this.dx = dx;
@@ -438,12 +450,16 @@ public class MoveTool extends AbstractPathTool {
 			timer.playFromStart();
 		}
 		
-		
+		/**
+		 * Stop moving, by smoothly decelerating.
+		 */
 		public void decelerate() {
 			constantVelocity = false;
 		}
 		
-
+		/**
+		 * Stop moving immediately.
+		 */
 		public void stopMoving() {
 			if (timer != null && timer.getStatus() == Status.RUNNING) {
 				timestamp = -1;

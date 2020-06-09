@@ -1,10 +1,36 @@
+/*-
+ * #%L
+ * This file is part of QuPath.
+ * %%
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
+ * %%
+ * QuPath is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ * 
+ * QuPath is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
+ * #L%
+ */
+
 package qupath.lib.images.writers.ome;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.UUID;
 
+import loci.common.ByteArrayHandle;
+import loci.common.IRandomAccess;
+import loci.common.Location;
 import loci.formats.FormatException;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.WrappedBufferedImageServer;
@@ -45,7 +71,7 @@ public class OMETiffWriter implements ImageWriter<BufferedImage> {
 	}
 
 	@Override
-	public boolean suportsImageType(ImageServer<BufferedImage> server) {
+	public boolean supportsImageType(ImageServer<BufferedImage> server) {
 		return true;
 	}
 
@@ -94,6 +120,45 @@ public class OMETiffWriter implements ImageWriter<BufferedImage> {
 		} catch (FormatException e) {
 			throw new IOException(e);
 		}
+	}
+	
+	private String createInMemoryID(IRandomAccess access) {
+		String id = UUID.randomUUID().toString() + "." + getDefaultExtension();
+		Location.mapFile(id, access);
+		return id;
+	}
+
+	/**
+	 * Write OME-TIFF image to an output stream. Note that this must be able to write the image in-memory first, 
+	 * and therefore is not suitable for very large images.
+	 */
+	@Override
+	public void writeImage(ImageServer<BufferedImage> server, RegionRequest region, OutputStream stream)
+			throws IOException {
+		var bytes = new ByteArrayHandle();
+		String id = createInMemoryID(bytes);
+		writeImage(server, region, id);
+		stream.write(bytes.getBytes());
+	}
+
+	@Override
+	public void writeImage(BufferedImage img, OutputStream stream) throws IOException {
+		var bytes = new ByteArrayHandle();
+		String id = createInMemoryID(bytes);
+		writeImage(img, id);
+		stream.write(bytes.getBytes());
+	}
+
+	/**
+	 * Write OME-TIFF image to an output stream. Note that this must be able to write the image in-memory first, 
+	 * and therefore is not suitable for very large images.
+	 */
+	@Override
+	public void writeImage(ImageServer<BufferedImage> server, OutputStream stream) throws IOException {
+		var bytes = new ByteArrayHandle();
+		String id = createInMemoryID(bytes);
+		writeImage(server, id);
+		stream.write(bytes.getBytes());
 	}
 
 }

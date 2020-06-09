@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -53,6 +53,7 @@ public class PointsROI extends AbstractPathROI implements Serializable {
 //	protected double pointRadius = -1;
 	
 	transient private double xMin = Double.NaN, yMin = Double.NaN, xMax = Double.NaN, yMax = Double.NaN;
+	transient private double xCentroid = Double.NaN, yCentroid = Double.NaN;
 	transient private ROI convexHull = null;
 //	transient protected Point2 pointAdjusting = null;
 	
@@ -110,20 +111,31 @@ public class PointsROI extends AbstractPathROI implements Serializable {
 	public double getCentroidX() {
 		if (points.isEmpty())
 			return Double.NaN;
-		double xSum = 0;
-		for (Point2 p : points)
-			xSum += p.getX();
-		return xSum / points.size();
+		if (Double.isNaN(xCentroid))
+			computeCentroid();
+		return xCentroid;
 	}
 
 	@Override
 	public double getCentroidY() {
 		if (points.isEmpty())
 			return Double.NaN;
+		if (Double.isNaN(yCentroid))
+			computeCentroid();
+		return yCentroid;
+	}
+	
+	
+	private void computeCentroid() {
+		double xSum = 0;
 		double ySum = 0;
-		for (Point2 p : points)
-			ySum += p.getY();
-		return ySum / points.size();
+		int n = points.size();
+		for (Point2 p : points) {
+			xSum += p.getX() / n;
+			ySum += p.getY() / n;
+		}
+		xCentroid = xSum;
+		yCentroid = ySum;
 	}
 
 
@@ -409,6 +421,7 @@ public class PointsROI extends AbstractPathROI implements Serializable {
 		
 		private final float[] x;
 		private final float[] y;
+		@SuppressWarnings("unused")
 		private final String name;
 		private final int c, z, t;
 		

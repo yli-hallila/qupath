@@ -4,20 +4,20 @@
  * %%
  * Copyright (C) 2014 - 2016 The Queen's University of Belfast, Northern Ireland
  * Contact: IP Management (ipmanagement@qub.ac.uk)
+ * Copyright (C) 2018 - 2020 QuPath developers, The University of Edinburgh
  * %%
- * This program is free software: you can redistribute it and/or modify
+ * QuPath is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * This program is distributed in the hope that it will be useful,
+ * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public
- * License along with this program.  If not, see
- * <http://www.gnu.org/licenses/gpl-3.0.html>.
+ * You should have received a copy of the GNU General Public License 
+ * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
@@ -143,6 +143,18 @@ public class FileFormatInfo {
 		 * @return
 		 */
 		public boolean isNotRGB();
+		
+		/**
+		 * Get the width of the largest image, if known.
+		 * @return the width of the largest image, or -1 if this is not known
+		 */
+		public long getLargestImageWidth();
+
+		/**
+		 * Get the height of the largest image, if known.
+		 * @return the height of the largest image, or -1 if this is not known
+		 */
+		public long getLargestImageHeight();
 
 	}
 	
@@ -162,6 +174,9 @@ public class FileFormatInfo {
 		private int nImagesLargest = -1;
 		private String description;
 		
+		private long largestImageWidth = -1;
+		private long largestImageHeight = -1;
+		
 		DefaultFormatInfo(URI uri) {
 			String scheme = uri.getScheme();
 			if (scheme != null && scheme.startsWith("http")) {
@@ -180,6 +195,7 @@ public class FileFormatInfo {
 			
 			// Check if we have a TIFF
 			try {
+				// TODO: Support checking zip-inside-TIFF (as frequently used with ImageJ)
 				try (RandomAccessFile in = new RandomAccessFile(file, "r")) {				
 					boolean littleEndian;
 					int byteOrder = in.readShort();
@@ -224,13 +240,17 @@ public class FileFormatInfo {
 							long maxNumPixels = 0L;
 							boolean largestMaybeRGB = false;
 							while (i < nTestImages) {
-								long nPixels = (long)reader.getWidth(i) * (long)reader.getHeight(i);
+								long width = reader.getWidth(i);
+								long height = reader.getHeight(i);
+								long nPixels = width * height;
 								ImageTypeSpecifier specifier = reader.getRawImageType(i);
 								if (nPixels > maxNumPixels) {
 									maxNumPixels = nPixels;
 									largestCount = 1;
 									largestMaybeRGB = maybeRGB(specifier);
-								} else if (nPixels == maxNumPixels) {
+									largestImageWidth = width;
+									largestImageHeight = height;
+								} else if (width == largestImageWidth && height == largestImageHeight) {
 									largestCount++;
 									largestMaybeRGB = largestMaybeRGB && maybeRGB(specifier);
 								}
@@ -291,6 +311,16 @@ public class FileFormatInfo {
 			return notRGB;
 		}
 		
+		@Override
+		public long getLargestImageWidth() {
+			return largestImageWidth;
+		}
+
+		@Override
+		public long getLargestImageHeight() {
+			return largestImageHeight;
+		}
+
 		@Override
 		public String toString() {
 			return "DefaultFormatInfo [isURL=" + isURL + ", file=" + file + ", isTiff=" + isTiff + ", isBigTiff="
