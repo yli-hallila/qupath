@@ -287,6 +287,7 @@ public class ProjectCommands {
 			    try {
 			        // Check for a data file
 			        var name = oldEntry.getName();
+			        var description = oldEntry.getDescription();
 			        var fileData = new File(dirData, name + ".qpdata");
 			        var split = decodeServerPath(oldEntry.getPath()).split("::");
 			        String path = split[0];
@@ -297,6 +298,7 @@ public class ProjectCommands {
 			        	server = ImageServerProvider.buildServer(path, BufferedImage.class);
 			        var entry = project.addImage(server.getBuilder());
 			        entry.setImageName(name);
+			        entry.setDescription(description);
 			        // Save the data if needed
 			        if (fileData.exists()) {
 			            logger.debug("Reading image data found for {}", name);
@@ -354,6 +356,7 @@ public class ProjectCommands {
 
 	    private String path;
 	    private String name;
+	    private String description;
 	    
 	    String getPath() {
 	    	return path;
@@ -362,12 +365,18 @@ public class ProjectCommands {
 	    String getName() {
 	    	return name;
 	    }
-	    
-	    @Override
-	    public String toString() {
-	    	return name + " (" + path + ")";
-	    }
 
+		String getDescription() {
+			return description;
+		}
+
+		@Override
+		public String toString() {
+			return "LegacyProjectEntry{" +
+					"name='" + name + '\'' +
+					", description='" + description + '\'' +
+					", path='" + path + '\'' +
+					'}';
+		}
 	}
-	
 }
