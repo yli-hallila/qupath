@@ -66,8 +66,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import javax.imageio.ImageIO;
-import javax.script.ScriptEngine;
-import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
 
 import com.google.gson.JsonArray;
@@ -1828,377 +1826,8 @@ public class QuPathGUI {
 		if (RemoteOpenslide.getHost() == null) {
 			Dialogs.showInfoNotification("Error", "Not connected to any server.");
 		} else {
-			showWorkspaceDialog(RemoteOpenslide.getWorkspace());
+			WorkspaceManager.showWorkspace(this);
 		}
-	}
-
-	// todo: make own class
-	public void showWorkspaceDialog(Optional<String> workspace) {
-		if (workspace.isEmpty()) {
-			RemoteOpenslide.logout();
-			Dialogs.showErrorNotification("No workspace file", "Try reconnecting to server.");
-			return;
-		}
-
-		Dialog dialog = new Dialog(); // see: https://stackoverflow.com/questions/36949595
-		dialog.setTitle("Select project");
-		dialog.initOwner(getStage());
-		dialog.setWidth(500);
-		dialog.setHeight(600);
-
-		TabPane tabPane = new TabPane();
-		tabPane.prefHeightProperty().bind(dialog.heightProperty().subtract(75));
-		tabPane.setTabClosingPolicy(TabClosingPolicy.SELECTED_TAB);
-		tabPane.getStyleClass().add("floating");
-
-		JsonArray workspaces = JsonParser.parseString(workspace.get()).getAsJsonArray(); // todo: GSON
-
-		for (JsonElement workspaceElement : workspaces) {
-			JsonObject workspaceObject = workspaceElement.getAsJsonObject();
-			String workspaceName = workspaceObject.get("name").getAsString();
-
-			ScrollPane scrollPane = new ScrollPane();
-			scrollPane.prefWidthProperty().bind(tabPane.widthProperty());
-
-			JsonArray projectsJson = workspaceObject.getAsJsonArray("projects");
-			VBox projects = new VBox();
-
-			for (JsonElement project : projectsJson) {
-				JsonObject json = project.getAsJsonObject();
-				createListItem(json, dialog, scrollPane, projects);
-			}
-
-			if (RemoteOpenslide.hasWriteAccess()) {
-				projects.setOnMouseDragReleased(event -> {
-					removePreview(projects);
-
-					int indexOfDraggingNode = projects.getChildren().indexOf(event.getGestureSource());
-					rotateNodes(projects, indexOfDraggingNode, projects.getChildren().size() - 1);
-				});
-
-				projects.setOnMouseDragExited(event -> {
-					removePreview(projects);
-				});
-			}
-
-			scrollPane.setContent(projects);
-			tabPane.getTabs().add(new Tab(workspaceName, scrollPane));
-		}
-
-		tabPane.getTabs().add(new Tab("+"));
-		tabPane.getSelectionModel().selectedItemProperty().addListener((observable, oldTab, newTab) -> {
-			if (newTab.getText().equals("+")) {
-				tabPane.getSelectionModel().select(oldTab);
-				String workspaceName = Dialogs.showInputDialog("Workspace name", "", "");
-
-				if (workspaceName == null) {
-					return;
-				}
-
-				RemoteOpenslide.Result result = RemoteOpenslide.createNewWorkspace(workspaceName);
-
-				if (result == RemoteOpenslide.Result.OK) {
-					reopenWorkspace(dialog);
-				} else {
-					Dialogs.showErrorNotification(
-					"Error when creating workspace", "See log for more details"
-					);
-				}
-			}
-		});
-
-		tabPane.getTabs().forEach(tab -> tab.setOnCloseRequest(event -> {
-			boolean confirm = Dialogs.showConfirmDialog("Delete workspace",
-					"Are you sure you wish to delete this workspace? This is un-reversible.");
-
-			if (!confirm) {
-				event.consume();
-				return;
-			}
-
-			String workspaceName = tabPane.getSelectionModel().getSelectedItem().getText();
-			RemoteOpenslide.Result result = RemoteOpenslide.deleteWorkspace(workspaceName);
-
-			if (result == RemoteOpenslide.Result.FAIL) {
-				event.consume();
-				Dialogs.showErrorNotification("Error when deleting workspace", "Server error");
-			}
-		}));
-
-		dialog.setDialogPane(new DialogPane() {
-			@Override
-			protected Node createDetailsButton() {
-				HBox hbox = new HBox(5);
-
-				Button createNewProject = new Button("Create new project");
-				createNewProject.setOnAction(action -> {
-					String projectName = Dialogs.showInputDialog("Project name", "", "");
-					String workspaceName = tabPane.getSelectionModel().getSelectedItem().getText();
-
-					if (projectName == null) {
-						return;
-					}
-
-					RemoteOpenslide.Result result = RemoteOpenslide.createNewProject(workspaceName, projectName);
-
-					if (result == RemoteOpenslide.Result.OK) {
-						reopenWorkspace(dialog);
-					} else {
-						Dialogs.showErrorNotification("Error when creating project", "See log for more details");
-					}
-				});
-
-				Button logout = new Button("Logout");
-				logout.setOnAction(action -> {
-					RemoteOpenslide.logout();
-					setProject(null);
-					dialog.close();
-				});
-
-				createNewProject.setDisable(!RemoteOpenslide.hasWriteAccess());
-
-				hbox.getChildren().addAll(createNewProject, logout);
-				return hbox;
-			}
-		});
-
-		dialog.getDialogPane().setContent(tabPane);
-		dialog.getDialogPane().setPadding(new Insets(0));
-		dialog.getDialogPane().getButtonTypes().setAll(ButtonType.CLOSE);
-		dialog.getDialogPane().setExpandableContent(new Group());
-		dialog.getDialogPane().setExpanded(true);
-		dialog.setResizable(false);
-
-		if (!RemoteOpenslide.hasWriteAccess()) {
-			tabPane.getTabs().get(tabPane.getTabs().size() - 1).setDisable(true);
-			tabPane.setTabClosingPolicy(TabClosingPolicy.UNAVAILABLE);
-		}
-
-		dialog.show();
-	}
-
-	private void createListItem(JsonObject object, Dialog parent, ScrollPane scrollPane, VBox vbox) {
-		String name = object.get("name").getAsString();
-		String description = object.get("description").getAsString();
-
-		HBox item = new HBox();
-		item.prefWidthProperty().bind(scrollPane.widthProperty());
-		item.setStyle("-fx-cursor: hand; -fx-border-style: hidden hidden solid hidden; -fx-border-width: 1; -fx-border-color: #ccc; ");
-		item.setPadding(new Insets(5));
-
-		StackPane leftSide = new StackPane(new ImageView(loadIcon(48)));
-		leftSide.setAlignment(Pos.TOP_LEFT);
-
-		VBox rightSide = new VBox();
-		rightSide.setAlignment(Pos.CENTER_LEFT);
-		rightSide.setPadding(new Insets(0, 0, 0, 10));
-
-		Text header = new Text(name);
-		header.setFont(Font.font("Calibri", FontWeight.BOLD, FontPosture.REGULAR, 15));
-
-		Text subtext = new Text(object.get("description").getAsString());
-
-		rightSide.getChildren().addAll(header, subtext);
-		item.getChildren().addAll(leftSide, rightSide);
-		item.setOnMouseClicked(event -> {
-			if (event.getButton() == MouseButton.PRIMARY) {
-				loadProject(object, parent);
-			}
-
-			if (event.getButton() == MouseButton.SECONDARY) {
-				ContextMenu menu = new ContextMenu();
-				MenuItem rename = new MenuItem("Rename");
-				rename.setDisable(true);
-
-				MenuItem delete = new MenuItem("Delete");
-				delete.setOnAction(action -> {
-					boolean confirm = Dialogs.showConfirmDialog(
-					"Are you sure?",
-					"Do you wish to delete this project? This action is un-reversible."
-					);
-
-					if (confirm) {
-						RemoteOpenslide.Result result = RemoteOpenslide.deleteProject(name);
-
-						if (result == RemoteOpenslide.Result.OK) {
-							reopenWorkspace(parent);
-						} else {
-							Dialogs.showErrorNotification(
-							"Error when deleting project",
-						"See more information from log."
-							);
-						}
-					}
-				});
-
-				MenuItem editDescription = new MenuItem("Edit description");
-				editDescription.setOnAction(action -> {
-					String newDescription = Dialogs.showInputDialog(
-					"New description", "", description
-					);
-
-					RemoteOpenslide.Result result = RemoteOpenslide.editProjectDescription(name, newDescription);
-					if (result == RemoteOpenslide.Result.OK) {
-						reopenWorkspace(parent);
-					}
-				});
-
-				menu.getItems().addAll(rename, delete, editDescription);
-				menu.show(item, event.getScreenX(), event.getScreenY());
-			}
-		});
-
-		if (RemoteOpenslide.hasWriteAccess()) {
-			item.setOnDragDetected(event -> {
-				addPreview(vbox, item);
-
-				item.startFullDrag();
-			});
-
-			item.setOnMouseDragReleased(event -> {
-				removePreview(vbox);
-
-				int indexOfDraggingNode = vbox.getChildren().indexOf(event.getGestureSource());
-				int indexOfDropTarget = vbox.getChildren().indexOf(item);
-				rotateNodes(vbox, indexOfDraggingNode, indexOfDropTarget);
-				event.consume();
-			});
-		}
-
-		vbox.getChildren().add(item);
-	}
-
-	private void rotateNodes(VBox root, int indexOfDraggingNode, int indexOfDropTarget) {
-		if (indexOfDraggingNode >= 0 && indexOfDropTarget >= 0) {
-			Node node = root.getChildren().remove(indexOfDraggingNode);
-			root.getChildren().add(indexOfDropTarget, node);
-		}
-	}
-
-	private void addPreview(VBox root, HBox item) {
-		ImageView imageView = new ImageView(item.snapshot(null, null));
-		imageView.setManaged(false);
-		imageView.setMouseTransparent(true);
-
-		root.getChildren().add(imageView);
-		root.setUserData(imageView);
-		root.setOnMouseDragged(event -> {
-			imageView.relocate(event.getX(), event.getY());
-		});
-	}
-
-	private void removePreview(VBox root) {
-		root.setOnMouseDragged(null);
-		root.getChildren().remove(root.getUserData());
-		root.setUserData(null);
-	}
-
-	private void reopenWorkspace(Dialog parent) {
-		parent.close();
-		showWorkspaceDialog();
-	}
-
-	private void loadProject(JsonObject object, Dialog parent) {
-		try {
-			Path tempPath = Path.of(System.getProperty("java.io.tmpdir"), "qupath-ext-project");
-			String tempPathStr = tempPath.toAbsolutePath().toString();
-			String projectId = object.get("id").getAsString();
-			Files.createDirectories(tempPath);
-
-			Task<Boolean> worker = new Task<>() {
-				@Override
-				protected Boolean call() throws Exception {
-					Optional<InputStream> is = RemoteOpenslide.downloadProject(projectId);
-
-					if (is.isPresent()) {
-						updateMessage("Downloading project");
-						unzip(is.get(), tempPathStr, this::updateMessage);
-						updateMessage("Extracted. Opening project");
-
-						is.get().close();
-					} else {
-						updateMessage("Error when downloading project, see log.");
-					}
-
-					return true;
-				}
-			};
-
-			ProgressDialog progress = new ProgressDialog(worker);
-			progress.setTitle("Project import");
-			submitShortTask(worker);
-			progress.showAndWait();
-
-			File projectFile = new File(tempPathStr + "/" + projectId + "/project.qpproj");
-			Project<BufferedImage> project = ProjectIO.loadProject(projectFile, BufferedImage.class);
-
-			parent.close();
-			tabbedPanel.getSelectionModel().select(0);
-			((TabPane) analysisPanel).getSelectionModel().select(0);
-			setProject(project);
-		} catch (IOException e) {
-			Dialogs.showErrorMessage("Load project", "Error when trying to load project. See log for additional information.");
-			e.printStackTrace();
-		}
-	}
-
-	/**
-	 * Extracts a zip file specified by the zipFilePath to a directory specified by
-	 * destDirectory (will be created if does not exists)
-	 *
-	 * @param is
-	 * @param destDirectory
-	 * @throws IOException
-	 */
-	public void unzip(InputStream is, String destDirectory, Consumer<String> updater) throws IOException {
-		ZipInputStream zipIn = new ZipInputStream(is, Charset.forName("Cp437"));
-		ZipEntry entry = zipIn.getNextEntry();
-
-		updater.accept("Extracting project ...");
-		int i = 1;
-		while (entry != null) {
-			String filePath = destDirectory + File.separator + entry.getName();
-
-			if (entry.isDirectory()) {
-				Files.createDirectories(Path.of(filePath));
-			} else {
-				Files.createDirectories(Path.of(filePath).getParent());
-				extractFile(zipIn, filePath);
-			}
-
-			zipIn.closeEntry();
-			entry = zipIn.getNextEntry();
-			updater.accept("Extracting file: " + i);
-			i++;
-		}
-
-		zipIn.close();
-	}
-
-	/**
-	 * Size of the buffer to read/write data
-	 */
-	private static final int BUFFER_SIZE = 4096;
-
-	/**
-	 * Extracts a zip entry (file entry)
-	 * @param zipIn
-	 * @param filePath
-	 * @throws IOException
-	 */
-	private void extractFile(ZipInputStream zipIn, String filePath) throws IOException {
-		FileOutputStream fos = new FileOutputStream(filePath);
-		BufferedOutputStream bos = new BufferedOutputStream(fos);
-
-		byte[] bytesIn = new byte[BUFFER_SIZE];
-		int read;
-
-		while ((read = zipIn.read(bytesIn)) != -1) {
-			bos.write(bytesIn, 0, read);
-		}
-
-		bos.close();
-		fos.close();
 	}
 
 	/**
@@ -2267,6 +1896,19 @@ public class QuPathGUI {
 		getMenu("File", true).getItems().add(1, createRecentProjectsMenu());
 		getMenu("File", true).getItems().add(2, ActionTools.createMenuItem(
 			createShowWorkspaceDialogAction()
+		));
+
+		// todo: Temporary
+		getMenu("Remote Slides", true).getItems().add(0, ActionTools.createMenuItem(
+			ActionTools.createAction(() -> {
+				ExternalSlideManager.showExternalSlideManager();
+			}, "Manage slides")
+		));
+
+		getMenu("Remote Slides", true).getItems().add(1, ActionTools.createMenuItem(
+			ActionTools.createAction(() -> {
+				WorkspaceManager.showWorkspace(this);
+			}, "Show workspaces")
 		));
 
 //		analysisPanel = createAnalysisPanel();
@@ -2354,7 +1996,7 @@ public class QuPathGUI {
 		return null;
 	}
 	
-	private Image loadIcon(int size) {
+	public Image loadIcon(int size) {
 		String path = "icons/QuPath_" + size + ".png";
 		try (InputStream stream = getExtensionClassLoader().getResourceAsStream(path)) {
 			if (stream != null) {

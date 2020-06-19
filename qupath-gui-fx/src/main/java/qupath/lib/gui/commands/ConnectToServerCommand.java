@@ -1,5 +1,11 @@
 package qupath.lib.gui.commands;
 
+import com.microsoft.aad.msal4j.IAuthenticationResult;
+import com.microsoft.aad.msal4j.InteractiveRequestParameters;
+import com.microsoft.aad.msal4j.PublicClientApplication;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
+import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -10,8 +16,8 @@ import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
-import javafx.stage.StageStyle;
 import org.controlsfx.control.StatusBar;
+import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.lib.gui.QuPathGUI;
@@ -19,11 +25,15 @@ import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.prefs.PathPrefs;
 
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConnectToServerCommand implements Runnable {
 
-    private Logger logger = LoggerFactory.getLogger(ConnectToServerCommand.class);
+    private static Logger logger = LoggerFactory.getLogger(ConnectToServerCommand.class);
 
     private static QuPathGUI qupath = QuPathGUI.getInstance();
 
@@ -49,6 +59,11 @@ public class ConnectToServerCommand implements Runnable {
             if (guest || RemoteOpenslide.login()) {
                 qupath.showWorkspaceDialog();
             } else {
+                Dialogs.showErrorNotification(
+                "Login error",
+                "Check your credentials and that you're connecting to the right host."
+                );
+
                 RemoteOpenslide.logout();
                 openDialog();
             }
@@ -64,7 +79,7 @@ public class ConnectToServerCommand implements Runnable {
         VBox buttons = new VBox();
         StatusBar statusBar = new StatusBar();
 
-        Button loginAsGuest = new Button("Login as guest");
+        Button loginAsGuest = new Button("Continue as guest");
         Button loginWithUsername = new Button("Login with username");
 
         loginAsGuest.prefWidthProperty().bind(borderPane.widthProperty().subtract(20));
@@ -87,12 +102,11 @@ public class ConnectToServerCommand implements Runnable {
         buttons.setSpacing(15);
         buttons.getChildren().addAll(loginAsGuest, loginWithUsername);
 
-        statusBar.setText(PathPrefs.remoteOpenslideHost().get());
+        statusBar.setText("Host " + PathPrefs.remoteOpenslideHost().get());
 
         dialog.setWidth(360);
         dialog.setHeight(360);
         dialog.setResizable(false);
-        dialog.initStyle(StageStyle.UTILITY);
         dialog.setScene(new Scene(borderPane));
         dialog.initOwner(qupath.getStage());
         dialog.showAndWait();
@@ -107,6 +121,7 @@ public class ConnectToServerCommand implements Runnable {
         TextField tfUsername = new TextField();
         labUsername.setLabelFor(tfUsername);
         tfUsername.setPromptText("Username");
+        Platform.runLater(tfUsername::requestFocus);
 
         Label labPassword = new Label("Password");
         PasswordField tfPassword = new PasswordField();

@@ -265,8 +265,6 @@ public class AnnotationPane implements PathObjectSelectionListener, ChangeListen
 			PathObject selected = hierarchy.getSelectionModel().getSelectedObject();
 			listAnnotations.getItems().setAll(hierarchy.getAnnotationObjects());
 			hierarchy.getSelectionModel().setSelectedObject(selected);
-
-			ProjectImageEntry<BufferedImage> imageEntry = QuPathGUI.getInstance().getProject().getEntry(imageData);
 		} else {
 			listAnnotations.getItems().clear();
 		}

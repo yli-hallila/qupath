@@ -98,12 +98,24 @@ public class RemoteOpenslide {
 		return Optional.of(slides);
 	}
 
-	public static Optional<InputStream> downloadProject(String id) {
+	public static Optional<String> getSlidesV1() {
+		Optional<HttpResponse<String>> response = get(
+			"/api/v1/slides/"
+		);
+
+		if (response.isEmpty()) {
+			return Optional.empty();
+		}
+
+		return Optional.of(response.get().body());
+	}
+
+	public static Optional<InputStream> downloadProject(String projectId) {
 		try { // todo: fix this piece of shit code; only changed ofString() -> ofInputStream()
 			HttpClient client = HttpClient.newHttpClient();
 			HttpRequest request = HttpRequest.newBuilder()
 				.uri(host.resolve(
-					"/api/v0/projects/" + e(id)
+					"/api/v0/projects/" + e(projectId)
 				))
 				.build();
 
@@ -127,9 +139,9 @@ public class RemoteOpenslide {
 		return Optional.of(response.get().body());
 	}
 
-	public static Optional<JsonObject> getProperties(String id) {
+	public static Optional<JsonObject> getSlideProperties(String slideId) {
 		Optional<HttpResponse<String>> response = get(
-			"/api/v0/slides/" + e(id)
+			"/api/v0/slides/" + e(slideId)
 		);
 
 		if (response.isEmpty() || response.get().statusCode() == 404) {
@@ -140,7 +152,34 @@ public class RemoteOpenslide {
 		return Optional.of(slides);
 	}
 
-	public static Result uploadProject(String projectName, File projectFile) {
+	public static Result editSlide(String slideId, String name) {
+		Optional<HttpResponse<String>> response = put(
+		"/api/v0/slides/" + e(slideId),
+			Map.of(
+			"slide-name", name
+			)
+		);
+
+		if (response.isEmpty()) {
+			return Result.FAIL;
+		}
+
+		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
+	}
+
+	public static Result deleteSlide(String slideId) {
+		Optional<HttpResponse<String>> response = delete(
+		"/api/v0/slides/" + e(slideId)
+		);
+
+		if (response.isEmpty()) {
+			return Result.FAIL;
+		}
+
+		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
+	}
+
+	public static Result uploadProject(String projectId, File projectFile) {
 		try {
 			String boundary = new BigInteger(256, new Random()).toString();
 			Map<Object, Object> data = new LinkedHashMap<>();
@@ -149,7 +188,7 @@ public class RemoteOpenslide {
 			HttpClient client = getHttpClient();
 			HttpRequest request = HttpRequest.newBuilder()
 					.uri(host.resolve(
-						"/api/v0/projects/" + e(projectName)
+						"/api/v0/projects/" + e(projectId)
 					))
 					.POST(ofMimeMultipartData(data, boundary))
 					.header("Content-Type", "multipart/form-data;boundary=" + boundary)
@@ -164,12 +203,28 @@ public class RemoteOpenslide {
 		return Result.FAIL;
 	}
 
-	public static Result createNewProject(String workspaceName, String projectName) {
+	public static Result uploadSlideChunk(String fileName, long fileSize, byte[] buffer, int chunkSize, int chunkIndex) throws IOException, InterruptedException {
+		String boundary = new BigInteger(256, new Random()).toString();
+		Map<Object, Object> data = new LinkedHashMap<>();
+		data.put("file", buffer);
+
+		HttpClient client = getHttpClient();
+		HttpRequest request = HttpRequest.newBuilder()
+				.uri(getSlideUploadURL(fileName, fileSize, chunkIndex, chunkSize))
+				.POST(ofMimeMultipartData(data, boundary))
+				.header("Content-Type", "multipart/form-data;boundary=" + boundary)
+				.build();
+
+		HttpResponse<String> response = client.send(request, BodyHandlers.ofString());
+		return response.statusCode() == 200 ? Result.OK : Result.FAIL;
+	}
+
+	public static Result createNewProject(String workspaceId, String projectName) {
 		Optional<HttpResponse<String>> response = post(
 		"/api/v0/projects",
 			Map.of(
-				"workspace-name", workspaceName,
-				"project-name", projectName
+			"workspace-id", workspaceId,
+			"project-name", projectName
 			)
 		);
 
@@ -180,12 +235,12 @@ public class RemoteOpenslide {
 		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
 	}
 
-	public static Result editProjectDescription(String projectName, String description) {
+	public static Result editProject(String projectId, String name, String description) {
 		Optional<HttpResponse<String>> response = put(
-		"/api/v0/projects/" + projectName,
+		"/api/v0/projects/" + e(projectId),
 			Map.of(
-				//"name", newProjectName,
-				"description", description
+			"name", name,
+			"description", description
 			)
 		);
 
@@ -200,15 +255,25 @@ public class RemoteOpenslide {
 	 * Formats the URI by replacing placeholders with proper values.
 	 * @return formatted string as a URI.
 	 */
-	public static URI getRenderRegionURL(String uri, String slide, int tileX, int tileY, int level, int tileWidth, int tileHeight) {
+	public static URI getRenderRegionURL(String uri, String slideId, int tileX, int tileY, int level, int tileWidth, int tileHeight) {
 		return URI.create(uri
-				.replace("{slideName}", e(slide))
+				.replace("{slideId}", e(slideId))
 				.replace("{tileX}", String.valueOf(tileX))
 				.replace("{tileY}", String.valueOf(tileY))
 				.replace("{level}", String.valueOf(level))
 				.replace("{tileWidth}", String.valueOf(tileWidth))
 				.replace("{tileHeight}", String.valueOf(tileHeight))
 		);
+	}
+
+	public static URI getSlideUploadURL(String fileName, long fileSize, int chunkIndex, int chunkSize) {
+		return host.resolve(String.format(
+				"/api/v0/upload/?filename=%s&fileSize=%s&chunk=%s&chunkSize=%s",
+				fileName,
+				fileSize,
+				chunkIndex,
+				chunkSize
+		));
 	}
 
 	public static Result createNewWorkspace(String workspaceName) {
@@ -224,9 +289,22 @@ public class RemoteOpenslide {
 		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
 	}
 
-	public static Result deleteWorkspace(String workspaceName) {
+	public static Result renameWorkspace(String workspaceId, String newName) {
+		Optional<HttpResponse<String>> response = put(
+			"/api/v0/workspaces/" + e(workspaceId),
+				Map.of("workspace-name", newName)
+		);
+
+		if (response.isEmpty()) {
+			return Result.FAIL;
+		}
+
+		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
+	}
+
+	public static Result deleteWorkspace(String workspaceId) {
 		Optional<HttpResponse<String>> response = delete(
-			"/api/v0/workspaces/" + e(workspaceName)
+			"/api/v0/workspaces/" + e(workspaceId)
 		);
 
 		if (response.isEmpty()) {
@@ -291,7 +369,7 @@ public class RemoteOpenslide {
 
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
-			logger.error("Error when making HTTP POST request", e);
+			logger.error("Error when making HTTP DELETE request", e);
 		}
 
 		return Optional.empty();
@@ -308,7 +386,7 @@ public class RemoteOpenslide {
 
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
-			logger.error("Error when making HTTP POST request", e);
+			logger.error("Error when making HTTP PUT request", e);
 		}
 
 		return Optional.empty();
@@ -360,6 +438,12 @@ public class RemoteOpenslide {
 						+ LINE_FEED + "Content-Type: " + mimeType).getBytes());
 				byteArrays.add((LINE_FEED + LINE_FEED).getBytes());
 				byteArrays.add(Files.readAllBytes(path));
+				byteArrays.add(LINE_FEED.getBytes());
+			} else if (entry.getValue() instanceof byte[]) {
+				byteArrays.add(("\"" + entry.getKey() + "\"; filename=\"unnamed\""
+						+ LINE_FEED + "Content-Type: application/octet-stream").getBytes());
+				byteArrays.add((LINE_FEED + LINE_FEED).getBytes());
+				byteArrays.add((byte[]) entry.getValue());
 				byteArrays.add(LINE_FEED.getBytes());
 			} else {
 				byteArrays.add(("\"" + entry.getKey() + "\"").getBytes());

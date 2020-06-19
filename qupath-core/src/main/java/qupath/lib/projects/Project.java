@@ -221,6 +221,8 @@ public interface Project<T> {
 	 */
 	public String getName();
 
+	public void setName(String name);
+
 	/**
 	 * Request a timestamp from when the project was created.
 	 * @return

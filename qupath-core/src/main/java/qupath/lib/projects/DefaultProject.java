@@ -43,8 +43,6 @@ import java.util.UUID;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
 import javax.imageio.ImageIO;
 
@@ -66,6 +64,7 @@ import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerBuilder.ServerBuilder;
 import qupath.lib.io.GsonTools;
 import qupath.lib.io.PathIO;
+import qupath.lib.io.ZipUtil;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.classes.PathClass;
@@ -353,21 +352,13 @@ class DefaultProject implements Project<BufferedImage> {
 		writePathClasses(pathClasses);
 
 		if (RemoteOpenslide.hasWriteAccess()) {
-			File projectFile = getFile();
-			Path tempFile = Files.createTempFile("qupath-project", ".zip");
+			File projectFolder = getFile().getParentFile();
+			Path projectZipFile = Files.createTempFile("qupath-project-", ".zip");
 
-			if (projectFile.getAbsolutePath().contains(System.getProperty("java.io.tmpdir"))) {
-				File projectDirectory = projectFile.getParentFile();
+			ZipUtil.zip(projectFolder.toPath(), projectZipFile);
 
-				ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tempFile.toAbsolutePath().toString()));
-				zipDirectory(projectDirectory, dirBase.getName(), zos);
-
-				zos.flush();
-				zos.close();
-			}
-
-			File projectZipFile = tempFile.toFile();
-			RemoteOpenslide.uploadProject(dirBase.getName(), projectZipFile);
+			RemoteOpenslide.uploadProject(dirBase.getName(), projectZipFile.toFile());
+			Files.delete(projectZipFile);
 		}
 
 
@@ -378,26 +369,6 @@ class DefaultProject implements Project<BufferedImage> {
 //		logger.warn("Syncing project not yet implemented!");
 	}
 
-	private void zipDirectory(File folder, String parentFolder, ZipOutputStream zos) throws IOException {
-		for (File file : folder.listFiles()) {
-			if (file.isDirectory()) {
-				zipDirectory(file, parentFolder + "/" + file.getName(), zos);
-				continue;
-			}
-
-			zos.putNextEntry(new ZipEntry(parentFolder + "/" + file.getName()));
-			BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
-
-			byte[] bytesIn = new byte[4096];
-			int read;
-			while ((read = bis.read(bytesIn)) != -1) {
-				zos.write(bytesIn, 0, read);
-			}
-
-			zos.closeEntry();
-		}
-	}
-	
 	@Override
 	public boolean getMaskImageNames() {
 		return maskNames;
@@ -432,6 +403,11 @@ class DefaultProject implements Project<BufferedImage> {
 			return dirBase.getName() + "/" + file.getName();
 		}
 		return dirBase.getName();
+	}
+
+	@Override
+	public void setName(String name) {
+		this.name = name;
 	}
 
 	@Override

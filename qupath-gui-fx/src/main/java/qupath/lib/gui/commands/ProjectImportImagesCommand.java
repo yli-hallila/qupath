@@ -41,12 +41,14 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import com.google.gson.JsonArray;
+import com.google.gson.Gson;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.scene.control.*;
+import javafx.scene.text.Text;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,6 +98,7 @@ import qupath.lib.images.servers.ImageServers;
 import qupath.lib.images.servers.RotatedImageServer;
 import qupath.lib.images.servers.RotatedImageServer.Rotation;
 import qupath.lib.images.servers.ServerTools;
+import qupath.lib.objects.remoteopenslide.ExternalSlide;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectIO;
 import qupath.lib.projects.ProjectImageEntry;
@@ -259,7 +262,7 @@ class ProjectImportImagesCommand {
 		scroll.setFitToHeight(true);
 		scroll.setFitToWidth(true);
 		dialog.getDialogPane().setContent(scroll);
-		
+
 		Optional<ButtonType> result = dialog.showAndWait();
 		if (!result.isPresent() || result.get() != typeImport)
 			return Collections.emptyList();
@@ -596,8 +599,25 @@ class ProjectImportImagesCommand {
 		TextField filterTextField = new TextField();
 		filterTextField.setPromptText("Search for slides");
 
-		ListView<String> listView = new ListView<>();
+		ListView<ExternalSlide> listView = new ListView<>();
 		listView.setPrefSize(480, 480);
+		listView.setCellFactory(f -> new ListCell<>() {
+			@Override
+			protected void updateItem(ExternalSlide item, boolean empty) {
+				super.updateItem(item, empty);
+
+				if (item == null || empty) {
+					setText(null);
+					setTooltip(null);
+					return;
+				}
+
+				setText(item.getName() + " (" + item.getOrganization() + ")");
+				setTooltip(new Tooltip(item.getId()));
+			}
+		});
+
+		listView.setPlaceholder(new Text("No slides or none match filter criteria"));
 
 		TitledPane paneList = new TitledPane("External slides", listView);
 		listView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
@@ -608,18 +628,17 @@ class ProjectImportImagesCommand {
 		pane.setTop(filterTextField);
 		pane.setCenter(paneList);
 
-		Optional<JsonArray> rawData = RemoteOpenslide.getSlides();
-		ObservableList<String> slides = FXCollections.observableArrayList();
+		Optional<String> rawData = RemoteOpenslide.getSlidesV1();
+		ObservableList<ExternalSlide> slides = FXCollections.observableArrayList();
 
-		if (rawData.isPresent()) {
-			rawData.get().forEach(slide -> {
-				slides.add(slide.getAsString());
-			});
-		} else {
-			slides.add("No external slides found");
-		}
+		rawData.ifPresent(data ->
+			slides.addAll(new Gson().fromJson(
+				data,
+				ExternalSlide[].class
+			)
+		));
 
-		FilteredList<String> filteredList = new FilteredList<>(slides, data -> true);
+		FilteredList<ExternalSlide> filteredList = new FilteredList<>(slides, data -> true);
 		filterTextField.textProperty().addListener(((observable, oldValue, newValue) -> {
 			filteredList.setPredicate(data -> {
 				if (newValue == null || newValue.isEmpty()) {
@@ -627,7 +646,7 @@ class ProjectImportImagesCommand {
 				}
 
 				String lowerCaseSearch = newValue.toLowerCase();
-				return data.toLowerCase().contains(lowerCaseSearch);
+				return data.getName().toLowerCase().contains(lowerCaseSearch);
 			});
 		}));
 
@@ -644,9 +663,8 @@ class ProjectImportImagesCommand {
 			return 0;
 		}
 
-		// TODO: make /slides/ API return JSON objects, with UUID
 		listView.getSelectionModel().getSelectedItems().forEach(item -> {
-			list.add(RemoteOpenslide.getHost() + "/" + RemoteOpenslide.e(item));
+			list.add(RemoteOpenslide.getHost() + "/" + RemoteOpenslide.e(item.getId()));
 		});
 
 		return listView.getSelectionModel().getSelectedItems().size();
