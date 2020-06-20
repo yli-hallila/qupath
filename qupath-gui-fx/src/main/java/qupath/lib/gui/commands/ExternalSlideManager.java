@@ -6,15 +6,19 @@ import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
+import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.control.Button;
 import javafx.scene.control.Dialog;
+import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
+import javafx.scene.text.Text;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,12 +34,15 @@ import java.awt.*;
 import java.io.*;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static qupath.lib.common.RemoteOpenslide.*;
 
 public class ExternalSlideManager {
+
+    private final QuPathGUI qupath = QuPathGUI.getInstance();
 
     private SimpleBooleanProperty writeAccessProperty;
     private final static Logger logger = LoggerFactory.getLogger(ExternalSlideManager.class);
@@ -53,7 +60,7 @@ public class ExternalSlideManager {
                 .title("External Slide Manager")
                 .content(manager.getPane())
                 .buttons(ButtonType.CLOSE)
-                .width(Math.min(600, screenSize.getWidth() / 2))
+                .width(Math.min(800, screenSize.getWidth() / 2))
                 .resizable()
                 .build();
 
@@ -73,8 +80,11 @@ public class ExternalSlideManager {
     }
 
     private synchronized void initializePane() {
+        /* Table */
+
         table = new TableView<>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setPlaceholder(new Text("No slides or none match search criteria"));
 
         TableColumn<ExternalSlide, String> slideNameColumn = new TableColumn<>("Name");
         slideNameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
@@ -95,7 +105,30 @@ public class ExternalSlideManager {
             ExternalSlide[].class
         );
 
-        table.setItems(FXCollections.observableArrayList(slides));
+        /* Filter / Search */
+
+        TextField filterTextField = new TextField();
+        filterTextField.setPromptText("Search by slide name, organization or ID");
+
+        FilteredList<ExternalSlide> filteredData = new FilteredList<>(FXCollections.observableArrayList(slides), data -> true);
+
+        filterTextField.textProperty().addListener(((observable, oldValue, newValue) -> {
+            filteredData.setPredicate(data -> {
+                if (newValue == null || newValue.isEmpty()) {
+                    return true;
+                }
+
+                String lowerCaseSearch = newValue.toLowerCase();
+                return data.toString().replaceAll("[-+.^:,']", "").toLowerCase().contains(lowerCaseSearch);
+            });
+        }));
+
+        SortedList<ExternalSlide> sortedData = new SortedList<>(filteredData);
+        sortedData.comparatorProperty().bind(table.comparatorProperty());
+
+        table.setItems(sortedData);
+
+        /* Buttons */
 
         Button btnDelete = new Button("Delete");
         btnDelete.setOnAction(e -> deleteSlide());
@@ -105,6 +138,10 @@ public class ExternalSlideManager {
         btnRename.setOnAction(e -> renameSlide());
         btnRename.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull().or(writeAccessProperty.not()));
 
+        Button btnOpen = new Button("Open slide");
+        btnOpen.setOnAction(e -> openSlide());
+        btnOpen.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+
         Button btnProperties = new Button("View Properties");
         btnProperties.setOnAction(e -> viewProperties());
         btnProperties.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
@@ -113,11 +150,16 @@ public class ExternalSlideManager {
         btnUpload.setOnAction(e -> uploadSlide());
         btnUpload.disableProperty().bind(writeAccessProperty.not());
 
-        GridPane paneButtons = PaneTools.createColumnGridControls(btnDelete, btnRename, btnProperties, btnUpload);
+        GridPane paneButtons = PaneTools.createColumnGridControls(btnDelete, btnRename, btnOpen, btnProperties, btnUpload);
+
+        /* Pane */
+
+        BorderPane.setMargin(table, new Insets(10, 0, 10, 0));
 
         pane = new BorderPane();
-        pane.setPrefWidth(600);
+        pane.setPrefWidth(800);
         pane.setPrefHeight(400);
+        pane.setTop(filterTextField);
         pane.setCenter(table);
         pane.setBottom(paneButtons);
         pane.setPadding(new Insets(10));
@@ -130,6 +172,50 @@ public class ExternalSlideManager {
 
         initializePane();
         dialog.getDialogPane().setContent(pane);
+    }
+
+    private void openSlide() {
+        ExternalSlide slide = table.getSelectionModel().getSelectedItem();
+
+        if (qupath.getProject() != null) {
+            ButtonType closeProject = new ButtonType("Close project and continue", ButtonBar.ButtonData.APPLY);
+
+            Optional<ButtonType> confirm = Dialogs.builder()
+                .title("Proceed with adding slide to project")
+                .contentText("Opening an slide with a project open will try to add that slide to the current project."
+                    + "\n" +
+                    "Close your project first if you want to only view the slide."
+                    + "\n\n" +
+                    "Do you wish to continue?")
+                .buttons(ButtonType.OK, closeProject, ButtonType.CANCEL)
+                .build()
+                .showAndWait();
+
+            if (confirm.isEmpty() || confirm.get().getButtonData() == ButtonBar.ButtonData.CANCEL_CLOSE) {
+                return;
+            }
+
+            if (confirm.get().getButtonData() == ButtonBar.ButtonData.APPLY) {
+                qupath.setProject(null);
+            }
+        }
+
+        Dialog<ButtonType> message = Dialogs.builder()
+            .title("Please wait")
+            .contentText("Loading slide ...")
+            .build();
+
+        message.setResult(ButtonType.CLOSE);
+        message.show();
+
+        dialog.close();
+
+        Platform.runLater(() -> {
+            qupath.openImage(RemoteOpenslide.getHost() + "/" + slide.getId(), true, true);
+            qupath.getTabbedPanel().getSelectionModel().select(1);
+
+            message.close();
+        });
     }
 
     private void viewProperties() {

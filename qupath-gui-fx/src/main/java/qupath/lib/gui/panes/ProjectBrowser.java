@@ -48,6 +48,7 @@ import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
+import javafx.event.Event;
 import org.controlsfx.control.MasterDetailPane;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
@@ -94,6 +95,7 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.util.Callback;
 import qupath.lib.common.GeneralTools;
+import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.gui.ActionTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.commands.ProjectCommands;
@@ -180,17 +182,13 @@ public class ProjectBrowser implements ChangeListener<ImageData<BufferedImage>> 
 
 		tree.setOnKeyPressed(e -> {
 			if (e.getCode() == KeyCode.ENTER) {
-				qupath.getTabbedPanel().getSelectionModel().select(1);
-				qupath.openImageEntry(getSelectedEntry());
-				e.consume();
+				openImage(e);
 			}
 		});
 
 		tree.setOnMouseClicked(e -> {
 			if (e.getClickCount() > 1) {
-				qupath.getTabbedPanel().getSelectionModel().select(1);
-				qupath.openImageEntry(getSelectedEntry());
-				e.consume();
+				openImage(e);
 			}
 		});
 
@@ -261,6 +259,25 @@ public class ProjectBrowser implements ChangeListener<ImageData<BufferedImage>> 
 
 		additionalSortKeys = new String[] {URI};
 
+	}
+
+	private void openImage(Event event) {
+		Dialog<ButtonType> message = Dialogs.builder()
+				.title("Please wait")
+				.contentText("Loading slide ...")
+				.build();
+
+		message.setResult(ButtonType.CLOSE);
+		message.show();
+
+		Platform.runLater(() -> {
+			qupath.getTabbedPanel().getSelectionModel().select(1);
+			qupath.openImageEntry(getSelectedEntry());
+
+			message.close();
+		});
+
+		event.consume();
 	}
 
 	private static String getUserFilter() {

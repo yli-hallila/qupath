@@ -25,4 +25,13 @@ public class ExternalSlide {
     public Map<String, String> getParameters() {
         return parameters;
     }
+
+    @Override
+    public String toString() {
+        return "ExternalSlide{" +
+                "name='" + name + '\'' +
+                ", uuid='" + id + '\'' +
+                ", owner='" + organization + '\'' +
+                '}';
+    }
 }

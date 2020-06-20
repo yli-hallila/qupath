@@ -415,7 +415,12 @@ public class RemoteOpenslide {
 
 			builder.append(e(entry.getKey().toString()));
 			builder.append("=");
-			builder.append(e(entry.getValue().toString()));
+
+			if (entry.getValue() instanceof byte[]) {
+				builder.append(e(new String((byte[]) entry.getValue())));
+			} else {
+				builder.append(e(entry.getValue().toString()));
+			}
 		}
 
 		return HttpRequest.BodyPublishers.ofString(builder.toString());

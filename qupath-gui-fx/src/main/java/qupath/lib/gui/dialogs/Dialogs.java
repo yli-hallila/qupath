@@ -254,8 +254,8 @@ public class Dialogs {
 			dialog.setTitle(title);
 			if (QuPathGUI.getInstance() != null)
 				dialog.initOwner(QuPathGUI.getInstance().getStage());
-			dialog.setHeaderText(null);
-			dialog.setContentText(message);
+			dialog.setHeaderText(message);
+			dialog.setContentText(null);
 			dialog.setResizable(true);
 			// Traditional way to get the response value.
 			Optional<String> result = dialog.showAndWait();

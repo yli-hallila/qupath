@@ -28,6 +28,7 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.util.*;
@@ -102,6 +103,14 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 			return defaultValue;
 		}
 	}
+
+	private static String readJsonStringProperty(JsonObject json, String parameter) {
+		return json.get(parameter).getAsString();
+	}
+
+	private static Integer readJsonIntegerProperty(JsonObject json, String parameter) {
+		return json.get(parameter).getAsInt();
+	}
 	
 	/**
 	 * Create an ImageServer using OpenSlide for the specified file.
@@ -144,7 +153,41 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 		int width = json.get("openslide.level[0].width").getAsInt();
 		int height = json.get("openslide.level[0].height").getAsInt();
 
-		// TODO: bounds
+		boolean applyBounds = useBoundingBoxes;
+		for (String arg : args) {
+			if ("--no-crop".equals(arg))
+				applyBounds = false;
+		}
+
+		json.keySet().forEach(System.out::println);
+
+		// Read bounds
+		boolean isCropped = false;
+		if (applyBounds && json.keySet().containsAll(
+			Arrays.asList(
+				OpenSlide.PROPERTY_NAME_BOUNDS_X,
+				OpenSlide.PROPERTY_NAME_BOUNDS_Y,
+				OpenSlide.PROPERTY_NAME_BOUNDS_WIDTH,
+				OpenSlide.PROPERTY_NAME_BOUNDS_HEIGHT
+			)
+		)) {
+			try {
+				boundsX = readJsonIntegerProperty(json, OpenSlide.PROPERTY_NAME_BOUNDS_X);
+				boundsY = readJsonIntegerProperty(json, OpenSlide.PROPERTY_NAME_BOUNDS_Y);
+				boundsWidth = readJsonIntegerProperty(json, OpenSlide.PROPERTY_NAME_BOUNDS_WIDTH);
+				boundsHeight = readJsonIntegerProperty(json, OpenSlide.PROPERTY_NAME_BOUNDS_HEIGHT);
+				isCropped = boundsWidth != width && boundsHeight != height;
+			} catch (Exception e) {
+				boundsX = 0;
+				boundsY = 0;
+				boundsWidth = width;
+				boundsHeight = height;
+			}
+		} else {
+			boundsWidth = width;
+			boundsHeight = height;
+		}
+
 		int tileWidth = (int) readJsonPropertyOrDefault(json, "openslide.level[0].tile-width", 256);
 		int tileHeight = (int) readJsonPropertyOrDefault(json, "openslide.level[0].tile-height", 256);
 
@@ -172,13 +215,19 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 			int h = json.get("openslide.level[" + i + "].height").getAsInt();
 			resolutionBuilder.addLevel(w, h);
 		}
-
 		var levels = resolutionBuilder.build();
+
 		String path = uri.toString();
 
-		// todo: bounds
-		boundsWidth = width;
-		boundsHeight = height;
+		// If the image is cropped, create a new list of resolution levels based on the cropped values
+		// (We do it this elaborate way as we'd like to keep the default downsample calculations based on the full image)
+		if (isCropped) {
+			var resolutionBuilderCropped = new ImageResolutionLevel.Builder(boundsWidth, boundsHeight);
+			for (var level : levels)
+				resolutionBuilderCropped.addLevelByDownsample(level.getDownsample());
+			levels = resolutionBuilderCropped.build();
+			path = String.format("%s [x=%d,y=%d,w=%d,h=%d]", path, boundsX, boundsY, boundsWidth, boundsHeight);
+		}
 
 		this.args = args;
 		originalMetadata = new ImageServerMetadata.Builder(getClass(),
@@ -432,7 +481,20 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 		try {
 			return ImageIO.read(uriRegion.toURL());
 		} catch (IOException e) {
-			logger.error("Error when loading remotely tile", e);
+			if (backgroundColor == null && e.getCause().getClass() != FileNotFoundException.class) {
+				logger.error("Error when loading remotely tile", e);
+			}
+		}
+
+		if (backgroundColor != null) {
+			BufferedImage img = new BufferedImage(tileWidth, tileHeight, BufferedImage.TYPE_INT_ARGB);
+
+			Graphics2D g2d = img.createGraphics();
+			g2d.setColor(backgroundColor);
+			g2d.fillRect(0, 0, tileWidth, tileHeight);
+			g2d.dispose();
+
+			return img;
 		}
 
 		return null;

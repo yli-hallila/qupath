@@ -1,7 +1,6 @@
 package qupath.lib.gui.panes;
 
 import javafx.collections.ObservableList;
-import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.VPos;
 import javafx.scene.control.ContextMenu;
@@ -16,31 +15,22 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontPosture;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
-import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.commands.WorkspaceManager;
 import qupath.lib.gui.dialogs.Dialogs;
-import qupath.lib.io.ZipUtil;
 import qupath.lib.objects.remoteopenslide.ExternalProject;
-import qupath.lib.projects.ProjectIO;
 
-import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static qupath.lib.common.RemoteOpenslide.*;
+import static qupath.lib.common.RemoteOpenslide.Result;
 
-public class ProjectListCell extends ListCell<ExternalProject> {
+public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
 
     private final QuPathGUI qupath = QuPathGUI.getInstance();
     private final WorkspaceManager manager;
@@ -50,9 +40,11 @@ public class ProjectListCell extends ListCell<ExternalProject> {
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
-    public ProjectListCell(WorkspaceManager manager) {
+    public WorkspaceProjectListCell(WorkspaceManager manager) {
         this.manager = manager;
         thisCell = this;
+
+        setPrefWidth(0);
 
         if (RemoteOpenslide.hasWriteAccess()) {
             enableReordering();
@@ -193,7 +185,7 @@ public class ProjectListCell extends ListCell<ExternalProject> {
 
         pane.setOnMouseClicked(event -> {
             if (event.getButton() == MouseButton.PRIMARY) {
-                loadProject();
+                WorkspaceManager.loadProject(project, manager);
             } else if (event.getButton() == MouseButton.SECONDARY) {
                 ContextMenu menu = new ContextMenu();
                 MenuItem rename = new MenuItem("Rename");
@@ -212,58 +204,6 @@ public class ProjectListCell extends ListCell<ExternalProject> {
 
         setGraphic(pane);
         setPadding(new Insets(0));
-    }
-
-    private void loadProject() {
-        try {
-            Path tempPath = Path.of(System.getProperty("java.io.tmpdir"), "qupath-ext-project");
-            String tempPathStr = tempPath.toAbsolutePath().toString();
-            Files.createDirectories(tempPath);
-
-            Task<Boolean> worker = new Task<>() {
-                @Override
-                protected Boolean call() throws Exception {
-                    Optional<InputStream> projectInputStream = RemoteOpenslide.downloadProject(ProjectListCell.this.project.getId());
-
-                    if (projectInputStream.isEmpty()) {
-                        updateMessage("Error when downloading project, see log.");
-                        return false;
-                    }
-
-                    updateMessage("Downloading project");
-                    ZipUtil.unzip(projectInputStream.get(), tempPathStr);
-                    updateMessage("Downloaded. Opening project...");
-
-                    projectInputStream.get().close();
-
-                    return true;
-                }
-            };
-
-            ProgressDialog progress = new ProgressDialog(worker);
-            progress.setTitle("Project import");
-            qupath.submitShortTask(worker);
-            progress.showAndWait();
-
-            var success = worker.getValue();
-
-            if (success) {
-                File projectFile = new File(tempPathStr + "/" + project.getId() + "/project.qpproj");
-                qupath.lib.projects.Project<BufferedImage> project = ProjectIO.loadProject(projectFile, BufferedImage.class);
-                project.setName(this.project.getName());
-
-                manager.closeDialog();
-                qupath.getTabbedPanel().getSelectionModel().select(0);
-                qupath.setProject(project);
-            }
-        } catch (IOException e) {
-            Dialogs.showErrorMessage(
-            "Error when trying to load project. ",
-            "See log for more information."
-            );
-
-            logger.error("Error when loading external project", e);
-        }
     }
 
     private void editProjectDescription() {

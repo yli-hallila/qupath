@@ -187,6 +187,7 @@ import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.classes.PathClassFactory;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.objects.hierarchy.TMAGrid;
+import qupath.lib.objects.remoteopenslide.ExternalProject;
 import qupath.lib.plugins.AbstractPluginRunner;
 import qupath.lib.plugins.PathInteractivePlugin;
 import qupath.lib.plugins.PathPlugin;
@@ -1909,6 +1910,46 @@ public class QuPathGUI {
 			ActionTools.createAction(() -> {
 				WorkspaceManager.showWorkspace(this);
 			}, "Show workspaces")
+		));
+
+		getMenu("Remote Slides", true).getItems().add(2, ActionTools.createMenuItem(
+				ActionTools.createAction(() -> {
+					String projectId = Dialogs.showInputDialog(
+					"Project ID",
+					"Project IDs are as following: 6ce7a026-e023-47b5-9b2e-0fc5eb523e49",
+					""
+					);
+
+					if (projectId == null) {
+						return;
+					}
+
+					ExternalProject project = new ExternalProject();
+					project.setId(projectId);
+					project.setName(projectId);
+
+					WorkspaceManager.loadProject(project);
+				}, "Open project by ID")
+		));
+
+		getMenu("Remote Slides", true).getItems().add(2, ActionTools.createMenuItem(
+				ActionTools.createAction(() -> {
+					String slideId = Dialogs.showInputDialog(
+					"Slide ID",
+					"Slide IDs are as following: 6ce7a026-e023-47b5-9b2e-0fc5eb523e49",
+					""
+					);
+
+					if (slideId == null) {
+						return;
+					}
+
+					ExternalProject project = new ExternalProject();
+					project.setId(slideId);
+					project.setName(slideId);
+
+					WorkspaceManager.loadProject(project);
+				}, "Open slide by ID")
 		));
 
 //		analysisPanel = createAnalysisPanel();

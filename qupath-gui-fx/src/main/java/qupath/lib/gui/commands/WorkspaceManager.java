@@ -3,23 +3,38 @@ package qupath.lib.gui.commands;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.event.Event;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.control.Button;
 import javafx.scene.layout.BorderPane;
+import org.controlsfx.dialog.ProgressDialog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
-import qupath.lib.gui.panes.ProjectListCell;
+import qupath.lib.gui.panes.WorkspaceProjectListCell;
+import qupath.lib.io.ZipUtil;
 import qupath.lib.objects.remoteopenslide.ExternalProject;
 import qupath.lib.objects.remoteopenslide.ExternalWorkspace;
+import qupath.lib.projects.ProjectIO;
 
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Optional;
 
 import static qupath.lib.common.RemoteOpenslide.*;
 
 public class WorkspaceManager {
+
+    private final static Logger logger = LoggerFactory.getLogger(WorkspaceManager.class);
 
     private static Dialog<ButtonType> dialog;
     private final QuPathGUI qupath;
@@ -72,7 +87,7 @@ public class WorkspaceManager {
             listView.getStyleClass().clear();
             listView.prefWidthProperty().bind(tabPane.widthProperty());
             listView.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
-            listView.setCellFactory(f -> new ProjectListCell(this));
+            listView.setCellFactory(f -> new WorkspaceProjectListCell(this));
             listView.getItems().addAll(workspace.getProjects());
 
             Tab tab = new Tab(workspace.getName(), listView);
@@ -219,6 +234,73 @@ public class WorkspaceManager {
             "Error when deleting workspace",
             "See log for possibly more details.."
             );
+        }
+    }
+
+    public static void loadProject(ExternalProject project) {
+        loadProject(project, null);
+    }
+
+    /**
+     * Loads an external project based on ExternalProject. If manager is defined, it tries to close the workspace
+     * manager dialog, but this method can be used without it to load projects manually.
+     * @param extProject External project to load, requires at least UUID and name defined.
+     * @param manager WorkspaceManager to close, can be null.
+     */
+    public static void loadProject(ExternalProject extProject, WorkspaceManager manager) {
+        QuPathGUI qupath = QuPathGUI.getInstance();
+
+        try {
+            Path tempPath = Path.of(System.getProperty("java.io.tmpdir"), "qupath-ext-project");
+            String tempPathStr = tempPath.toAbsolutePath().toString();
+            Files.createDirectories(tempPath);
+
+            Task<Boolean> worker = new Task<>() {
+                @Override
+                protected Boolean call() throws Exception {
+                    Optional<InputStream> projectInputStream = RemoteOpenslide.downloadProject(extProject.getId());
+
+                    if (projectInputStream.isEmpty()) {
+                        updateMessage("Error when downloading project, see log.");
+                        return false;
+                    }
+
+                    updateMessage("Downloading project");
+                    ZipUtil.unzip(projectInputStream.get(), tempPathStr);
+                    updateMessage("Downloaded. Opening project...");
+
+                    projectInputStream.get().close();
+
+                    return true;
+                }
+            };
+
+            ProgressDialog progress = new ProgressDialog(worker);
+            progress.setTitle("Project import");
+            qupath.submitShortTask(worker);
+            progress.showAndWait();
+
+            var success = worker.getValue();
+
+            if (success) {
+                File projectFile = new File(tempPathStr + "/" + extProject.getId() + "/project.qpproj");
+                qupath.lib.projects.Project<BufferedImage> project = ProjectIO.loadProject(projectFile, BufferedImage.class);
+                project.setName(extProject.getName());
+
+                if (manager != null) {
+                    manager.closeDialog();
+                }
+
+                qupath.getTabbedPanel().getSelectionModel().select(0);
+                qupath.setProject(project);
+            }
+        } catch (IOException e) {
+            Dialogs.showErrorMessage(
+                    "Error when trying to load project. ",
+                    "See log for more information."
+            );
+
+            logger.error("Error when loading external project", e);
         }
     }
 
