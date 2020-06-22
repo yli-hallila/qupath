@@ -9,4 +9,5 @@ configurations {
   implementation.extendsFrom jfxtras
   implementation.extendsFrom commonstext
   implementation.extendsFrom commonsmath
+  implementation.extendsFrom msal4j
 }

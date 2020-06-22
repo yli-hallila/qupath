@@ -33,7 +33,6 @@ import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,27 +61,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 import javax.imageio.ImageIO;
 import javax.script.ScriptException;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import javafx.concurrent.Task;
 import javafx.scene.*;
 import javafx.scene.control.*;
 import javafx.scene.input.*;
 import javafx.scene.layout.*;
-import javafx.scene.text.FontPosture;
-import javafx.scene.text.FontWeight;
-import javafx.scene.text.Text;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
-import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -690,7 +678,7 @@ public class QuPathGUI {
 			return ActionTools.createAction(this::showWorkspaceDialog, "External projects");
 		}
 
-		return ActionTools.createAction(new ConnectToServerCommand(), "External projects");
+		return ActionTools.createAction(this::showLoginDialog, "External projects");
 	}
 
 	/**
@@ -1123,7 +1111,7 @@ public class QuPathGUI {
 
 		if (PathPrefs.showWorkspaceDialogOnStartupProperty().get()) {
 			try {
-				ConnectToServerCommand.openDialog();
+				showLoginDialog();
 			} catch (Exception e) {
 				Dialogs.showErrorNotification("Error when connecting to server", e);
 				RemoteOpenslide.logout();
@@ -1826,8 +1814,17 @@ public class QuPathGUI {
 	public void showWorkspaceDialog() {
 		if (RemoteOpenslide.getHost() == null) {
 			Dialogs.showInfoNotification("Error", "Not connected to any server.");
+			showLoginDialog();
 		} else {
 			WorkspaceManager.showWorkspace(this);
+		}
+	}
+
+	public void showLoginDialog() {
+		if (RemoteOpenslide.getHost() == null) {
+			RemoteServerLoginManager.showLoginDialog();
+		} else {
+			showWorkspaceDialog();
 		}
 	}
 

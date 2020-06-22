@@ -22,11 +22,14 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
 
+// TODO: Error management
 public class RemoteOpenslide {
 
 	private final static Logger logger = LoggerFactory.getLogger(RemoteOpenslide.class);
 
 	private static URI host;
+
+	private static String token;
 
 	private static String username;
 	private static String password;
@@ -49,6 +52,10 @@ public class RemoteOpenslide {
 		}
 	}
 
+	public static URI getHost() {
+		return host;
+	}
+
 	public static void setAuthentication(String username, String password) {
 		RemoteOpenslide.username = username;
 		RemoteOpenslide.password = password;
@@ -58,10 +65,25 @@ public class RemoteOpenslide {
 		return host != null;
 	}
 
-	public static void logout() {
-		setHost(null);
+	public static String getToken() {
+		return token;
+	}
+
+	public static void setToken(String token) {
+		RemoteOpenslide.token = token;
+	}
+
+	/* Authentication */
+
+	public static boolean login(String username, String password) {
+		setAuthentication(username, password);
+
+		if (login()) {
+			return true;
+		}
+
 		setAuthentication(null, null);
-		setWriteAccess(false);
+		return false;
 	}
 
 	public static boolean login() {
@@ -85,39 +107,46 @@ public class RemoteOpenslide {
 		return true;
 	}
 
-	public static Optional<JsonArray> getSlides() {
+	public static boolean validate() {
 		Optional<HttpResponse<String>> response = get(
-			"/api/v0/slides/"
+			"/api/v0/users/verify"
 		);
 
 		if (response.isEmpty()) {
-			return Optional.empty();
+			return false;
 		}
 
-		JsonArray slides = JsonParser.parseString(response.get().body()).getAsJsonArray();
-		return Optional.of(slides);
-	}
+		setWriteAccess(false);
 
-	public static Optional<String> getSlidesV1() {
-		Optional<HttpResponse<String>> response = get(
-			"/api/v1/slides/"
-		);
+		JsonArray permissions = JsonParser.parseString(response.get().body()).getAsJsonArray();
+		for (JsonElement element : permissions) {
+			String permission = element.getAsString().toUpperCase();
 
-		if (response.isEmpty()) {
-			return Optional.empty();
+			if (permission.equals("TEACHER") || permission.equals("ADMIN")) {
+				setWriteAccess(true);
+			}
 		}
 
-		return Optional.of(response.get().body());
+		return true;
 	}
+
+	public static void logout() {
+		setHost(null);
+		setToken(null);
+		setAuthentication(null, null);
+		setWriteAccess(false);
+	}
+
+	/* Projects */
 
 	public static Optional<InputStream> downloadProject(String projectId) {
 		try { // todo: fix this piece of shit code; only changed ofString() -> ofInputStream()
 			HttpClient client = HttpClient.newHttpClient();
 			HttpRequest request = HttpRequest.newBuilder()
-				.uri(host.resolve(
-					"/api/v0/projects/" + e(projectId)
-				))
-				.build();
+					.uri(host.resolve(
+							"/api/v0/projects/" + e(projectId)
+					))
+					.build();
 
 			return Optional.of(client.send(request, BodyHandlers.ofInputStream()).body());
 		} catch (IOException | InterruptedException e) {
@@ -125,58 +154,6 @@ public class RemoteOpenslide {
 		}
 
 		return Optional.empty();
-	}
-
-	public static Optional<String> getWorkspace() {
-		Optional<HttpResponse<String>> response = get(
-			"/api/v0/workspaces"
-		);
-
-		if (response.isEmpty()) {
-			return Optional.empty();
-		}
-
-		return Optional.of(response.get().body());
-	}
-
-	public static Optional<JsonObject> getSlideProperties(String slideId) {
-		Optional<HttpResponse<String>> response = get(
-			"/api/v0/slides/" + e(slideId)
-		);
-
-		if (response.isEmpty() || response.get().statusCode() == 404) {
-			return Optional.empty();
-		}
-
-		JsonObject slides = JsonParser.parseString(response.get().body()).getAsJsonObject();
-		return Optional.of(slides);
-	}
-
-	public static Result editSlide(String slideId, String name) {
-		Optional<HttpResponse<String>> response = put(
-		"/api/v0/slides/" + e(slideId),
-			Map.of(
-			"slide-name", name
-			)
-		);
-
-		if (response.isEmpty()) {
-			return Result.FAIL;
-		}
-
-		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
-	}
-
-	public static Result deleteSlide(String slideId) {
-		Optional<HttpResponse<String>> response = delete(
-		"/api/v0/slides/" + e(slideId)
-		);
-
-		if (response.isEmpty()) {
-			return Result.FAIL;
-		}
-
-		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
 	}
 
 	public static Result uploadProject(String projectId, File projectFile) {
@@ -190,6 +167,7 @@ public class RemoteOpenslide {
 					.uri(host.resolve(
 						"/api/v0/projects/" + e(projectId)
 					))
+					.headers("token", token)
 					.POST(ofMimeMultipartData(data, boundary))
 					.header("Content-Type", "multipart/form-data;boundary=" + boundary)
 					.build();
@@ -203,24 +181,9 @@ public class RemoteOpenslide {
 		return Result.FAIL;
 	}
 
-	public static Result uploadSlideChunk(String fileName, long fileSize, byte[] buffer, int chunkSize, int chunkIndex) throws IOException, InterruptedException {
-		String boundary = new BigInteger(256, new Random()).toString();
-		Map<Object, Object> data = new LinkedHashMap<>();
-		data.put("file", buffer);
-
-		HttpClient client = getHttpClient();
-		HttpRequest request = HttpRequest.newBuilder()
-				.uri(getSlideUploadURL(fileName, fileSize, chunkIndex, chunkSize))
-				.POST(ofMimeMultipartData(data, boundary))
-				.header("Content-Type", "multipart/form-data;boundary=" + boundary)
-				.build();
-
-		HttpResponse<String> response = client.send(request, BodyHandlers.ofString());
-		return response.statusCode() == 200 ? Result.OK : Result.FAIL;
-	}
 
 	public static Result createNewProject(String workspaceId, String projectName) {
-		Optional<HttpResponse<String>> response = post(
+		var response = post(
 		"/api/v0/projects",
 			Map.of(
 			"workspace-id", workspaceId,
@@ -236,7 +199,7 @@ public class RemoteOpenslide {
 	}
 
 	public static Result editProject(String projectId, String name, String description) {
-		Optional<HttpResponse<String>> response = put(
+		var response = put(
 		"/api/v0/projects/" + e(projectId),
 			Map.of(
 			"name", name,
@@ -249,6 +212,101 @@ public class RemoteOpenslide {
 		}
 
 		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
+	}
+
+	public static Result deleteProject(String projectName) {
+		var response = delete("/api/v0/projects/" + e(projectName));
+
+		if (response.isEmpty()) {
+			return Result.FAIL;
+		}
+
+		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
+	}
+
+	/* Slides */
+
+	public static Optional<JsonArray> getSlides() {
+		var response = get("/api/v0/slides/");
+
+		if (response.isEmpty()) {
+			return Optional.empty();
+		}
+
+		JsonArray slides = JsonParser.parseString(response.get().body()).getAsJsonArray();
+		return Optional.of(slides);
+	}
+
+	public static Optional<String> getSlidesV1() {
+		var response = get("/api/v1/slides/");
+
+		if (response.isEmpty()) {
+			return Optional.empty();
+		}
+
+		return Optional.of(response.get().body());
+	}
+
+	public static Optional<JsonObject> getSlideProperties(String slideId) {
+		var response = get("/api/v0/slides/" + e(slideId));
+
+		if (response.isEmpty() || response.get().statusCode() == 404) {
+			return Optional.empty();
+		}
+
+		JsonObject slides = JsonParser.parseString(response.get().body()).getAsJsonObject();
+		return Optional.of(slides);
+	}
+
+	public static Result editSlide(String slideId, String name) {
+		var response = put(
+			"/api/v0/slides/" + e(slideId),
+			Map.of(
+				"slide-name", name
+			)
+		);
+
+		if (response.isEmpty()) {
+			return Result.FAIL;
+		}
+
+		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
+	}
+
+	public static Result deleteSlide(String slideId) {
+		var response = delete("/api/v0/slides/" + e(slideId));
+
+		if (response.isEmpty()) {
+			return Result.FAIL;
+		}
+
+		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
+	}
+
+	public static Result uploadSlideChunk(String fileName, long fileSize, byte[] buffer, int chunkSize, int chunkIndex) throws IOException, InterruptedException {
+		String boundary = new BigInteger(256, new Random()).toString();
+		Map<Object, Object> data = new LinkedHashMap<>();
+		data.put("file", buffer);
+
+		HttpClient client = getHttpClient();
+		HttpRequest request = HttpRequest.newBuilder()
+			.uri(getSlideUploadURL(fileName, fileSize, chunkIndex, chunkSize))
+			.POST(ofMimeMultipartData(data, boundary))
+			.header("Content-Type", "multipart/form-data;boundary=" + boundary)
+			.build();
+
+		HttpResponse<String> response = client.send(request, BodyHandlers.ofString());
+		return response.statusCode() == 200 ? Result.OK : Result.FAIL;
+	}
+
+	public static URI getSlideUploadURL(String fileName, long fileSize, int chunkIndex, int chunkSize) {
+		return host.resolve(String.format(
+			"/api/v0/upload/?filename=%s&fileSize=%s&chunk=%s&chunkSize=%s",
+			fileName,
+			fileSize,
+			chunkIndex,
+			chunkSize
+		));
 	}
 
 	/**
@@ -266,20 +324,22 @@ public class RemoteOpenslide {
 		);
 	}
 
-	public static URI getSlideUploadURL(String fileName, long fileSize, int chunkIndex, int chunkSize) {
-		return host.resolve(String.format(
-				"/api/v0/upload/?filename=%s&fileSize=%s&chunk=%s&chunkSize=%s",
-				fileName,
-				fileSize,
-				chunkIndex,
-				chunkSize
-		));
+	/* Workspaces */
+
+	public static Optional<String> getWorkspace() {
+		var response = get("/api/v0/workspaces");
+
+		if (response.isEmpty()) {
+			return Optional.empty();
+		}
+
+		return Optional.of(response.get().body());
 	}
 
 	public static Result createNewWorkspace(String workspaceName) {
-		Optional<HttpResponse<String>> response = post(
-			"/api/v0/workspaces",
-				Map.of("workspace-name", workspaceName)
+		var response = post(
+		"/api/v0/workspaces",
+			Map.of("workspace-name", workspaceName)
 		);
 
 		if (response.isEmpty()) {
@@ -290,9 +350,9 @@ public class RemoteOpenslide {
 	}
 
 	public static Result renameWorkspace(String workspaceId, String newName) {
-		Optional<HttpResponse<String>> response = put(
-			"/api/v0/workspaces/" + e(workspaceId),
-				Map.of("workspace-name", newName)
+		var response = put(
+		"/api/v0/workspaces/" + e(workspaceId),
+			Map.of("workspace-name", newName)
 		);
 
 		if (response.isEmpty()) {
@@ -303,9 +363,7 @@ public class RemoteOpenslide {
 	}
 
 	public static Result deleteWorkspace(String workspaceId) {
-		Optional<HttpResponse<String>> response = delete(
-			"/api/v0/workspaces/" + e(workspaceId)
-		);
+		var response = delete("/api/v0/workspaces/" + e(workspaceId));
 
 		if (response.isEmpty()) {
 			return Result.FAIL;
@@ -314,24 +372,14 @@ public class RemoteOpenslide {
 		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
 	}
 
-	public static Result deleteProject(String projectName) {
-		Optional<HttpResponse<String>> response = delete(
-			"/api/v0/projects/" + e(projectName)
-		);
-
-		if (response.isEmpty()) {
-			return Result.FAIL;
-		}
-
-		return (response.get().statusCode() == 200) ? Result.OK : Result.FAIL;
-	}
+	/* Private API */
 
 	private static Optional<HttpResponse<String>> get(String path) {
 		try {
 			HttpClient client = getHttpClient();
 			HttpRequest request = HttpRequest.newBuilder()
 				.uri(host.resolve(path))
-				.header("name", username)
+				.header("token", token)
 				.build();
 
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
@@ -348,6 +396,7 @@ public class RemoteOpenslide {
 			HttpRequest request = HttpRequest.newBuilder()
 				.POST(ofFormData(data))
 				.uri(host.resolve(path))
+				.header("token", token)
 				.header("Content-Type", "application/x-www-form-urlencoded")
 				.build();
 
@@ -363,9 +412,10 @@ public class RemoteOpenslide {
 		try {
 			HttpClient client = getHttpClient();
 			HttpRequest request = HttpRequest.newBuilder()
-					.DELETE()
-					.uri(host.resolve(path))
-					.build();
+				.DELETE()
+				.header("token", token)
+				.uri(host.resolve(path))
+				.build();
 
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
@@ -379,10 +429,11 @@ public class RemoteOpenslide {
 		try {
 			HttpClient client = getHttpClient();
 			HttpRequest request = HttpRequest.newBuilder()
-					.PUT(ofFormData(data))
-					.uri(host.resolve(path))
-					.header("Content-Type", "application/x-www-form-urlencoded")
-					.build();
+				.PUT(ofFormData(data))
+				.header("token", token)
+				.uri(host.resolve(path))
+				.header("Content-Type", "application/x-www-form-urlencoded")
+				.build();
 
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
@@ -393,14 +444,21 @@ public class RemoteOpenslide {
 	}
 
 	private static HttpClient getHttpClient() {
+		if (username != null && password != null) {
+			return HttpClient.newBuilder()
+					.connectTimeout(Duration.ofSeconds(10))
+					.authenticator(new Authenticator() {
+						@Override
+						protected PasswordAuthentication getPasswordAuthentication() {
+							return new PasswordAuthentication(username, password.toCharArray());
+						}
+					})
+					.version(HttpClient.Version.HTTP_1_1)
+					.build();
+		}
+
 		return HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(10))
-				.authenticator(new Authenticator() {
-					@Override
-					protected PasswordAuthentication getPasswordAuthentication() {
-						return new PasswordAuthentication(username, password.toCharArray());
-					}
-				})
 				.version(HttpClient.Version.HTTP_1_1)
 				.build();
 	}
@@ -468,10 +526,6 @@ public class RemoteOpenslide {
 	 */
 	public static String e(String toEncode) {
 		return URLEncoder.encode(toEncode, StandardCharsets.UTF_8).replace("+", "%20");
-	}
-
-	public static URI getHost() {
-		return host;
 	}
 
 	public enum Result {

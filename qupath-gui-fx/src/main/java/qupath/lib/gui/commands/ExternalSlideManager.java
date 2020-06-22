@@ -248,7 +248,6 @@ public class ExternalSlideManager {
     }
 
     private static final int CHUNK_BUFFER_SIZE = 1024 * 1024;
-    private static ExecutorService threadPool = Executors.newFixedThreadPool(4);
 
     private void uploadSlide() {
         File file = Dialogs.promptForFile("Select slide", null, null);
@@ -265,7 +264,7 @@ public class ExternalSlideManager {
             ImageServerBuilder.UriImageSupport<?> support = openSlideBuilder.checkImageSupport(file.toURI());
 
             if (support.getSupportLevel() == 0) {
-                Dialogs.showWarningNotification("Error uploading slide", "Given file is not supported by QuPath.");
+                Dialogs.showWarningNotification("Error uploading slide", "Given file is not supported by OpenSlide.");
                 return;
             }
 
