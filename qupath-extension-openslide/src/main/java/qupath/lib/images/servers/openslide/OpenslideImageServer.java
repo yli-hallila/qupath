@@ -159,8 +159,6 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 				applyBounds = false;
 		}
 
-		json.keySet().forEach(System.out::println);
-
 		// Read bounds
 		boolean isCropped = false;
 		if (applyBounds && json.keySet().containsAll(

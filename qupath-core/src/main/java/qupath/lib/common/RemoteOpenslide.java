@@ -29,19 +29,38 @@ public class RemoteOpenslide {
 
 	private static URI host;
 
-	private static String token;
-
+	private static AuthType authType = AuthType.UNAUTHENTICATED; // TODO: Implement. Avoid unnecessary API calls when GUEST and send proper Authentication based on AuthType
+	private static String token = "";
 	private static String username;
 	private static String password;
 
-	private static boolean WRITE_ACCESS = false;
+	/**
+	 * A GUID provided by the Azure Active Directory, which is unique and consistent for every user.
+	 * @see <a href="https://docs.microsoft.com/fi-fi/onedrive/find-your-office-365-tenant-id">Microsoft documentation</a>
+	 */
+	private static String userId = "";
 
-	public static boolean hasWriteAccess() {
-		return WRITE_ACCESS;
+	/**
+	 * The GUID of the Azure AD Tenant (= Organization) this user belongs to.
+	 */
+	private static String tenantId = "";
+
+	private static List<String> roles = new ArrayList<>();
+
+	public static String getUserId() {
+		return userId;
 	}
 
-	public static void setWriteAccess(boolean writeAccess) {
-		WRITE_ACCESS = writeAccess;
+	public static void setUserId(String userId) {
+		RemoteOpenslide.userId = userId;
+	}
+
+	public static String getTenantId() {
+		return tenantId;
+	}
+
+	public static void setTenantId(String tenantId) {
+		RemoteOpenslide.tenantId = tenantId;
 	}
 
 	public static void setHost(String host) {
@@ -56,13 +75,14 @@ public class RemoteOpenslide {
 		return host;
 	}
 
-	public static void setAuthentication(String username, String password) {
-		RemoteOpenslide.username = username;
-		RemoteOpenslide.password = password;
-	}
-
 	public static boolean isConnected() {
 		return host != null;
+	}
+
+	public static void setAuthentication(String username, String password) {
+		RemoteOpenslide.authType = AuthType.USERNAME;
+		RemoteOpenslide.username = username;
+		RemoteOpenslide.password = password;
 	}
 
 	public static String getToken() {
@@ -70,7 +90,58 @@ public class RemoteOpenslide {
 	}
 
 	public static void setToken(String token) {
+		RemoteOpenslide.authType = AuthType.TOKEN;
 		RemoteOpenslide.token = token;
+	}
+
+	/* Roles and Permissions*/
+
+	public static boolean hasRole(String role) {
+		return roles.contains(role);
+	}
+
+	public static boolean hasRole(String... temp) {
+		List<String> permitted = List.of(temp);
+
+		return roles.stream().anyMatch(permitted::contains);
+	}
+
+	/**
+	 * User is treated as a owner when ...
+	 * 	  a) The ownerId is the same as userId and the user has the role MANAGE_PERSONAL PROJECTS.
+	 * 	  b) The ownerId is the same as tenantId and the user has the the role MANAGE_PROJECTS.
+	 * @param ownerId ID of project or workspace owner.
+	 * @return True if owner (=has write permissions)
+	 */
+	public static boolean isOwner(String ownerId) {
+		return (userId.equals(ownerId) && roles.contains("MANAGE_PERSONAL_PROJECTS")) ||
+				(tenantId.equals(ownerId) && roles.contains("MANAGE_PROJECTS"));
+	}
+
+	private static Map<String, Boolean> permissions = new HashMap<>();
+
+	/**
+	 * This method checks if the user is authorized to edit a given ID.
+	 * Use isOwner(String ownerId) if the ownerId is available;
+	 * use this method only when only the object ID is available.
+	 * @param id Project or workspace Id.
+	 * @return True if has write permissions.
+	 */
+	public static boolean hasPermission(String id) {
+		if (permissions.containsKey(id)) {
+			return permissions.get(id);
+		}
+
+		var response = get("/api/v0/users/write/" + e(id));
+
+		if (response.isEmpty()) {
+			return false;
+		}
+
+		var result = Boolean.parseBoolean(response.get().body());
+		permissions.put(id, result);
+
+		return result;
 	}
 
 	/* Authentication */
@@ -78,53 +149,41 @@ public class RemoteOpenslide {
 	public static boolean login(String username, String password) {
 		setAuthentication(username, password);
 
-		if (login()) {
-			return true;
-		}
+		var response = get("/api/v0/users/login");
 
-		setAuthentication(null, null);
-		return false;
-	}
-
-	public static boolean login() {
-		Optional<HttpResponse<String>> response = get(
-			"/api/v0/users/login"
-		);
-
-		if (response.isEmpty()) {
+		if (response.isEmpty() || response.get().statusCode() != 200) {
+			setAuthentication(null, null);
 			return false;
 		}
 
-		setWriteAccess(false);
+		JsonObject result = JsonParser.parseString(response.get().body()).getAsJsonObject();
 
-		JsonArray permissions = JsonParser.parseString(response.get().body()).getAsJsonArray();
+		setUserId(result.get("userId").getAsString());
+		setTenantId(result.get("organizationId").getAsString());
+
+		JsonArray permissions = result.get("roles").getAsJsonArray();
 		for (JsonElement element : permissions) {
-			if (element.getAsString().equals("TEACHER") || element.getAsString().equals("ADMIN")) {
-				setWriteAccess(true);
-			}
+			String permission = element.getAsString();
+			roles.add(permission);
 		}
 
 		return true;
 	}
 
-	public static boolean validate() {
-		Optional<HttpResponse<String>> response = get(
-			"/api/v0/users/verify"
-		);
+	public static boolean validate(String token) {
+		setToken(token);
+
+		var response = get("/api/v0/users/verify");
 
 		if (response.isEmpty()) {
+			setToken("");
 			return false;
 		}
 
-		setWriteAccess(false);
-
-		JsonArray permissions = JsonParser.parseString(response.get().body()).getAsJsonArray();
-		for (JsonElement element : permissions) {
-			String permission = element.getAsString().toUpperCase();
-
-			if (permission.equals("TEACHER") || permission.equals("ADMIN")) {
-				setWriteAccess(true);
-			}
+		JsonArray roles = JsonParser.parseString(response.get().body()).getAsJsonArray();
+		for (JsonElement role : roles) {
+			String permission = role.getAsString().toUpperCase();
+			RemoteOpenslide.roles.add(permission);
 		}
 
 		return true;
@@ -132,9 +191,10 @@ public class RemoteOpenslide {
 
 	public static void logout() {
 		setHost(null);
-		setToken(null);
+		setToken("");
 		setAuthentication(null, null);
-		setWriteAccess(false);
+		roles.clear();
+		permissions.clear();
 	}
 
 	/* Projects */
@@ -181,8 +241,28 @@ public class RemoteOpenslide {
 		return Result.FAIL;
 	}
 
+	public static Optional<String> createPersonalProject(String projectName) {
+		var response = post(
+		"/api/v0/projects/personal",
+			Map.of(
+			"project-name", projectName
+			)
+		);
 
-	public static Result createNewProject(String workspaceId, String projectName) {
+		if (response.isEmpty() || response.get().statusCode() != 200) {
+			return Optional.empty();
+		}
+
+		return Optional.of(response.get().body());
+	}
+
+	/**
+	 * Creates a new project and places it inside given workspace.
+	 * @param workspaceId Workspace Id, null if personal project.
+	 * @param projectName Name of the project.
+	 * @return Result.OK if status code 200 else Result.FAIL.
+	 */
+	public static Result createProject(String workspaceId, String projectName) {
 		var response = post(
 		"/api/v0/projects",
 			Map.of(
@@ -326,7 +406,17 @@ public class RemoteOpenslide {
 
 	/* Workspaces */
 
-	public static Optional<String> getWorkspace() {
+	public static Optional<String> getWorkspace(String id) {
+		var response = get("/api/v0/workspaces" + e(id));
+
+		if (response.isEmpty()) {
+			return Optional.empty();
+		}
+
+		return Optional.of(response.get().body());
+	}
+
+	public static Optional<String> getAllWorkspaces() {
 		var response = get("/api/v0/workspaces");
 
 		if (response.isEmpty()) {
@@ -377,10 +467,11 @@ public class RemoteOpenslide {
 	private static Optional<HttpResponse<String>> get(String path) {
 		try {
 			HttpClient client = getHttpClient();
-			HttpRequest request = HttpRequest.newBuilder()
-				.uri(host.resolve(path))
-				.header("token", token)
-				.build();
+			HttpRequest.Builder builder = HttpRequest.newBuilder()
+				.uri(host.resolve(path));
+
+			addAuthorization(builder);
+			HttpRequest request = builder.build();
 
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
@@ -393,12 +484,13 @@ public class RemoteOpenslide {
 	private static Optional<HttpResponse<String>> post(String path, Map<Object, Object> data) {
 		try {
 			HttpClient client = getHttpClient();
-			HttpRequest request = HttpRequest.newBuilder()
+			HttpRequest.Builder builder = HttpRequest.newBuilder()
 				.POST(ofFormData(data))
 				.uri(host.resolve(path))
-				.header("token", token)
-				.header("Content-Type", "application/x-www-form-urlencoded")
-				.build();
+				.header("Content-Type", "application/x-www-form-urlencoded");
+
+			addAuthorization(builder);
+			HttpRequest request = builder.build();
 
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (Exception e) {
@@ -411,11 +503,12 @@ public class RemoteOpenslide {
 	private static Optional<HttpResponse<String>> delete(String path) {
 		try {
 			HttpClient client = getHttpClient();
-			HttpRequest request = HttpRequest.newBuilder()
+			HttpRequest.Builder builder = HttpRequest.newBuilder()
 				.DELETE()
-				.header("token", token)
-				.uri(host.resolve(path))
-				.build();
+				.uri(host.resolve(path));
+
+			addAuthorization(builder);
+			HttpRequest request = builder.build();
 
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
@@ -428,12 +521,14 @@ public class RemoteOpenslide {
 	private static Optional<HttpResponse<String>> put(String path, Map<Object, Object> data) {
 		try {
 			HttpClient client = getHttpClient();
-			HttpRequest request = HttpRequest.newBuilder()
+			HttpRequest.Builder builder = HttpRequest.newBuilder()
 				.PUT(ofFormData(data))
-				.header("token", token)
 				.uri(host.resolve(path))
-				.header("Content-Type", "application/x-www-form-urlencoded")
-				.build();
+				.header("Content-Type", "application/x-www-form-urlencoded");
+
+			addAuthorization(builder);
+
+			HttpRequest request = builder.build();
 
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
@@ -443,19 +538,27 @@ public class RemoteOpenslide {
 		return Optional.empty();
 	}
 
-	private static HttpClient getHttpClient() {
+	private static void addAuthorization(HttpRequest.Builder builder) {
 		if (username != null && password != null) {
-			return HttpClient.newBuilder()
-					.connectTimeout(Duration.ofSeconds(10))
-					.authenticator(new Authenticator() {
-						@Override
-						protected PasswordAuthentication getPasswordAuthentication() {
-							return new PasswordAuthentication(username, password.toCharArray());
-						}
-					})
-					.version(HttpClient.Version.HTTP_1_1)
-					.build();
+			builder.headers("Authorization", basicAuth(username, password));
+		} else if (!getToken().isEmpty()) {
+			builder.headers("Token", getToken());
 		}
+	}
+
+	private static HttpClient getHttpClient() {
+//		if (username != null && password != null) {
+//			return HttpClient.newBuilder()
+//					.connectTimeout(Duration.ofSeconds(10))
+//					.authenticator(new Authenticator() {
+//						@Override
+//						protected PasswordAuthentication getPasswordAuthentication() {
+//							return new PasswordAuthentication(username, password.toCharArray());
+//						}
+//					})
+//					.version(HttpClient.Version.HTTP_1_1)
+//					.build();
+//		}
 
 		return HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(10))
@@ -528,8 +631,19 @@ public class RemoteOpenslide {
 		return URLEncoder.encode(toEncode, StandardCharsets.UTF_8).replace("+", "%20");
 	}
 
+	private static String basicAuth(String username, String password) {
+		return "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes());
+	}
+
 	public enum Result {
 		OK,
 		FAIL
+	}
+
+	public enum AuthType {
+		UNAUTHENTICATED,
+		GUEST,
+		USERNAME,
+		TOKEN
 	}
 }

@@ -35,8 +35,6 @@ import java.io.*;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static qupath.lib.common.RemoteOpenslide.*;
 
@@ -68,7 +66,7 @@ public class ExternalSlideManager {
     }
 
     public ExternalSlideManager() {
-        this.writeAccessProperty = new SimpleBooleanProperty(RemoteOpenslide.hasWriteAccess());
+        this.writeAccessProperty = new SimpleBooleanProperty(RemoteOpenslide.hasRole("MANAGE_PROJECTS"));
     }
 
     public BorderPane getPane() {
@@ -90,15 +88,15 @@ public class ExternalSlideManager {
         slideNameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
         slideNameColumn.setReorderable(false);
 
-        TableColumn<ExternalSlide, String> organizationColumn = new TableColumn<>("Owner");
-        organizationColumn.setCellValueFactory(new PropertyValueFactory<>("organization"));
-        organizationColumn.setReorderable(false);
+        TableColumn<ExternalSlide, String> ownerColumn = new TableColumn<>("Owner");
+        ownerColumn.setCellValueFactory(new PropertyValueFactory<>("owner"));
+        ownerColumn.setReorderable(false);
 
         TableColumn<ExternalSlide, String> uuidColumn = new TableColumn<>("UUID");
         uuidColumn.setCellValueFactory(new PropertyValueFactory<>("id"));
         uuidColumn.setReorderable(false);
 
-        table.getColumns().addAll(slideNameColumn, organizationColumn, uuidColumn);
+        table.getColumns().addAll(slideNameColumn, ownerColumn, uuidColumn);
 
         ExternalSlide[] slides = new Gson().fromJson(
             RemoteOpenslide.getSlidesV1().get(),

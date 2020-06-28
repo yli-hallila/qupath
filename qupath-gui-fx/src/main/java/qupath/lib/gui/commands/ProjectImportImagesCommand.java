@@ -41,7 +41,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import com.google.gson.Gson;
 import javafx.collections.FXCollections;
@@ -612,7 +611,7 @@ class ProjectImportImagesCommand {
 					return;
 				}
 
-				setText(item.getName() + " (" + item.getOrganization() + ")");
+				setText(item.getName() + " (" + item.getOwner() + ")");
 				setTooltip(new Tooltip(item.getId()));
 			}
 		});

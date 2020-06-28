@@ -6,6 +6,7 @@ public class ExternalWorkspace {
 
     private String name;
     private String id;
+    private String owner;
     private ArrayList<ExternalProject> projects;
 
     public String getName() {
@@ -14,6 +15,10 @@ public class ExternalWorkspace {
 
     public String getId() {
         return id;
+    }
+
+    public String getOwner() {
+        return owner;
     }
 
     public ArrayList<ExternalProject> getProjects() {

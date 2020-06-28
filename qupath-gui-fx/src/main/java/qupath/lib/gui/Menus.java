@@ -302,7 +302,11 @@ class Menus {
 
 		@ActionDescription("Export a list of the image paths for images in the current project.")
 		@ActionMenu("Project...>Export image list")
-		public final Action EXPORT_IMAGE_LIST = qupath.createProjectAction(project -> ProjectCommands.promptToExportImageList(project));	
+		public final Action EXPORT_IMAGE_LIST = qupath.createProjectAction(project -> ProjectCommands.promptToExportImageList(project));
+
+		@ActionDescription("Edit project information")
+		@ActionMenu("Project...>Edit project information")
+		public final Action EDIT_PROJECT_INFORMATION = qupath.createProjectAction(ProjectCommands::promptToEditProjectInformation);
 		
 		@ActionMenu("Project...>")
 		public final Action SEP_2 = ActionTools.createSeparator();

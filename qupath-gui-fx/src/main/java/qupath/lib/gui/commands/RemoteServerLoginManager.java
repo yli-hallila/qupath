@@ -1,9 +1,8 @@
 package qupath.lib.gui.commands;
 
-import com.microsoft.aad.msal4j.IAuthenticationResult;
-import com.microsoft.aad.msal4j.InteractiveRequestParameters;
-import com.microsoft.aad.msal4j.PublicClientApplication;
+import com.microsoft.aad.msal4j.*;
 import javafx.application.Platform;
+import javafx.beans.property.StringProperty;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
@@ -29,7 +28,6 @@ import java.net.URISyntaxException;
 import java.util.Optional;
 import java.util.Set;
 
-// TODO: use something else than host as a indicator of being logged in.
 public class RemoteServerLoginManager {
 
     private static Logger logger = LoggerFactory.getLogger(RemoteServerLoginManager.class);
@@ -96,7 +94,7 @@ public class RemoteServerLoginManager {
 
     private void loginAsGuest() {
         RemoteOpenslide.setHost(PathPrefs.remoteOpenslideHost().get());
-        RemoteOpenslide.setAuthentication("", "");
+        RemoteOpenslide.setAuthentication(null, null);
 
         dialog.close();
         qupath.showWorkspaceDialog();
@@ -164,15 +162,20 @@ public class RemoteServerLoginManager {
     // TODO: Kill server if retry - different port?
     private void showMicrosoftAuthDialog() {
         try {
+            StringProperty cache = PathPrefs.createPersistentPreference("MSAL4J_TOKEN", "");
+
+            ITokenCacheAccessAspect persistenceAspect = new TokenPersistence(cache);
+
             PublicClientApplication app = PublicClientApplication
                 .builder("eccc9211-faa5-40d5-9ff9-7a5087dbcadb")
+                .setTokenCacheAccessAspect(persistenceAspect)
                 .authority("https://login.microsoftonline.com/common/")
                 .build();
 
             Set<String> scopes = Set.of("user.read", "openid", "profile", "email");
 
             InteractiveRequestParameters parameters = InteractiveRequestParameters
-                .builder(new URI("http://localhost:12425"))
+                .builder(new URI("http://localhost:51820"))
                 .scopes(scopes)
                 .build();
 
@@ -187,8 +190,11 @@ public class RemoteServerLoginManager {
                 RemoteOpenslide.setHost(PathPrefs.remoteOpenslideHost().get());
                 IAuthenticationResult result = task.getValue();
 
-                RemoteOpenslide.setToken(result.idToken());
-                if (RemoteOpenslide.validate()) {
+                if (RemoteOpenslide.validate(result.idToken())) {
+                    String[] split = result.account().homeAccountId().split("\\.");
+                    RemoteOpenslide.setUserId(split[0]);
+                    RemoteOpenslide.setTenantId(split[1]);
+
                     Platform.runLater(() -> {
                         dialog.close();
                         qupath.showWorkspaceDialog();
@@ -220,6 +226,33 @@ public class RemoteServerLoginManager {
         } catch (MalformedURLException | URISyntaxException e) {
             Dialogs.showErrorNotification("Error", "Error while logging in. See log for more details");
             logger.error(e.getLocalizedMessage(), e);
+        }
+    }
+
+    public static void closeDialog() {
+        dialog.close();
+    }
+
+    /* DEBUG ONLY */
+    static class TokenPersistence implements ITokenCacheAccessAspect {
+        StringProperty data;
+
+        TokenPersistence(StringProperty data) {
+            this.data = data;
+        }
+
+        @Override
+        public void beforeCacheAccess(ITokenCacheAccessContext iTokenCacheAccessContext) {
+            logger.debug("Reading cache");
+            logger.debug(data.get());
+            iTokenCacheAccessContext.tokenCache().deserialize(data.get());
+        }
+
+        @Override
+        public void afterCacheAccess(ITokenCacheAccessContext iTokenCacheAccessContext) {
+            logger.debug("Saving cache");
+            data.set(iTokenCacheAccessContext.tokenCache().serialize());
+            logger.debug(data.get());
         }
     }
 }

@@ -65,6 +65,7 @@ public class QuPathApp extends Application {
 		String unnamed = params.getUnnamed().isEmpty() ? null : params.getUnnamed().get(0);
 		String projectPath = namedParams.getOrDefault("project", null);
 		String imagePath = namedParams.getOrDefault("image", unnamed);
+		String remotePath = namedParams.getOrDefault("remote", null);
 		
 		if (projectPath != null) {
 			var uri = GeneralTools.toURI(projectPath);
@@ -80,6 +81,9 @@ public class QuPathApp extends Application {
 			}
 		} else if (imagePath != null) {
 			gui.openImage(imagePath, false, false);
+		} else if (remotePath != null) {
+			logger.debug("Loading Remote: {}", remotePath);
+			gui.processQuPathProtocol(remotePath);
 		}
 		
 		registerFileHandler(gui);

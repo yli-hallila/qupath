@@ -3,10 +3,7 @@ package qupath.lib.gui.panes;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.VPos;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.MenuItem;
+import javafx.scene.control.*;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.*;
 import javafx.scene.layout.*;
@@ -36,6 +33,8 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
     private final WorkspaceManager manager;
     private ExternalProject project;
 
+    private boolean hasWriteAccess = false;
+
     private ListCell<ExternalProject> thisCell;
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -45,10 +44,6 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
         thisCell = this;
 
         setPrefWidth(0);
-
-        if (RemoteOpenslide.hasWriteAccess()) {
-            enableReordering();
-        }
     }
 
     private void enableReordering() {
@@ -141,6 +136,12 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
             return;
         }
 
+        this.hasWriteAccess = RemoteOpenslide.isOwner(project.getOwner());
+
+        if (hasWriteAccess) {
+            enableReordering();
+        }
+
         GridPane pane = new GridPane();
         pane.setPadding(new Insets(5));
         pane.setHgap(5);
@@ -188,16 +189,28 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
                 WorkspaceManager.loadProject(project, manager);
             } else if (event.getButton() == MouseButton.SECONDARY) {
                 ContextMenu menu = new ContextMenu();
-                MenuItem rename = new MenuItem("Rename");
-                rename.setOnAction(action -> renameProject());
 
-                MenuItem delete = new MenuItem("Delete");
-                delete.setOnAction(action -> deleteProject());
+                if (hasWriteAccess) {
+                    MenuItem miRename = new MenuItem("Rename");
+                    miRename.setOnAction(action -> renameProject());
 
-                MenuItem editDescription = new MenuItem("Edit description");
-                editDescription.setOnAction(action -> editProjectDescription());
+                    MenuItem miDelete = new MenuItem("Delete");
+                    miDelete.setOnAction(action -> deleteProject());
 
-                menu.getItems().addAll(rename, delete, editDescription);
+                    MenuItem miEdit = new MenuItem("Edit description");
+                    miEdit.setOnAction(action -> editDescription());
+
+                    menu.getItems().addAll(miRename, miDelete, miEdit);
+                }
+
+                MenuItem miShare = new MenuItem("Share");
+                miShare.setOnAction(action -> Dialogs.showInputDialog(
+                "Project ID",
+                "You can enter this ID to: Remote Openslide > Open project by ID",
+                    project.getId()
+                ));
+
+                menu.getItems().add(miShare);
                 menu.show(pane, event.getScreenX(), event.getScreenY());
             }
         });
@@ -206,7 +219,7 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
         setPadding(new Insets(0));
     }
 
-    private void editProjectDescription() {
+    private void editDescription() {
         String newDescription = Dialogs.showInputDialog(
         "New description", "", project.getDescription()
         );
@@ -236,12 +249,15 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
         }
 
         Result result = RemoteOpenslide.editProject(project.getId(), newName, project.getDescription());
+        int currentIndex = manager.getTabPane().getSelectionModel().getSelectedIndex();
+
         if (result == Result.OK) {
             manager.refreshDialog();
+            manager.getTabPane().getSelectionModel().select(currentIndex);
         } else {
             Dialogs.showErrorNotification(
-                    "Error when editing project name",
-                    "See log for more details"
+            "Error when editing project name",
+            "See log for more details"
             );
         }
     }

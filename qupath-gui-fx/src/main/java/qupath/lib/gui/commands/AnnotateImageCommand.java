@@ -15,7 +15,7 @@ public class AnnotateImageCommand {
             return;
 
         String input = GeneralTools.nullableString((String) qupath.getImageData().getProperty("Information"));
-        Optional<String> result = Dialogs.showEditor(input);
+        Optional<String> result = Dialogs.showWysiwygEditor(input);
 
         result.ifPresent(s -> qupath.getImageData().setProperty("Information", s));
     }

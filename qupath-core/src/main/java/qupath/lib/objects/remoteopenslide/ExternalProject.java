@@ -5,6 +5,7 @@ public class ExternalProject {
     private String id;
     private String name;
     private String description;
+    private String owner;
 
     public String getId() {
         return id;
@@ -23,10 +24,18 @@ public class ExternalProject {
     }
 
     public String getDescription() {
-        return description;
+        return description == null ? "" : description;
     }
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getOwner() {
+        return owner;
+    }
+
+    public void setOwner(String owner) {
+        this.owner = owner;
     }
 }

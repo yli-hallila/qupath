@@ -477,11 +477,11 @@ public class Dialogs {
 
 	private static final String[] imageExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".gif" };
 
-	public static Optional<String> showEditor(String input) {
+	public static Optional<String> showWysiwygEditor(String input) {
 		QuPathGUI qupath = QuPathGUI.getInstance();
 		String dataFolderURI = qupath.getProject().getPath().getParent().toUri().toString();
 		String resourceRoot = QuPathGUI.class.getResource("/ckeditor/ckeditor.js").toString();
-		resourceRoot = resourceRoot.substring(0, resourceRoot.length() - 20); // hacky wacky way to get jar:file: ... URI
+		resourceRoot = resourceRoot.substring(0, resourceRoot.length() - 20); // Hacky wacky way to get jar:file: ... URI
 
 		String result = null;
 
@@ -515,48 +515,48 @@ public class Dialogs {
 		return Optional.empty();
 	}
 
-	public static String showHTML(final String content) {
-		if (Platform.isFxApplicationThread()) {
-			Browser browser = new Browser();
-			browser.setContent(content, false);
-
-			Dialog<String> dialog = new Dialog<>();
-			dialog.setResizable(true);
-			dialog.setOnCloseRequest(confirmCloseEventHandler);
-			dialog.setTitle("Editor");
-
-			try {
-				Rectangle2D bounds = Screen.getPrimary().getVisualBounds();
-				dialog.getDialogPane().setPrefSize(bounds.getWidth() * 0.8, bounds.getHeight() * 0.8);
-			} catch (Exception e) {
-				logger.debug("Unable to set stage size using primary screen {}", Screen.getPrimary());
-				dialog.getDialogPane().setPrefSize(1000, 800);
-			}
-
-			ButtonType closeButton = new ButtonType("Save & Close", ButtonBar.ButtonData.OK_DONE);
-			dialog.getDialogPane().getButtonTypes().addAll(closeButton, ButtonType.CANCEL);
-			dialog.getDialogPane().setContent(browser);
-
-			dialog.setResultConverter(dialogButton -> {
-				if (dialogButton == closeButton) {
-					Element textArea = browser.getWebEngine().getDocument().getElementById("editor");
-					return textArea.getTextContent();
-				}
-
-				return null;
-			});
-
-			Optional<String> result = dialog.showAndWait();
-
-			if (result.isPresent())
-				return result.get();
+	public static String showHTML(String content) {
+		if (!Platform.isFxApplicationThread()) {
+			Platform.runLater(() -> showHTML(content));
 		}
 
-		return null;
+		Browser browser = new Browser();
+		browser.setContent(content, false);
+
+		Dialog<String> dialog = new Dialog<>();
+		dialog.setResizable(true);
+		dialog.initOwner(QuPathGUI.getInstance().getStage());
+		dialog.setOnCloseRequest(confirmCloseEventHandler);
+		dialog.setTitle("Editor");
+
+		try {
+			Rectangle2D bounds = Screen.getPrimary().getVisualBounds();
+			dialog.getDialogPane().setPrefSize(bounds.getWidth() * 0.8, bounds.getHeight() * 0.8);
+		} catch (Exception e) {
+			logger.debug("Unable to set stage size using primary screen {}", Screen.getPrimary());
+			dialog.getDialogPane().setPrefSize(1000, 800);
+		}
+
+		ButtonType btnSave = new ButtonType("Save & Close", ButtonBar.ButtonData.OK_DONE);
+		dialog.getDialogPane().getButtonTypes().addAll(btnSave, ButtonType.CANCEL);
+		dialog.getDialogPane().setContent(browser);
+
+		dialog.setResultConverter(dialogButton -> {
+			if (dialogButton == btnSave) {
+				Element textArea = browser.getWebEngine().getDocument().getElementById("editor");
+				return textArea.getTextContent();
+			}
+
+			return null;
+		});
+
+		Optional<String> result = dialog.showAndWait();
+
+		return result.orElse(null);
 	}
 
 	private static EventHandler<DialogEvent> confirmCloseEventHandler = event -> {
-		boolean cancel = showConfirmDialog("Exit", "Press 'OK' if you want to exit.");
+		boolean cancel = showYesNoDialog("Exit", "Are you sure you want to exit?");
 
 		if (!cancel) {
 			event.consume();

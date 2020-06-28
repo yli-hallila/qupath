@@ -245,7 +245,7 @@ class DefaultProject implements Project<BufferedImage> {
 		return getFile().toURI();
 	}
 	
-	private File getBaseDirectory() {
+	public File getBaseDirectory() {
 		return dirBase;
 	}
 	
@@ -351,7 +351,13 @@ class DefaultProject implements Project<BufferedImage> {
 		writeProject(getFile());
 		writePathClasses(pathClasses);
 
-		if (RemoteOpenslide.hasWriteAccess()) {
+		var hasWriteAccess = RemoteOpenslide.hasPermission(dirBase.getName());
+
+
+//		if (RemoteOpenslide.hasWriteAccess()) {
+		if (hasWriteAccess) {
+			logger.debug("Uploading project to server");
+
 			File projectFolder = getFile().getParentFile();
 			Path projectZipFile = Files.createTempFile("qupath-project-", ".zip");
 
@@ -359,7 +365,10 @@ class DefaultProject implements Project<BufferedImage> {
 
 			RemoteOpenslide.uploadProject(dirBase.getName(), projectZipFile.toFile());
 			Files.delete(projectZipFile);
+
+			logger.debug("Uploaded to server");
 		}
+//		}
 
 
 //		if (file.isDirectory())

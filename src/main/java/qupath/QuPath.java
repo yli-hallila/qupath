@@ -27,6 +27,8 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ServiceLoader;
@@ -37,6 +39,7 @@ import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
 import javax.script.SimpleScriptContext;
 
+import com.google.gson.internal.bind.util.ISO8601Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,6 +102,9 @@ public class QuPath {
 	
 	@Option(names = {"-t", "--tma"}, description = "Launch standalone viewer for TMA summary results.")
 	private boolean tma;
+
+	@Option(names = {"--remote"}, description = {"Launch QuPath and open a remote workspace, project or slide.", "--remote [server]|[project or slide<|name>]<|slide>"})
+	private String remote;
 
 	@Option(names = {"-l", "--log"}, description = {"Log level (default = INFO).", "Options: ${COMPLETION-CANDIDATES}"} )
 	private LogLevel logLevel = LogLevel.INFO;
@@ -171,7 +177,36 @@ public class QuPath {
 		
 			if (qupath.image != null && !qupath.image.equals(""))
 				CLIArgs.add("--image=" + qupath.image);
-			
+
+			if (qupath.remote != null) {
+				/*
+				 * If a QuPath instance is already running we'll save the request as a file, which
+				 * the existing instance(s) can read and prompt the user to open the project. If a
+				 * QuPath instance isn't running, we'll start one.
+				 *
+				 */
+
+				var QuPathInstances = ProcessHandle.allProcesses().filter(handle ->
+						handle.info().command().orElse("").contains("QuPath")).count();
+
+				if (QuPathInstances > 1) {
+					logger.debug("QuPath running, saving remote request to file.");
+
+					try {
+						Files.createDirectories(Path.of("Transfer"));
+						Files.write(Path.of("Transfer/Request"), qupath.remote.getBytes());
+
+						logger.debug("Saved request to file. Exiting.");
+						System.exit(0);
+					} catch (IOException e) {
+						logger.error("Error while saving remote request to file", e);
+					}
+				}
+
+				logger.debug("Starting QuPath with remote: {}", qupath.remote);
+				CLIArgs.add("--remote=" + qupath.remote);
+			}
+
 			QuPathApp.launch(QuPathApp.class, CLIArgs.toArray(new String[CLIArgs.size()]));
 			
 		} else {

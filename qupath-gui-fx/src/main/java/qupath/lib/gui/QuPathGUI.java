@@ -34,10 +34,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -166,6 +163,7 @@ import qupath.lib.images.servers.ImageServerProvider;
 import qupath.lib.images.servers.ImageServers;
 import qupath.lib.images.servers.ServerTools;
 import qupath.lib.io.PathIO;
+import qupath.lib.io.ZipUtil;
 import qupath.lib.objects.PathAnnotationObject;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjectTools;
@@ -234,7 +232,10 @@ public class QuPathGUI {
 	
 	private ProjectBrowser projectBrowser;
 
-	private Browser browser;
+	/**
+	 * Embedded browser to display rich text inside the "Project Information" tab.
+	 */
+	private Browser projectInformation;
 
 	/**
 	 * Preference panel, which may be used by extensions to add in their on preferences if needed
@@ -1124,9 +1125,93 @@ public class QuPathGUI {
 		} catch (Exception e) {
 			logger.error("Error running startup script", e);
 		}
+
+		registerWatchservice();
 	}
 
-	
+	private void registerWatchservice() {
+		Runnable task = new Runnable() {
+			@Override
+			public void run() {
+				Path path = FileSystems.getDefault().getPath("Transfer");
+
+				logger.debug("Registering Watch Service");
+
+				try (WatchService watchService = FileSystems.getDefault().newWatchService()) {
+					WatchKey watchKey = path.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
+
+					var valid = true;
+					while (valid) {
+						WatchKey wk = watchService.take();
+
+						logger.debug("Polling Events");
+
+						for (WatchEvent<?> event : wk.pollEvents()) {
+							if (event.kind() == StandardWatchEventKinds.OVERFLOW) {
+								continue;
+							}
+
+							Path changed = (Path) event.context();
+
+							logger.debug(String.valueOf(changed));
+
+							if (changed.endsWith("Request")) {
+								logger.debug(Files.readString(Path.of("Transfer/Request")));
+								processQuPathProtocol(Files.readString(Path.of("Transfer/Request")));
+							}
+						}
+
+						valid = wk.reset();
+						if (!valid) {
+							logger.debug("WatchKey has been unregistered");
+						}
+					}
+				} catch (IOException | InterruptedException e) {
+					logger.error("Watch Service exception. QuPath protocol unavailable.", e);
+				}
+			}
+		};
+
+		submitShortTask(task);
+	}
+
+	/**
+	 * qupath:[//[userinfo@]host[:port]]path[?query][#fragment]
+	 * @param request
+	 */
+	public void processQuPathProtocol(String request) {
+		if (!Platform.isFxApplicationThread()) {
+			Platform.runLater(() -> processQuPathProtocol(request));
+			return;
+		}
+
+		RemoteServerLoginManager.closeDialog();
+
+		try {
+			URI uri = new URI(request);
+
+			assert uri.getScheme() == "qupath";
+			assert uri.getPath() == "open";
+
+			RemoteOpenslide.setHost("http://" + uri.getAuthority()); // todo: fix hardcoded http(s) and add dialogs
+
+			if (uri.getFragment().equals("slide")) {
+				logger.debug("Loading slide {}", uri.getQuery());
+				logger.debug(uri.getHost());
+
+				openImage(RemoteOpenslide.getHost() + "/" + uri.getQuery(), true, true);
+				getTabbedPanel().getSelectionModel().select(1);
+			} else {
+				logger.debug("Loading project {} ({})", uri.getFragment(), uri.getQuery());
+
+				WorkspaceManager.loadProject(uri.getQuery(), uri.getFragment());
+			}
+		} catch (URISyntaxException e) {
+			showLoginDialog();
+			logger.error("Invalid QuPath URI syntax", e);
+		}
+	}
+
 	/**
 	 * Try to start logging to a file.
 	 * This will only work if <code>PathPrefs.getLoggingPath() != null</code>.
@@ -1965,10 +2050,19 @@ public class QuPathGUI {
 		tabbedPanel = new TabPane();
 		tabbedPanel.setTabClosingPolicy(TabClosingPolicy.UNAVAILABLE);
 
-		browser = new Browser();
-		browser.setTextHighlightable(false);
+		projectInformation = new Browser();
+		projectInformation.setTextHighlightable(false);
+		projectInformation.setOnMouseClicked(event -> {
+			if (event.getClickCount() > 1 && getProject() != null) {
+				String projectId = getProject().getPath().getParent().getFileName().toString();
 
-		tabbedPanel.getTabs().add(new Tab("Project Information", browser));
+				if (RemoteOpenslide.hasPermission(projectId)) {
+					ProjectCommands.promptToEditProjectInformation(getProject());
+				}
+			}
+		});
+
+		tabbedPanel.getTabs().add(new Tab("Project Information", projectInformation));
 		tabbedPanel.getTabs().add(new Tab("Viewer", paneViewer));
 
 //		paneViewer.setTop(tfCommands);
@@ -2100,6 +2194,10 @@ public class QuPathGUI {
 
 	public ProjectBrowser getProjectBrowser() {
 		return projectBrowser;
+	}
+
+	public Browser getProjectInformation() {
+		return projectInformation;
 	}
 	
 	/**
@@ -2719,7 +2817,9 @@ public class QuPathGUI {
 		var project = getProject();
 		return project == null ? null : project.getEntry(imageData);
 	}
-	
+
+	private boolean askedToLogin = false;
+
 	/**
 	 * Check if changes need to be saved for an ImageData, prompting the user if necessary.
 	 * <p>
@@ -2734,11 +2834,50 @@ public class QuPathGUI {
 			return true;
 		ProjectImageEntry<BufferedImage> entry = getProjectImageEntry(imageData);
 		String name = entry == null ? ServerTools.getDisplayableImageName(imageData.getServer()) : entry.getImageName();
-		var response = Dialogs.showYesNoCancelDialog("Save changes", "Save changes to " + name + "?");
-		if (response == DialogButton.CANCEL)
-			return false;
-		if (response == DialogButton.NO)
+		var makeCopy = false;
+
+		var hasWriteAccess = false;
+
+		if (entry != null) {
+			String projectId = getProject().getPath().getParent().getFileName().toString();
+			hasWriteAccess = RemoteOpenslide.hasPermission(projectId);
+		}
+
+		if (RemoteOpenslide.hasRole("MANAGE_PERSONAL_PROJECTS") && !hasWriteAccess) {
+			var response = Dialogs.showYesNoDialog("Save changes",
+					"You've made changes to this project but you don't have the required permissions to save these changes." +
+						"\n\n" +
+						"Do you want to make a personal copy of this project which you can edit?");
+
+			if (response) {
+				makeCopy = true;
+			} else {
+				return true;
+			}
+		} else if (hasWriteAccess) {
+			var response = Dialogs.showYesNoCancelDialog("Save changes", "Save changes to " + name + "?");
+			if (response == DialogButton.CANCEL)
+				return false;
+			if (response == DialogButton.NO)
+				return true;
+		} else if (!askedToLogin) {
+			var response = Dialogs.showYesNoDialog("Save changes",
+					"You've made changes to this project but you're not logged in." +
+						"\n\n" +
+						"Do you wish to login?");
+
+			askedToLogin = true;
+
+			if (response) {
+				RemoteOpenslide.logout();
+				showLoginDialog();
+				return false;
+			}
+
 			return true;
+		} else {
+			return true;
+		}
 
 		try {
 			if (entry == null) {
@@ -2753,17 +2892,85 @@ public class QuPathGUI {
 			} else {
 				entry.saveImageData(imageData);
 				var project = getProject();
-				if (project != null)
+				if (project != null && !makeCopy)
 					project.syncChanges();
 			}
+
+			if (makeCopy) {
+				var project = getProject();
+				Optional<String> query = RemoteOpenslide.createPersonalProject(project.getName());
+
+				try {
+					String projectId = query.orElseThrow(IOException::new);
+
+					Path dest = Path.of(System.getProperty("java.io.tmpdir"), "qupath-ext-project", projectId, File.separator);
+					Path src = project.getPath().getParent();
+
+					Files.createDirectory(dest.toAbsolutePath());
+
+					copy(src.toFile(), dest.toFile());
+
+					Path projectZipFile = Files.createTempFile("qupath-project-", ".zip");
+
+					ZipUtil.zip(dest, projectZipFile);
+
+					RemoteOpenslide.uploadProject(projectId, projectZipFile.toFile());
+					Files.delete(projectZipFile);
+
+					Platform.runLater(() -> {
+						WorkspaceManager.loadProject(projectId, "Copy of " + project.getName());
+						openImageEntry(getProjectImageEntry(imageData));
+					});
+				} catch (IOException e) {
+					logger.error("Error while creating personal project", e);
+				}
+			} else if (hasWriteAccess) {
+//				File projectFolder = getProject().getPath().getParent().toFile();
+//				Path projectZipFile = Files.createTempFile("qupath-project-", ".zip");
+//
+//				ZipUtil.zip(projectFolder.toPath(), projectZipFile);
+//
+//				RemoteOpenslide.uploadProject(projectFolder.getName(), projectZipFile.toFile());
+//				Files.delete(projectZipFile);
+			}
+
 			return true;
 		} catch (IOException e) {
 			Dialogs.showErrorMessage("Save ImageData", e);
 			return false;
 		}
 	}
-	
 
+	public void copy(File sourceLocation, File targetLocation) throws IOException {
+		if (sourceLocation.isDirectory()) {
+			copyDirectory(sourceLocation, targetLocation);
+		} else {
+			copyFile(sourceLocation, targetLocation);
+		}
+	}
+
+	private void copyDirectory(File source, File target) throws IOException {
+		if (!target.exists()) {
+			target.mkdir();
+		}
+
+		for (String f : source.list()) {
+			copy(new File(source, f), new File(target, f));
+		}
+	}
+
+	private void copyFile(File source, File target) throws IOException {
+		try (
+				InputStream in = new FileInputStream(source);
+				OutputStream out = new FileOutputStream(target)
+		) {
+			byte[] buf = new byte[1024];
+			int length;
+			while ((length = in.read(buf)) > 0) {
+				out.write(buf, 0, length);
+			}
+		}
+	}
 	
 	
 	/**
@@ -3998,9 +4205,9 @@ public class QuPathGUI {
 		}
 
 		if (project == null || project.getDescription() == null || project.getDescription().isEmpty()) {
-			this.browser.setContent("No description available for this project");
+			this.projectInformation.setContent("No description available for this project");
 		} else {
-			this.browser.setContent(project.getDescription());
+			this.projectInformation.setContent(project.getDescription());
 		}
 		
 		// Update the PathClass list, if necessary

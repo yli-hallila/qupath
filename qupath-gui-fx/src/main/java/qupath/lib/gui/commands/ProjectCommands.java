@@ -260,6 +260,25 @@ public class ProjectCommands {
 		qupath.refreshProject();
 		return true;
 	}
+
+	/**
+	 * Opens prompt to edit the HTML visible on the "Project Information" tab.
+	 * @param project Current project to edit.
+	 */
+	public static void promptToEditProjectInformation(Project<?> project) {
+		var result = Dialogs.showWysiwygEditor(project.getDescription());
+
+		if (result.isPresent()) {
+			try {
+				project.setDescription(result.get());
+				project.syncChanges();
+				QuPathGUI.getInstance().getProjectInformation().setContent(result.get());
+			} catch (IOException e) {
+				logger.error("Error while syncing project changes", e);
+				Dialogs.showErrorNotification("Error", "Couldn't save project changes.");
+			}
+		}
+	}
 	
 	
 	

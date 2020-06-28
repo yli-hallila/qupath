@@ -373,7 +373,7 @@ public class ProjectBrowser implements ChangeListener<ImageData<BufferedImage>> 
 		});
 		
 		// Edit the description for the image
-		Action actionEditDescription = new Action("Edit description", e -> {
+		Action actionEditDescription = new Action("Edit slide description", e -> {
 			Project<?> project = getProject();
 			ProjectImageEntry<?> entry = getSelectedEntry();
 			if (project != null && entry != null) {
@@ -465,6 +465,10 @@ public class ProjectBrowser implements ChangeListener<ImageData<BufferedImage>> 
 				Dialogs.showErrorMessage("Edit image description", "No entry is selected!");
 			}
 		});
+
+		Action actionEditInformation = new Action("Edit project information", e -> {
+			ProjectCommands.promptToEditProjectInformation(getProject());
+		});
 		
 		Action actionDuplicateImages = new Action("Duplicate image(s)", e -> {
 			Collection<ProjectImageEntry<BufferedImage>> entries = getAllSelectedEntries();
@@ -553,6 +557,7 @@ public class ProjectBrowser implements ChangeListener<ImageData<BufferedImage>> 
 		MenuItem miRefreshThumbnail = ActionUtils.createMenuItem(actionRefreshThumbnail);
 		MenuItem miEditDescription = ActionUtils.createMenuItem(actionEditDescription);
 		MenuItem miAddMetadata = ActionUtils.createMenuItem(actionAddMetadataValue);
+		MenuItem miEditInformation = ActionUtils.createMenuItem(actionEditInformation);
 		
 		
 		// Set visibility as menu being displayed
@@ -605,6 +610,7 @@ public class ProjectBrowser implements ChangeListener<ImageData<BufferedImage>> 
 				new SeparatorMenuItem(),
 				miSetImageName,
 				miAddMetadata,
+				miEditInformation,
 				miEditDescription,
 				miRefreshThumbnail,
 				separator,

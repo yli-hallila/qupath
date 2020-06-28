@@ -6,7 +6,7 @@ public class ExternalSlide {
 
     private String name;
     private String id;
-    private String organization;
+    private String owner;
 
     private Map<String, String> parameters;
 
@@ -18,8 +18,8 @@ public class ExternalSlide {
         return id;
     }
 
-    public String getOrganization() {
-        return organization;
+    public String getOwner() {
+        return owner;
     }
 
     public Map<String, String> getParameters() {
@@ -31,7 +31,7 @@ public class ExternalSlide {
         return "ExternalSlide{" +
                 "name='" + name + '\'' +
                 ", uuid='" + id + '\'' +
-                ", owner='" + organization + '\'' +
+                ", owner='" + owner + '\'' +
                 '}';
     }
 }

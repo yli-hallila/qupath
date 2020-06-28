@@ -3,6 +3,8 @@ package qupath.lib.gui.commands;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import javafx.application.Platform;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.value.ChangeListener;
 import javafx.concurrent.Task;
 import javafx.event.Event;
 import javafx.geometry.Insets;
@@ -36,6 +38,8 @@ public class WorkspaceManager {
 
     private final static Logger logger = LoggerFactory.getLogger(WorkspaceManager.class);
 
+    private SimpleBooleanProperty hasAccessProperty = new SimpleBooleanProperty(false);
+
     private static Dialog<ButtonType> dialog;
     private final QuPathGUI qupath;
 
@@ -46,7 +50,7 @@ public class WorkspaceManager {
         WorkspaceManager manager = new WorkspaceManager(qupath);
 
         dialog = Dialogs.builder()
-                .title("Select workspace")
+                .title("Select project")
                 .content(manager.getPane())
                 .size(400, 500)
                 .build();
@@ -76,11 +80,14 @@ public class WorkspaceManager {
         tabPane.setPrefWidth(360);
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.SELECTED_TAB);
         tabPane.getStyleClass().add("floating");
+        tabPane.getSelectionModel().selectedItemProperty().addListener(onTabChange());
 
         ArrayList<ExternalWorkspace> workspaces = Lists.newArrayList(new Gson().fromJson(
-            RemoteOpenslide.getWorkspace().orElseThrow(),
+            RemoteOpenslide.getAllWorkspaces().orElseThrow(),
             ExternalWorkspace[].class
         ));
+
+        /* Tabs */
 
         workspaces.forEach(workspace -> {
             ListView<ExternalProject> listView = new ListView<>();
@@ -91,25 +98,38 @@ public class WorkspaceManager {
             listView.getItems().addAll(workspace.getProjects());
 
             Tab tab = new Tab(workspace.getName(), listView);
-            tab.setClosable(RemoteOpenslide.hasWriteAccess());
-            tab.setUserData(workspace.getId());
 
-            if (RemoteOpenslide.hasWriteAccess()) {
-                MenuItem miRename = new MenuItem("Rename");
-                miRename.setOnAction(a -> renameWorkspace(workspace));
+            if (workspace.getName().equals("My Projects")) {
+                tab.setClosable(false);
+            } else {
+                var hasWriteAccess = RemoteOpenslide.isOwner(workspace.getOwner());
+                tab.setClosable(hasWriteAccess);
 
-                tab.setContextMenu(new ContextMenu(miRename));
+                if (hasWriteAccess) {
+                    MenuItem miRename = new MenuItem("Rename");
+                    miRename.setOnAction(a -> renameWorkspace(workspace));
+
+                    tab.setContextMenu(new ContextMenu(miRename));
+                }
             }
+
+            tab.setUserData(workspace.getId());
 
             tabPane.getTabs().add(tab);
         });
 
-        tabPane.getTabs().add(getCreateNewWorkspaceTab());
+        Tab newWorkspaceTab = new Tab("+");
+        newWorkspaceTab.setClosable(false);
+        newWorkspaceTab.setDisable(!RemoteOpenslide.hasRole("MANAGE_PROJECTS"));
+
+        tabPane.getTabs().add(newWorkspaceTab);
         tabPane.getTabs().forEach(tab -> tab.setOnCloseRequest(this::deleteWorkspace));
+
+        /* Buttons */
 
         Button btnCreate = new Button("Create project");
         btnCreate.setOnAction(action -> createNewProject());
-        btnCreate.setDisable(!RemoteOpenslide.hasWriteAccess());
+        btnCreate.disableProperty().bind(hasAccessProperty.not());
 
         Button btnLogout = new Button("Logout");
         btnLogout.setOnAction(action -> logout());
@@ -133,6 +153,20 @@ public class WorkspaceManager {
         pane.setBottom(buttonBar);
     }
 
+    private ChangeListener<Tab> onTabChange() {
+        return (ov, oldTab, newTab) -> {
+            if (newTab.getText().equals("+")) {
+                tabPane.getSelectionModel().select(oldTab);
+                createNewWorkspace();
+            } else if (newTab.getText().equals("My Projects")) {
+                hasAccessProperty.set(true);
+            } else {
+                String workspaceId = (String) newTab.getUserData();
+                hasAccessProperty.set(RemoteOpenslide.hasPermission(workspaceId));
+            }
+        };
+    }
+
     public void refreshDialog() {
         if (!Platform.isFxApplicationThread()) {
             Platform.runLater(this::refreshDialog);
@@ -151,7 +185,7 @@ public class WorkspaceManager {
             return;
         }
 
-        Result result = RemoteOpenslide.createNewProject(workspaceId, projectName);
+        Result result = RemoteOpenslide.createProject(workspaceId, projectName);
 
         if (result == Result.OK) {
             refreshDialog();
@@ -164,35 +198,24 @@ public class WorkspaceManager {
         }
     }
 
-    private Tab getCreateNewWorkspaceTab() {
-        Tab tab = new Tab("+");
-        tab.setClosable(false);
-        tab.setDisable(!RemoteOpenslide.hasWriteAccess());
+    private void createNewWorkspace() {
+        String workspaceName = Dialogs.showInputDialog("Workspace name", "", "");
 
-        tab.setOnSelectionChanged(event -> {
-            event.consume();
-            tabPane.getSelectionModel().selectPrevious();
+        if (workspaceName == null) {
+            return;
+        }
 
-            String workspaceName = Dialogs.showInputDialog("Workspace name", "", "");
+        Result result = RemoteOpenslide.createNewWorkspace(workspaceName);
 
-            if (workspaceName == null) {
-                return;
-            }
-
-            Result result = RemoteOpenslide.createNewWorkspace(workspaceName);
-
-            if (result == Result.OK) {
-                refreshDialog();
-                tabPane.getSelectionModel().select(tabPane.getTabs().size() - 2);
-            } else {
-                Dialogs.showErrorNotification(
-                "Error when creating workspace",
-                "See log for possibly more details."
-                );
-            }
-        });
-
-        return tab;
+        if (result == Result.OK) {
+            refreshDialog();
+            tabPane.getSelectionModel().select(tabPane.getTabs().size() - 3);
+        } else {
+            Dialogs.showErrorNotification(
+            "Error when creating workspace",
+            "See log for possibly more details."
+            );
+        }
     }
 
     private void renameWorkspace(ExternalWorkspace workspace) {
@@ -237,8 +260,14 @@ public class WorkspaceManager {
         }
     }
 
-    public static void loadProject(ExternalProject project) {
-        loadProject(project, null);
+    public void logout() {
+        qupath.setProject(null);
+        RemoteOpenslide.logout();
+        closeDialog();
+    }
+
+    public void closeDialog() {
+        dialog.close();
     }
 
     /**
@@ -296,21 +325,23 @@ public class WorkspaceManager {
             }
         } catch (IOException e) {
             Dialogs.showErrorMessage(
-                    "Error when trying to load project. ",
-                    "See log for more information."
+            "Error when trying to load project. ",
+            "See log for more information."
             );
 
             logger.error("Error when loading external project", e);
         }
     }
 
-    public void logout() {
-        RemoteOpenslide.logout();
-        qupath.setProject(null);
-        closeDialog();
+    public static void loadProject(String id, String name) {
+        ExternalProject project = new ExternalProject();
+        project.setId(id);
+        project.setName(name);
+
+        loadProject(project);
     }
 
-    public void closeDialog() {
-        dialog.close();
+    public static void loadProject(ExternalProject project) {
+        loadProject(project, null);
     }
 }
