@@ -1223,8 +1223,8 @@ public class Commands {
 	 * @return true if a project was created, false otherwise (e.g. the user cancelled).
 	 */
 	public static boolean promptToCreateProject(QuPathGUI qupath) {
-		if (RemoteOpenslide.isConnected()) {
-			QuPathGUI.getInstance().showWorkspaceDialog();
+		if (RemoteOpenslide.isAuthenticated()) {
+			qupath.showWorkspaceDialog();
 
 			return true;
 		}
@@ -1254,8 +1254,8 @@ public class Commands {
 	 */
 
 	public static boolean promptToOpenProject(QuPathGUI qupath) {
-		if (RemoteOpenslide.isConnected()) {
-			QuPathGUI.getInstance().showWorkspaceDialog();
+		if (RemoteOpenslide.isAuthenticated()) {
+			qupath.showWorkspaceDialog();
 
 			return true;
 		}

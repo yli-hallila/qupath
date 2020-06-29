@@ -675,7 +675,7 @@ public class QuPathGUI {
 	}
 
 	private Action createShowWorkspaceDialogAction() {
-		if (RemoteOpenslide.isConnected()) {
+		if (RemoteOpenslide.isAuthenticated()) {
 			return ActionTools.createAction(this::showWorkspaceDialog, "External projects");
 		}
 
@@ -1109,6 +1109,8 @@ public class QuPathGUI {
 				
 		long endTime = System.currentTimeMillis();
 		logger.debug("Startup time: {} ms", (endTime - startTime));
+
+		RemoteOpenslide.setHost(PathPrefs.remoteOpenslideHost().get());
 
 		if (PathPrefs.showWorkspaceDialogOnStartupProperty().get()) {
 			try {
@@ -1897,8 +1899,7 @@ public class QuPathGUI {
 	}
 
 	public void showWorkspaceDialog() {
-		if (RemoteOpenslide.getHost() == null) {
-			Dialogs.showInfoNotification("Error", "Not connected to any server.");
+		if (RemoteOpenslide.getAuthType() == RemoteOpenslide.AuthType.UNAUTHENTICATED) {
 			showLoginDialog();
 		} else {
 			WorkspaceManager.showWorkspace(this);
@@ -1906,7 +1907,7 @@ public class QuPathGUI {
 	}
 
 	public void showLoginDialog() {
-		if (RemoteOpenslide.getHost() == null) {
+		if (RemoteOpenslide.getAuthType() == RemoteOpenslide.AuthType.UNAUTHENTICATED) {
 			RemoteServerLoginManager.showLoginDialog();
 		} else {
 			showWorkspaceDialog();
@@ -2796,7 +2797,8 @@ public class QuPathGUI {
 //			setInitialLocationAndMagnification(viewer);
 			if (imageData != null && (imageData.getImageType() == null || imageData.getImageType() == ImageType.UNSET)) {
 				var setType = PathPrefs.imageTypeSettingProperty().get();
-				if (setType == ImageTypeSetting.AUTO_ESTIMATE) {
+				if (setType == ImageTypeSetting.AUTO_ESTIMATE
+						|| !RemoteOpenslide.getAuthType().shouldPrompt()) {
 					var type = GuiTools.estimateImageType(imageData.getServer(), imageRegionStore.getThumbnail(imageData.getServer(), 0, 0, true));
 					logger.info("Image type estimated to be {}", type);
 					imageData.setImageType(type);
@@ -3144,7 +3146,7 @@ public class QuPathGUI {
 				viewer.setImageData(imageData);
 //				setInitialLocationAndMagnification(viewer);
 
-				if (imageData.getImageType() == ImageType.UNSET && PathPrefs.imageTypeSettingProperty().get() == ImageTypeSetting.PROMPT)
+				if (RemoteOpenslide.getAuthType().shouldPrompt() && imageData.getImageType() == ImageType.UNSET && PathPrefs.imageTypeSettingProperty().get() == ImageTypeSetting.PROMPT)
 					ImageDetailsPane.promptToSetImageType(imageData);
 
 //				// Reset the object hierarchy to clear any ROIs etc.
@@ -3983,11 +3985,12 @@ public class QuPathGUI {
 		projectBrowser = new ProjectBrowser(this);
 
 		analysisPanel.getTabs().add(new Tab("Project", projectBrowser.getPane()));
-		ImageDetailsPane pathImageDetailsPanel = new ImageDetailsPane(this);
-		analysisPanel.getTabs().add(new Tab("Image", pathImageDetailsPanel.getPane()));
 
 		AnnotationPane panelAnnotations = new AnnotationPane(this);
 		analysisPanel.getTabs().add(new Tab("Annotations", panelAnnotations.getPane()));
+
+		ImageDetailsPane pathImageDetailsPanel = new ImageDetailsPane(this);
+		analysisPanel.getTabs().add(new Tab("Image", pathImageDetailsPanel.getPane()));
 
 		final PathObjectHierarchyView paneHierarchy = new PathObjectHierarchyView(this);
 		SplitPane splitHierarchy = new SplitPane();

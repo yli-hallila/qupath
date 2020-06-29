@@ -270,6 +270,8 @@ public class ProjectBrowser implements ChangeListener<ImageData<BufferedImage>> 
 		message.setResult(ButtonType.CLOSE);
 		message.show();
 
+		AnnotationPane.setSlideDescription(getSelectedEntry().getDescription());
+
 		Platform.runLater(() -> {
 			qupath.getTabbedPanel().getSelectionModel().select(1);
 			qupath.openImageEntry(getSelectedEntry());

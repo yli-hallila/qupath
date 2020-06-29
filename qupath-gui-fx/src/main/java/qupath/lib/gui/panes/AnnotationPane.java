@@ -64,7 +64,6 @@ import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.objects.hierarchy.events.PathObjectHierarchyEvent;
 import qupath.lib.objects.hierarchy.events.PathObjectHierarchyListener;
 import qupath.lib.objects.hierarchy.events.PathObjectSelectionListener;
-import qupath.lib.projects.ProjectImageEntry;
 import qupath.lib.roi.interfaces.ROI;
 
 
@@ -105,7 +104,11 @@ public class AnnotationPane implements PathObjectSelectionListener, ChangeListen
 	 */
 	private boolean suppressSelectionChanges = false;
 
-	private Browser browser = new Browser();
+	private static Browser slideDescription = new Browser();
+
+	public static void setSlideDescription(String description) {
+		slideDescription.setContent(description);
+	}
 
 	private StringProperty descriptionProperty = new SimpleStringProperty();
 	private StringProperty answerProperty = new SimpleStringProperty();
@@ -195,28 +198,10 @@ public class AnnotationPane implements PathObjectSelectionListener, ChangeListen
 		btnShowAnswer.disableProperty().bind(answerProperty.isNull());
 		btnShowAnswer.prefWidthProperty().bind(panelObjects.widthProperty());
 
-		browser.setTextHighlightable(false);
-		browser.maxHeightProperty().bind(pane.heightProperty().divide(3).multiply(2));
-		ProjectBrowser.descriptionTextProperty().addListener((observable, oldValue, newValue) -> {
-			browser.setContent(newValue);
-		});
+		slideDescription.setTextHighlightable(false);
+		slideDescription.maxHeightProperty().bind(pane.heightProperty().divide(3).multiply(2));
 
-
-		/*GridPane panelButtons = new GridPane();
-		panelButtons.add(btnSelectAll, 0, 0);
-		panelButtons.add(btnDelete, 1, 0);
-		panelButtons.add(btnMore, 2, 0);
-		GridPane.setHgrow(btnSelectAll, Priority.ALWAYS);
-		GridPane.setHgrow(btnDelete, Priority.ALWAYS);
-
-		PaneTools.setMaxWidth(Double.MAX_VALUE, btnSelectAll, btnDelete);
-		
-		BooleanBinding disableButtons = hasImageData.not();
-		btnSelectAll.disableProperty().bind(disableButtons);
-		btnDelete.disableProperty().bind(disableButtons);
-		btnMore.disableProperty().bind(disableButtons);*/
-
-		panelObjects.setTop(browser);
+		panelObjects.setTop(slideDescription);
 		panelObjects.setCenter(listAnnotations);
 		panelObjects.setBottom(btnShowAnswer);
 		return panelObjects;

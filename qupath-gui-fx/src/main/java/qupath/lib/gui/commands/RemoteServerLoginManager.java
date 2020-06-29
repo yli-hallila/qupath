@@ -93,8 +93,7 @@ public class RemoteServerLoginManager {
     }
 
     private void loginAsGuest() {
-        RemoteOpenslide.setHost(PathPrefs.remoteOpenslideHost().get());
-        RemoteOpenslide.setAuthentication(null, null);
+        RemoteOpenslide.setAuthType(RemoteOpenslide.AuthType.GUEST);
 
         dialog.close();
         qupath.showWorkspaceDialog();
@@ -145,14 +144,10 @@ public class RemoteServerLoginManager {
             .showAndWait();
 
         if (choice.isPresent() && choice.get().getButtonData() == ButtonBar.ButtonData.OK_DONE) {
-            RemoteOpenslide.setHost(PathPrefs.remoteOpenslideHost().get());
-
             if (RemoteOpenslide.login(tfUsername.getText(), tfPassword.getText())) {
                 dialog.close();
                 qupath.showWorkspaceDialog();
             } else {
-                RemoteOpenslide.setHost(null);
-
                 Dialogs.showErrorNotification("Error", "Wrong username, password or host");
                 showAuthDialog();
             }
@@ -187,13 +182,12 @@ public class RemoteServerLoginManager {
             };
 
             task.setOnSucceeded(event -> {
-                RemoteOpenslide.setHost(PathPrefs.remoteOpenslideHost().get());
                 IAuthenticationResult result = task.getValue();
 
                 if (RemoteOpenslide.validate(result.idToken())) {
                     String[] split = result.account().homeAccountId().split("\\.");
                     RemoteOpenslide.setUserId(split[0]);
-                    RemoteOpenslide.setTenantId(split[1]);
+                    RemoteOpenslide.setOrganizationId(split[1]);
 
                     Platform.runLater(() -> {
                         dialog.close();
