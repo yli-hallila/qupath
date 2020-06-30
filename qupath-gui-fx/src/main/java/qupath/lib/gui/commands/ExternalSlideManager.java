@@ -3,6 +3,8 @@ package qupath.lib.gui.commands;
 import com.google.common.collect.MoreCollectors;
 import com.google.gson.Gson;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
@@ -11,6 +13,7 @@ import javafx.collections.transformation.SortedList;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
 import javafx.scene.control.*;
 import javafx.scene.control.Button;
 import javafx.scene.control.Dialog;
@@ -18,7 +21,9 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.Priority;
 import javafx.scene.text.Text;
+import javafx.util.Callback;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +38,7 @@ import qupath.lib.objects.remoteopenslide.ExternalSlide;
 import java.awt.*;
 import java.io.*;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 
@@ -42,7 +48,6 @@ public class ExternalSlideManager {
 
     private final QuPathGUI qupath = QuPathGUI.getInstance();
 
-    private SimpleBooleanProperty writeAccessProperty;
     private final static Logger logger = LoggerFactory.getLogger(ExternalSlideManager.class);
 
     private static Dialog dialog;
@@ -65,10 +70,6 @@ public class ExternalSlideManager {
         dialog.showAndWait();
     }
 
-    public ExternalSlideManager() {
-        this.writeAccessProperty = new SimpleBooleanProperty(RemoteOpenslide.hasRole("MANAGE_PROJECTS"));
-    }
-
     public BorderPane getPane() {
         if (pane == null) {
             initializePane();
@@ -89,7 +90,7 @@ public class ExternalSlideManager {
         slideNameColumn.setReorderable(false);
 
         TableColumn<ExternalSlide, String> ownerColumn = new TableColumn<>("Owner");
-        ownerColumn.setCellValueFactory(new PropertyValueFactory<>("owner"));
+        ownerColumn.setCellValueFactory(new PropertyValueFactory<>("ownerReadable"));
         ownerColumn.setReorderable(false);
 
         TableColumn<ExternalSlide, String> uuidColumn = new TableColumn<>("UUID");
@@ -99,7 +100,7 @@ public class ExternalSlideManager {
         table.getColumns().addAll(slideNameColumn, ownerColumn, uuidColumn);
 
         ExternalSlide[] slides = new Gson().fromJson(
-            RemoteOpenslide.getSlidesV1().get(),
+            RemoteOpenslide.getSlidesV1().orElse("[]"),
             ExternalSlide[].class
         );
 
@@ -128,27 +129,36 @@ public class ExternalSlideManager {
 
         /* Buttons */
 
+        BooleanBinding hasWriteAccess = Bindings.createBooleanBinding(
+            () -> !(RemoteOpenslide.isOwner(table.getSelectionModel().getSelectedItem().getOwner())),
+            table.getSelectionModel().selectedItemProperty()
+        );
+
+        BooleanBinding slideSelected = table.getSelectionModel().selectedItemProperty().isNull();
+        BooleanBinding canManageSlides = new SimpleBooleanProperty(RemoteOpenslide.hasRole("MANAGE_SLIDES")).not();
+
         Button btnDelete = new Button("Delete");
         btnDelete.setOnAction(e -> deleteSlide());
-        btnDelete.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull().or(writeAccessProperty.not()));
+        btnDelete.disableProperty().bind(slideSelected.or(hasWriteAccess).or(canManageSlides));
 
         Button btnRename = new Button("Rename");
         btnRename.setOnAction(e -> renameSlide());
-        btnRename.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull().or(writeAccessProperty.not()));
+        btnRename.disableProperty().bind(slideSelected.or(hasWriteAccess).or(canManageSlides));
 
         Button btnOpen = new Button("Open slide");
         btnOpen.setOnAction(e -> openSlide());
-        btnOpen.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+        btnOpen.disableProperty().bind(slideSelected);
 
         Button btnProperties = new Button("View Properties");
         btnProperties.setOnAction(e -> viewProperties());
-        btnProperties.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+        btnProperties.disableProperty().bind(slideSelected);
 
         Button btnUpload = new Button("Upload new slide");
         btnUpload.setOnAction(e -> uploadSlide());
-        btnUpload.disableProperty().bind(writeAccessProperty.not());
+        btnUpload.disableProperty().bind(canManageSlides);
 
         GridPane paneButtons = PaneTools.createColumnGridControls(btnDelete, btnRename, btnOpen, btnProperties, btnUpload);
+        paneButtons.setHgap(5);
 
         /* Pane */
 

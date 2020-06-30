@@ -6,6 +6,7 @@ public class ExternalProject {
     private String name;
     private String description;
     private String owner;
+    private String ownerReadable;
 
     public String getId() {
         return id;
@@ -37,5 +38,13 @@ public class ExternalProject {
 
     public void setOwner(String owner) {
         this.owner = owner;
+    }
+
+    public String getOwnerReadable() {
+        return ownerReadable;
+    }
+
+    public void setOwnerReadable(String ownerReadable) {
+        this.ownerReadable = ownerReadable;
     }
 }

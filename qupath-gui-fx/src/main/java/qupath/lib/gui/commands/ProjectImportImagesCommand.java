@@ -611,7 +611,7 @@ class ProjectImportImagesCommand {
 					return;
 				}
 
-				setText(item.getName() + " (" + item.getOwner() + ")");
+				setText(item.getName() + " (" + item.getOwnerReadable() + ")");
 				setTooltip(new Tooltip(item.getId()));
 			}
 		});

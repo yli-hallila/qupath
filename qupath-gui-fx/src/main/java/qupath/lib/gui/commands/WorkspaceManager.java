@@ -264,6 +264,8 @@ public class WorkspaceManager {
         qupath.setProject(null);
         RemoteOpenslide.logout();
         closeDialog();
+
+        qupath.showLoginDialog();
     }
 
     public void closeDialog() {

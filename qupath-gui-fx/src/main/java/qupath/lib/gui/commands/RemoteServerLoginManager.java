@@ -2,11 +2,17 @@ package qupath.lib.gui.commands;
 
 import com.microsoft.aad.msal4j.*;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
@@ -21,10 +27,12 @@ import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.tools.PaneTools;
+import qupath.lib.objects.remoteopenslide.ExternalOrganization;
 
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
 
@@ -33,6 +41,8 @@ public class RemoteServerLoginManager {
     private static Logger logger = LoggerFactory.getLogger(RemoteServerLoginManager.class);
 
     private static QuPathGUI qupath = QuPathGUI.getInstance();
+
+    private final StringProperty selectedOrganizationProperty = new SimpleStringProperty();
 
     private BorderPane pane;
     private static Dialog<ButtonType> dialog;
@@ -45,6 +55,7 @@ public class RemoteServerLoginManager {
                 .content(loginDialog.getPane())
                 .build();
 
+        dialog.getDialogPane().getStylesheets().add(RemoteServerLoginManager.class.getClassLoader().getResource("css/remove_buttonbar.css").toExternalForm());
         dialog.setResult(ButtonType.CLOSE);
         dialog.show();
     }
@@ -58,9 +69,22 @@ public class RemoteServerLoginManager {
     }
 
     private synchronized void initializePane() {
-        /* Logo */
+        pane = new BorderPane();
+
+        /* Logos */
         
-        ImageView logo = new ImageView(new Image("icons/OuluUni.png"));
+        ComboBox<ExternalOrganization> cbLogos = new ComboBox<>();
+        cbLogos.prefWidthProperty().bind(pane.widthProperty());
+        cbLogos.setButtonCell(new ImageViewListCell(false));
+        cbLogos.setCellFactory(f -> new ImageViewListCell(true));
+        cbLogos.getItems().addAll(RemoteOpenslide.getOrganizations().orElse(Collections.emptyList()));
+
+        selectedOrganizationProperty.bind(Bindings.createStringBinding(
+            () -> cbLogos.getSelectionModel().getSelectedItem().getId(),
+            cbLogos.getSelectionModel().selectedItemProperty()
+        ));
+
+        cbLogos.getSelectionModel().select(0);
 
         /* Buttons */
         
@@ -73,7 +97,7 @@ public class RemoteServerLoginManager {
         Button btnLoginMicrosoft = new Button("Login using Microsoft");
         btnLoginMicrosoft.setOnAction(e -> showMicrosoftAuthDialog());
 
-        GridPane buttons = PaneTools.createRowGridControls(btnLoginGuest, btnLoginUsername, btnLoginMicrosoft);
+        GridPane buttons = PaneTools.createRowGridControls(btnLoginGuest, new Separator(), btnLoginUsername, btnLoginMicrosoft);
         buttons.setPadding(new Insets(10));
         buttons.setVgap(10);
 
@@ -83,10 +107,12 @@ public class RemoteServerLoginManager {
         statusBar.setText("Host " + PathPrefs.remoteOpenslideHost().get());
 
         /* Borderpane */
-        
-        pane = new BorderPane();
+
+        BorderPane.setMargin(cbLogos, new Insets(10));
+
         pane.setPrefWidth(360);
-        pane.setTop(logo);
+        pane.setPrefHeight(0);
+        pane.setTop(cbLogos);
         pane.setCenter(buttons);
         pane.setBottom(statusBar);
         pane.setPadding(new Insets(0));
@@ -94,6 +120,7 @@ public class RemoteServerLoginManager {
 
     private void loginAsGuest() {
         RemoteOpenslide.setAuthType(RemoteOpenslide.AuthType.GUEST);
+        RemoteOpenslide.setOrganizationId(selectedOrganizationProperty.get());
 
         dialog.close();
         qupath.showWorkspaceDialog();
@@ -225,6 +252,44 @@ public class RemoteServerLoginManager {
 
     public static void closeDialog() {
         dialog.close();
+    }
+
+    static class ImageViewListCell extends ListCell<ExternalOrganization> {
+
+        private boolean cellFactory;
+
+        public ImageViewListCell(boolean cellFactory) {
+            this.cellFactory = cellFactory;
+        }
+
+        {
+            setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+            setPrefWidth(0);
+        }
+
+        @Override
+        protected void updateItem(ExternalOrganization item, boolean empty) {
+            super.updateItem(item, empty);
+
+            if (item == null || empty) {
+                setGraphic(null);
+            } else {
+                Image image = new Image(RemoteOpenslide.getHost() + item.getLogoUrl());
+                ImageView imageView = new ImageView(image);
+
+                if (cellFactory) {
+                    imageView.setFitWidth(330);
+                } else {
+                    imageView.setFitWidth(310);
+                }
+
+                imageView.setPreserveRatio(true);
+                imageView.setSmooth(true);
+                imageView.setCache(true);
+
+                setGraphic(imageView);
+            }
+        }
     }
 
     /* DEBUG ONLY */

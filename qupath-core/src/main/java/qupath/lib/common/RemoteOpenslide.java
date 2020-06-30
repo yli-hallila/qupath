@@ -1,11 +1,9 @@
 package qupath.lib.common;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.gson.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.lib.objects.remoteopenslide.ExternalOrganization;
 
 import java.io.File;
 import java.io.IOException;
@@ -427,7 +425,7 @@ public class RemoteOpenslide {
 	}
 
 	public static Optional<String> getAllWorkspaces() {
-		var response = get("/api/v0/workspaces");
+		var response = get("/api/v0/workspaces?owner=" + getOrganizationId());
 
 		if (isInvalidResponse(response)) {
 			return Optional.empty();
@@ -462,6 +460,18 @@ public class RemoteOpenslide {
 		}
 
 		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
+	}
+
+	/* Organizations */
+
+	public static Optional<List<ExternalOrganization>> getOrganizations() {
+		var response = get("/api/v0/organizations");
+
+		if (isInvalidResponse(response)) {
+			return Optional.empty();
+		}
+
+		return Optional.of(List.of(new Gson().fromJson(response.get().body(), ExternalOrganization[].class)));
 	}
 
 	/* Private API */
