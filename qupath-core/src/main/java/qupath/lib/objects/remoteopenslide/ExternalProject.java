@@ -7,8 +7,17 @@ public class ExternalProject {
     private String description;
     private String owner;
     private String ownerReadable;
+    private String timestamp;
 
     public String getId() {
+        return id;
+    }
+
+    public String getIdWithTimestamp() {
+        if (hasTimestamp()) {
+            return id + ":" + timestamp;
+        }
+
         return id;
     }
 
@@ -46,5 +55,17 @@ public class ExternalProject {
 
     public void setOwnerReadable(String ownerReadable) {
         this.ownerReadable = ownerReadable;
+    }
+
+    public boolean hasTimestamp() {
+        return timestamp != null;
+    }
+
+    public String getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(String timestamp) {
+        this.timestamp = timestamp;
     }
 }

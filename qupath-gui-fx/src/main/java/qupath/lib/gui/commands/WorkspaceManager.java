@@ -1,16 +1,21 @@
 package qupath.lib.gui.commands;
 
 import com.google.common.collect.Lists;
+import com.google.common.io.MoreFiles;
+import com.google.common.io.RecursiveDeleteOption;
 import com.google.gson.Gson;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.concurrent.Task;
-import javafx.event.Event;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.control.Button;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.MenuItem;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.text.Font;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +23,7 @@ import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.panes.WorkspaceProjectListCell;
+import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.io.ZipUtil;
 import qupath.lib.objects.remoteopenslide.ExternalProject;
 import qupath.lib.objects.remoteopenslide.ExternalWorkspace;
@@ -45,6 +51,7 @@ public class WorkspaceManager {
 
     private BorderPane pane;
     private TabPane tabPane;
+    private boolean filterWorkspaces = true;
 
     public static void showWorkspace(QuPathGUI qupath) {
         WorkspaceManager manager = new WorkspaceManager(qupath);
@@ -55,6 +62,7 @@ public class WorkspaceManager {
                 .size(400, 500)
                 .build();
 
+        dialog.getDialogPane().getStylesheets().add(RemoteServerLoginManager.class.getClassLoader().getResource("css/remove_buttonbar.css").toExternalForm());
         dialog.setResult(ButtonType.CLOSE);
         dialog.showAndWait();
     }
@@ -87,9 +95,25 @@ public class WorkspaceManager {
             ExternalWorkspace[].class
         ));
 
+        /* Filter Checkbox */
+
+        CheckBox cbFilter = new CheckBox("Filter workspaces");
+        cbFilter.setSelected(filterWorkspaces);
+        cbFilter.setFont(new Font(10));
+        cbFilter.setTooltip(new Tooltip("Filters out all workspaces which doesn't belong to your organization."));
+        cbFilter.setOnAction(e -> {
+            this.filterWorkspaces = !filterWorkspaces;
+            refreshDialog();
+        });
+
         /* Tabs */
 
         workspaces.forEach(workspace -> {
+            if (filterWorkspaces && !workspace.getOwner().equals(RemoteOpenslide.getOrganizationId())
+                && !workspace.getName().equals("My Projects")) {
+                return;
+            }
+
             ListView<ExternalProject> listView = new ListView<>();
             listView.getStyleClass().clear();
             listView.prefWidthProperty().bind(tabPane.widthProperty());
@@ -98,18 +122,19 @@ public class WorkspaceManager {
             listView.getItems().addAll(workspace.getProjects());
 
             Tab tab = new Tab(workspace.getName(), listView);
+            tab.setClosable(false);
 
-            if (workspace.getName().equals("My Projects")) {
-                tab.setClosable(false);
-            } else {
+            if (!workspace.getName().equals("My Projects")) {
                 var hasWriteAccess = RemoteOpenslide.isOwner(workspace.getOwner());
-                tab.setClosable(hasWriteAccess);
 
                 if (hasWriteAccess) {
                     MenuItem miRename = new MenuItem("Rename");
                     miRename.setOnAction(a -> renameWorkspace(workspace));
 
-                    tab.setContextMenu(new ContextMenu(miRename));
+                    MenuItem miDelete = new MenuItem("Delete");
+                    miDelete.setOnAction(e -> deleteWorkspace(workspace));
+
+                    tab.setContextMenu(new ContextMenu(miRename, miDelete));
                 }
             }
 
@@ -118,12 +143,11 @@ public class WorkspaceManager {
             tabPane.getTabs().add(tab);
         });
 
-        Tab newWorkspaceTab = new Tab("+");
-        newWorkspaceTab.setClosable(false);
-        newWorkspaceTab.setDisable(!RemoteOpenslide.hasRole("MANAGE_PROJECTS"));
-
-        tabPane.getTabs().add(newWorkspaceTab);
-        tabPane.getTabs().forEach(tab -> tab.setOnCloseRequest(this::deleteWorkspace));
+        if (RemoteOpenslide.hasRole("MANAGE_PROJECTS")) {
+            Tab newWorkspaceTab = new Tab("+");
+            newWorkspaceTab.setClosable(false);
+            tabPane.getTabs().add(newWorkspaceTab);
+        }
 
         /* Buttons */
 
@@ -146,9 +170,13 @@ public class WorkspaceManager {
         ButtonBar buttonBar = new ButtonBar();
         buttonBar.getButtons().addAll(btnCreate, btnLogout, btnClose);
 
+        /* Pane */
+
         BorderPane.setMargin(buttonBar, new Insets(10, 0, 0, 0));
+        BorderPane.setAlignment(cbFilter, Pos.TOP_RIGHT);
 
         pane = new BorderPane();
+        pane.setTop(cbFilter);
         pane.setCenter(tabPane);
         pane.setBottom(buttonBar);
     }
@@ -237,26 +265,25 @@ public class WorkspaceManager {
 
     }
 
-    private void deleteWorkspace(Event event) {
+    private void deleteWorkspace(ExternalWorkspace workspace) {
         boolean confirm = Dialogs.showConfirmDialog(
         "Delete workspace",
         "Are you sure you wish to delete this workspace? This is irreversible."
         );
 
         if (!confirm) {
-            event.consume();
             return;
         }
 
-        Tab tab = (Tab) event.getSource();
-        Result result = RemoteOpenslide.deleteWorkspace((String) tab.getUserData());
+        Result result = RemoteOpenslide.deleteWorkspace(workspace.getId());
 
         if (result == Result.FAIL) {
-            event.consume();
             Dialogs.showErrorNotification(
             "Error when deleting workspace",
             "See log for possibly more details.."
             );
+        } else {
+            refreshDialog();
         }
     }
 
@@ -286,10 +313,12 @@ public class WorkspaceManager {
             String tempPathStr = tempPath.toAbsolutePath().toString();
             Files.createDirectories(tempPath);
 
+            MoreFiles.deleteDirectoryContents(Path.of(tempPathStr, extProject.getId()), RecursiveDeleteOption.ALLOW_INSECURE);
+
             Task<Boolean> worker = new Task<>() {
                 @Override
                 protected Boolean call() throws Exception {
-                    Optional<InputStream> projectInputStream = RemoteOpenslide.downloadProject(extProject.getId());
+                    Optional<InputStream> projectInputStream = RemoteOpenslide.downloadProject(extProject.getIdWithTimestamp());
 
                     if (projectInputStream.isEmpty()) {
                         updateMessage("Error when downloading project, see log.");

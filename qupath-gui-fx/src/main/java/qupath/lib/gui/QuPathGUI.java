@@ -1990,12 +1990,18 @@ public class QuPathGUI {
 		));
 
 		getMenu("Remote Slides", true).getItems().add(1, ActionTools.createMenuItem(
+				ActionTools.createAction(() -> {
+					BackupManager.showBackupManagerPane();
+				}, "Manage backups")
+		));
+
+		getMenu("Remote Slides", true).getItems().add(2, ActionTools.createMenuItem(
 			ActionTools.createAction(() -> {
 				WorkspaceManager.showWorkspace(this);
 			}, "Show workspaces")
 		));
 
-		getMenu("Remote Slides", true).getItems().add(2, ActionTools.createMenuItem(
+		getMenu("Remote Slides", true).getItems().add(3, ActionTools.createMenuItem(
 				ActionTools.createAction(() -> {
 					String projectId = Dialogs.showInputDialog(
 					"Project ID",
@@ -2015,7 +2021,7 @@ public class QuPathGUI {
 				}, "Open project by ID")
 		));
 
-		getMenu("Remote Slides", true).getItems().add(2, ActionTools.createMenuItem(
+		getMenu("Remote Slides", true).getItems().add(4, ActionTools.createMenuItem(
 				ActionTools.createAction(() -> {
 					String slideId = Dialogs.showInputDialog(
 					"Slide ID",

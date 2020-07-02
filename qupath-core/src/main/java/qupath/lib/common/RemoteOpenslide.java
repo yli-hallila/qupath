@@ -1,13 +1,15 @@
 package qupath.lib.common;
 
+import com.google.common.io.ByteSource;
+import com.google.common.io.CharSource;
+import com.google.common.io.CharStreams;
 import com.google.gson.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.lib.objects.remoteopenslide.ExternalBackup;
 import qupath.lib.objects.remoteopenslide.ExternalOrganization;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.math.BigInteger;
 import java.net.*;
 import java.net.http.HttpClient;
@@ -222,13 +224,20 @@ public class RemoteOpenslide {
 
 	/* Projects */
 
-	public static Optional<InputStream> downloadProject(String projectId) {
-		try { // todo: fix this piece of shit code; only changed ofString() -> ofInputStream()
+	public static Optional<InputStream> downloadProject(String id) throws IOException {
+		try {
+			String path;
+
+			if (id.contains(":")) {
+				String[] parts = id.split(":");
+				path = "/api/v0/projects/" + e(parts[0]) + "?timestamp=" + parts[1];
+			} else {
+				path = "/api/v0/projects/" + e(id);
+			}
+
 			HttpClient client = HttpClient.newHttpClient();
 			HttpRequest.Builder builder = HttpRequest.newBuilder()
-				.uri(host.resolve(
-					"/api/v0/projects/" + e(projectId)
-				));
+				.uri(host.resolve(path));
 
 			addAuthorization(builder);
 			HttpRequest request = builder.build();
@@ -425,7 +434,7 @@ public class RemoteOpenslide {
 	}
 
 	public static Optional<String> getAllWorkspaces() {
-		var response = get("/api/v0/workspaces?owner=" + getOrganizationId());
+		var response = get("/api/v0/workspaces");
 
 		if (isInvalidResponse(response)) {
 			return Optional.empty();
@@ -472,6 +481,24 @@ public class RemoteOpenslide {
 		}
 
 		return Optional.of(List.of(new Gson().fromJson(response.get().body(), ExternalOrganization[].class)));
+	}
+
+	/* Backups */
+
+	public static Optional<List<ExternalBackup>> getAllBackups() {
+		var response = get("/api/v0/backups");
+
+		if (isInvalidResponse(response)) {
+			return Optional.empty();
+		}
+
+		return Optional.of(List.of(new Gson().fromJson(response.get().body(), ExternalBackup[].class)));
+	}
+
+	public static boolean restoreBackup(String backup, String timestamp) {
+		var response = get("/api/v0/backups/restore/" + e(backup) + "/" + e(timestamp));
+
+		return !isInvalidResponse(response);
 	}
 
 	/* Private API */
