@@ -8,13 +8,16 @@ import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.concurrent.Task;
+import javafx.event.ActionEvent;
+import javafx.geometry.HPos;
 import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.control.Button;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.MenuItem;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
 import javafx.scene.text.Font;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
@@ -26,6 +29,7 @@ import qupath.lib.gui.panes.WorkspaceProjectListCell;
 import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.io.ZipUtil;
 import qupath.lib.objects.remoteopenslide.ExternalProject;
+import qupath.lib.objects.remoteopenslide.ExternalSlide;
 import qupath.lib.objects.remoteopenslide.ExternalWorkspace;
 import qupath.lib.projects.ProjectIO;
 
@@ -34,8 +38,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static qupath.lib.common.RemoteOpenslide.*;
@@ -84,16 +89,7 @@ public class WorkspaceManager {
     }
 
     private synchronized void initializePane() {
-        tabPane = new TabPane();
-        tabPane.setPrefWidth(360);
-        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.SELECTED_TAB);
-        tabPane.getStyleClass().add("floating");
-        tabPane.getSelectionModel().selectedItemProperty().addListener(onTabChange());
-
-        ArrayList<ExternalWorkspace> workspaces = Lists.newArrayList(new Gson().fromJson(
-            RemoteOpenslide.getAllWorkspaces().orElseThrow(),
-            ExternalWorkspace[].class
-        ));
+        List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
 
         /* Filter Checkbox */
 
@@ -106,11 +102,68 @@ public class WorkspaceManager {
             refreshDialog();
         });
 
+        /* Open by ID Button */
+
+        Button btnOpenById = new Button("Open ID ...");
+        btnOpenById.setFont(new Font(10));
+        btnOpenById.setOnAction(this::openById);
+
         /* Tabs */
 
+        tabPane = new TabPane();
+        tabPane.setPrefWidth(360);
+        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.SELECTED_TAB);
+        tabPane.getStyleClass().add("floating");
+        tabPane.getSelectionModel().selectedItemProperty().addListener(onTabChange());
+
+        createTabs(tabPane, workspaces);
+        selectPreviousWorkspace(tabPane);
+
+        /* Buttons */
+
+        Button btnCreate = new Button("Create project");
+        btnCreate.setOnAction(action -> createNewProject());
+        btnCreate.disableProperty().bind(hasAccessProperty.not());
+
+        Button btnLogout = new Button("Logout");
+        btnLogout.setOnAction(action -> logout());
+
+        Button btnClose = new Button("Close");
+        btnClose.setOnAction(action -> closeDialog());
+
+        ButtonBar.setButtonData(btnCreate, ButtonBar.ButtonData.LEFT);
+        ButtonBar.setButtonData(btnLogout, ButtonBar.ButtonData.LEFT);
+        ButtonBar.setButtonData(btnClose, ButtonBar.ButtonData.RIGHT);
+        ButtonBar.setButtonUniformSize(btnLogout, false);
+        ButtonBar.setButtonUniformSize(btnClose, false);
+
+        ButtonBar buttonBar = new ButtonBar();
+        buttonBar.getButtons().addAll(btnCreate, btnLogout, btnClose);
+
+        /* Pane */
+
+        BorderPane.setMargin(buttonBar, new Insets(10, 0, 0, 0));
+
+        GridPane top = new GridPane();
+        ColumnConstraints constraint = new ColumnConstraints();
+        constraint.setPercentWidth(50);
+
+        top.getColumnConstraints().addAll(constraint, constraint);
+        top.addRow(0, btnOpenById, cbFilter);
+
+        GridPane.setHalignment(btnOpenById, HPos.LEFT);
+        GridPane.setHalignment(cbFilter,    HPos.RIGHT);
+
+        pane = new BorderPane();
+        pane.setTop(top);
+        pane.setCenter(tabPane);
+        pane.setBottom(buttonBar);
+    }
+
+    private void createTabs(TabPane tabPane, List<ExternalWorkspace> workspaces) {
         workspaces.forEach(workspace -> {
             if (filterWorkspaces && !workspace.getOwner().equals(RemoteOpenslide.getOrganizationId())
-                && !workspace.getName().equals("My Projects")) {
+                    && !workspace.getName().equals("My Projects")) {
                 return;
             }
 
@@ -148,37 +201,44 @@ public class WorkspaceManager {
             newWorkspaceTab.setClosable(false);
             tabPane.getTabs().add(newWorkspaceTab);
         }
+    }
 
-        /* Buttons */
+    private void openById(ActionEvent actionEvent) {
+        String id = Dialogs.showInputDialog(
+        "Project or slide ID",
+        "All IDs are similar to 6ce7a026-e023-47b5-9b2e-0fc5eb523e49",
+        ""
+        );
 
-        Button btnCreate = new Button("Create project");
-        btnCreate.setOnAction(action -> createNewProject());
-        btnCreate.disableProperty().bind(hasAccessProperty.not());
+        if (id == null) {
+            return;
+        }
 
-        Button btnLogout = new Button("Logout");
-        btnLogout.setOnAction(action -> logout());
+        List<ExternalSlide> slides = RemoteOpenslide.getSlidesV1();
+        Optional<ExternalSlide> slide = slides.stream().filter(s -> s.getId().equalsIgnoreCase(id)).findFirst();
+        if (slide.isPresent()) {
+            ExternalSlideManager.openSlide(slide.get());
+        } else {
+            ExternalProject project = new ExternalProject();
+            project.setId(id);
+            project.setName(id);
 
-        Button btnClose = new Button("Close");
-        btnClose.setOnAction(action -> closeDialog());
+            WorkspaceManager.loadProject(project);
+        }
 
-        ButtonBar.setButtonData(btnCreate, ButtonBar.ButtonData.LEFT);
-        ButtonBar.setButtonData(btnLogout, ButtonBar.ButtonData.LEFT);
-        ButtonBar.setButtonData(btnClose, ButtonBar.ButtonData.RIGHT);
-        ButtonBar.setButtonUniformSize(btnLogout, false);
-        ButtonBar.setButtonUniformSize(btnClose, false);
+        closeDialog();
+    }
 
-        ButtonBar buttonBar = new ButtonBar();
-        buttonBar.getButtons().addAll(btnCreate, btnLogout, btnClose);
+    private void selectPreviousWorkspace(TabPane tabPane) {
+        if (PathPrefs.previousWorkspace().get() != null) {
+            tabPane.getTabs().forEach(workspace -> {
+                String id = (String) workspace.getUserData();
 
-        /* Pane */
-
-        BorderPane.setMargin(buttonBar, new Insets(10, 0, 0, 0));
-        BorderPane.setAlignment(cbFilter, Pos.TOP_RIGHT);
-
-        pane = new BorderPane();
-        pane.setTop(cbFilter);
-        pane.setCenter(tabPane);
-        pane.setBottom(buttonBar);
+                if (id != null && id.equals(PathPrefs.previousWorkspace().get())) {
+                    tabPane.getSelectionModel().select(workspace);
+                }
+            });
+        }
     }
 
     private ChangeListener<Tab> onTabChange() {
@@ -191,6 +251,12 @@ public class WorkspaceManager {
             } else {
                 String workspaceId = (String) newTab.getUserData();
                 hasAccessProperty.set(RemoteOpenslide.hasPermission(workspaceId));
+
+                // onTabChange() is fired when the TabPane is drawn and the first tab is selected.
+                // This check avoids setting the previous workspace to always the first workspace.
+                if (oldTab != null) {
+                    PathPrefs.previousWorkspace().set(workspaceId);
+                }
             }
         };
     }
@@ -313,7 +379,9 @@ public class WorkspaceManager {
             String tempPathStr = tempPath.toAbsolutePath().toString();
             Files.createDirectories(tempPath);
 
-            MoreFiles.deleteDirectoryContents(Path.of(tempPathStr, extProject.getId()), RecursiveDeleteOption.ALLOW_INSECURE);
+            try {
+                MoreFiles.deleteDirectoryContents(Path.of(tempPathStr, extProject.getId()), RecursiveDeleteOption.ALLOW_INSECURE);
+            } catch (NoSuchFileException ignored) {}
 
             Task<Boolean> worker = new Task<>() {
                 @Override

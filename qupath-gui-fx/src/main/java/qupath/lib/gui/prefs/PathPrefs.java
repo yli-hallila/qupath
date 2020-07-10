@@ -51,7 +51,6 @@ import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.FloatProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ObjectProperty;
-import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleFloatProperty;
@@ -1132,8 +1131,6 @@ public class PathPrefs {
 
 	/**
 	 * Flag to indicate that when adding files to project, they will be referenced relatively to project.
-	 *
-	 * @return
 	 */
 	public static BooleanProperty useRelativePaths() {
 		return useRelativePaths;
@@ -1144,8 +1141,6 @@ public class PathPrefs {
 
 	/**
 	 * Flag to indicate whether to show workspace dialog on startup
-	 *
-	 * @return
 	 */
 	public static BooleanProperty showWorkspaceDialogOnStartupProperty() {
 		return showWorkspaceDialog;
@@ -1163,6 +1158,25 @@ public class PathPrefs {
 
 
 	private static StringProperty remoteOpenslideHost = createPersistentPreference("remoteOpenslideHost", "http://qupath.yli-hallila.fi:7777");
+
+
+	/**
+	 * ID of the organization that was previously selected on the workspace manager dialog.
+	 */
+	public static StringProperty previousOrganization() {
+		return previousOrganization;
+	}
+
+	private static StringProperty previousOrganization = createPersistentPreference("previousOrganization", null);
+
+	/**
+	 * ID of the workspace which the user previously had open.
+	 */
+	public static StringProperty previousWorkspace() {
+		return previousWorkspace;
+	};
+
+	private static StringProperty previousWorkspace = createPersistentPreference("previousProject", null);
 
 	/**
 	 * Create a persistent property, which is one that will be saved to/reloaded from the user preferences.

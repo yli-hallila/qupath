@@ -30,7 +30,7 @@ public class BackupManager {
         BackupManager manager = new BackupManager();
 
         dialog = Dialogs.builder()
-                .title("External Slide Manager")
+                .title("Backup Manager")
                 .content(manager.getPane())
                 .buttons(ButtonType.CLOSE)
                 .resizable()
@@ -53,7 +53,7 @@ public class BackupManager {
 
         table = new TableView<>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        table.setPlaceholder(new Text("No backups or none match search criteria"));
+        table.setPlaceholder(new Text("No backups, none match search criteria or no permissions."));
 
         TableColumn<ExternalBackup, String> backupNameColumn = new TableColumn<>("Project name");
         backupNameColumn.setCellValueFactory(new PropertyValueFactory<>("readable"));

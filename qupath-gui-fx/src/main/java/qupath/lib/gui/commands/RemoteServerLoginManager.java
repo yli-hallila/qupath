@@ -79,12 +79,15 @@ public class RemoteServerLoginManager {
         cbLogos.setCellFactory(f -> new ImageViewListCell(true));
         cbLogos.getItems().addAll(RemoteOpenslide.getOrganizations().orElse(Collections.emptyList()));
 
+        selectPreviousOrganization(cbLogos);
+
         selectedOrganizationProperty.bind(Bindings.createStringBinding(
             () -> cbLogos.getSelectionModel().getSelectedItem().getId(),
             cbLogos.getSelectionModel().selectedItemProperty()
         ));
 
-        cbLogos.getSelectionModel().select(0);
+        PathPrefs.previousOrganization().bind(selectedOrganizationProperty);
+
 
         /* Buttons */
         
@@ -111,11 +114,22 @@ public class RemoteServerLoginManager {
         BorderPane.setMargin(cbLogos, new Insets(10));
 
         pane.setPrefWidth(360);
-        pane.setPrefHeight(0);
         pane.setTop(cbLogos);
         pane.setCenter(buttons);
         pane.setBottom(statusBar);
         pane.setPadding(new Insets(0));
+    }
+
+    private void selectPreviousOrganization(ComboBox<ExternalOrganization> cbLogos) {
+        if (PathPrefs.previousOrganization().get() != null) {
+            cbLogos.getItems().forEach(organization -> {
+                if (organization.getId().equals(PathPrefs.previousOrganization().get())) {
+                    cbLogos.getSelectionModel().select(organization);
+                }
+            });
+        } else {
+            cbLogos.getSelectionModel().select(0);
+        }
     }
 
     private void loginAsGuest() {
@@ -254,12 +268,15 @@ public class RemoteServerLoginManager {
         dialog.close();
     }
 
-    static class ImageViewListCell extends ListCell<ExternalOrganization> {
+    private class ImageViewListCell extends ListCell<ExternalOrganization> {
 
-        private boolean cellFactory;
+        /**
+         * Flag to indicate whether this is the factory for the button or cells.
+         */
+        private boolean buttonCell;
 
-        public ImageViewListCell(boolean cellFactory) {
-            this.cellFactory = cellFactory;
+        public ImageViewListCell(boolean buttonCell) {
+            this.buttonCell = buttonCell;
         }
 
         {
@@ -277,7 +294,7 @@ public class RemoteServerLoginManager {
                 Image image = new Image(RemoteOpenslide.getHost() + item.getLogoUrl());
                 ImageView imageView = new ImageView(image);
 
-                if (cellFactory) {
+                if (buttonCell) {
                     imageView.setFitWidth(330);
                 } else {
                     imageView.setFitWidth(310);

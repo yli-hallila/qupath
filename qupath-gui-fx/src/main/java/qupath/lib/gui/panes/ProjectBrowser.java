@@ -262,6 +262,10 @@ public class ProjectBrowser implements ChangeListener<ImageData<BufferedImage>> 
 	}
 
 	private void openImage(Event event) {
+		if (getSelectedEntry() == null) {
+			return;
+		}
+
 		Dialog<ButtonType> message = Dialogs.builder()
 				.title("Please wait")
 				.contentText("Loading slide ...")

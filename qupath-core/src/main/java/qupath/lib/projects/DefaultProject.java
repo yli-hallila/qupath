@@ -353,7 +353,7 @@ class DefaultProject implements Project<BufferedImage> {
 
 		var hasWriteAccess = RemoteOpenslide.hasPermission(dirBase.getName());
 
-		if (name.startsWith("Backup of")) {
+		if (name == null || name.startsWith("Backup of")) {
 			return;
 		} else if (hasWriteAccess) {
 			logger.debug("Uploading project to server");

@@ -112,6 +112,7 @@ import javafx.stage.WindowEvent;
 import javafx.util.Duration;
 import jfxtras.scene.menu.CirclePopupMenu;
 import qupath.lib.common.GeneralTools;
+import qupath.lib.common.HttpException;
 import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.common.ThreadTools;
 import qupath.lib.gui.ActionTools.ActionAccelerator;
@@ -1996,49 +1997,15 @@ public class QuPathGUI {
 		));
 
 		getMenu("Remote Slides", true).getItems().add(2, ActionTools.createMenuItem(
-			ActionTools.createAction(() -> {
-				WorkspaceManager.showWorkspace(this);
-			}, "Show workspaces")
+				ActionTools.createAction(() -> {
+					RemoteUserManager.showManagementDialog();
+				}, "Manage users")
 		));
 
 		getMenu("Remote Slides", true).getItems().add(3, ActionTools.createMenuItem(
-				ActionTools.createAction(() -> {
-					String projectId = Dialogs.showInputDialog(
-					"Project ID",
-					"Project IDs are as following: 6ce7a026-e023-47b5-9b2e-0fc5eb523e49",
-					""
-					);
-
-					if (projectId == null) {
-						return;
-					}
-
-					ExternalProject project = new ExternalProject();
-					project.setId(projectId);
-					project.setName(projectId);
-
-					WorkspaceManager.loadProject(project);
-				}, "Open project by ID")
-		));
-
-		getMenu("Remote Slides", true).getItems().add(4, ActionTools.createMenuItem(
-				ActionTools.createAction(() -> {
-					String slideId = Dialogs.showInputDialog(
-					"Slide ID",
-					"Slide IDs are as following: 6ce7a026-e023-47b5-9b2e-0fc5eb523e49",
-					""
-					);
-
-					if (slideId == null) {
-						return;
-					}
-
-					ExternalProject project = new ExternalProject();
-					project.setId(slideId);
-					project.setName(slideId);
-
-					WorkspaceManager.loadProject(project);
-				}, "Open slide by ID")
+			ActionTools.createAction(() -> {
+				WorkspaceManager.showWorkspace(this);
+			}, "Show workspaces")
 		));
 
 //		analysisPanel = createAnalysisPanel();

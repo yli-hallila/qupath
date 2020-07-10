@@ -31,6 +31,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import com.google.gson.*;
 import javafx.beans.property.SimpleStringProperty;
@@ -373,33 +374,17 @@ public class AnnotationPane implements PathObjectSelectionListener, ChangeListen
 
 	private void showQuizDialog(PathObject pathObject) {
 		try {
-			List<Option> questions = new ArrayList<>();
-			List<String> rightAnswers = new ArrayList<>();
+			List<MultichoiceOption> choices = List.of(new Gson().fromJson(pathObject.getAnswer(), MultichoiceOption[].class));
+			List<MultichoiceOption> answers = choices.stream().filter(MultichoiceOption::getIsAnswer).collect(Collectors.toList());
 
-			JsonArray arr = new Gson().fromJson(pathObject.getAnswer(), JsonArray.class);
-			for (JsonElement element : arr) {
-				JsonObject obj = (JsonObject) element;
-
-				Option option = new Option(
-					obj.get("question").getAsString(),
-					obj.get("answer").getAsBoolean()
-				);
-
-				questions.add(option);
-
-				if (option.isAnswer()) {
-					rightAnswers.add(option.getQuestion());
-				}
-			}
-
-			Option result = (Option) Dialogs.showChoiceDialog("Select correct choice", pathObject.getName(), questions.toArray(), questions.get(0));
+			MultichoiceOption result = (MultichoiceOption) Dialogs.showChoiceDialog("Select correct choice", pathObject.getName(), choices.toArray(), choices.get(0));
 
 			if (result != null) {
-				String message = result.isAnswer() ? "Right answer!" : "Wrong answer!";
+				String message = result.getIsAnswer() ? "Right answer!" : "Wrong answer!";
 
-				if (rightAnswers.size() > 1) {
+				if (answers.size() > 1) {
 					message += "\n\n";
-					message += "All the right answers are: " + rightAnswers.toString().replaceAll("\\[|\\]", "");
+					message += "All the right answers are: " + answers.toString().replaceAll("\\[|\\]", "");
 				}
 
 				String description = ((PathAnnotationObject) pathObject).getDescription();
@@ -420,51 +405,52 @@ public class AnnotationPane implements PathObjectSelectionListener, ChangeListen
 		Dialogs.showMessageDialog(pathObject.getName(), pathObject.getAnswer());
 	}
 
-	public static class Option {
+	// todo: rework variable names & remember to update table property references
+	public static class MultichoiceOption {
 
-		private final SimpleStringProperty question;
-		private final SimpleBooleanProperty answer;
+		private String choice;
+		private Boolean isAnswer;
 
-		public Option() {
+		public MultichoiceOption() {
 			this("", false);
 		}
 
-		public Option(String question) {
-			this(question, false);
+		public MultichoiceOption(String choice) {
+			this(choice, false);
 		}
 
-		public Option(String question, boolean answer) {
-			this.question = new SimpleStringProperty(question);
-			this.answer = new SimpleBooleanProperty(answer);
+		public MultichoiceOption(String choice, boolean isAnswer) {
+			this.choice = choice;
+			this.isAnswer = isAnswer;
 		}
 
-		public String getQuestion() {
-			return question.get();
+		public String getChoice() {
+			return choice;
 		}
 
-		public SimpleStringProperty questionProperty() {
-			return question;
+		public void setChoice(String choice) {
+			this.choice = choice;
 		}
 
-		public void setQuestion(String question) {
-			this.question.set(question);
+		public boolean getIsAnswer() {
+			return isAnswer;
 		}
 
-		public boolean isAnswer() {
-			return answer.get();
+		public void setIsAnswer(boolean isAnswer) {
+			this.isAnswer = isAnswer;
 		}
 
-		public SimpleBooleanProperty answerProperty() {
-			return answer;
+		public Boolean getAnswer() {
+			return isAnswer;
 		}
 
-		public void setAnswer(boolean answer) {
-			this.answer.set(answer);
+		public void setAnswer(Boolean answer) {
+			this.isAnswer = answer;
 		}
 
 		@Override
 		public String toString() {
-			return question.get();
+			return choice;
 		}
 	}
 

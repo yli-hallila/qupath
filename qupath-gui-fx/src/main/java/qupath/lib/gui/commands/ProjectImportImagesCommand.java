@@ -627,15 +627,7 @@ class ProjectImportImagesCommand {
 		pane.setTop(filterTextField);
 		pane.setCenter(paneList);
 
-		Optional<String> rawData = RemoteOpenslide.getSlidesV1();
-		ObservableList<ExternalSlide> slides = FXCollections.observableArrayList();
-
-		rawData.ifPresent(data ->
-			slides.addAll(new Gson().fromJson(
-				data,
-				ExternalSlide[].class
-			)
-		));
+		ObservableList<ExternalSlide> slides = FXCollections.observableArrayList(RemoteOpenslide.getSlidesV1());
 
 		FilteredList<ExternalSlide> filteredList = new FilteredList<>(slides, data -> true);
 		filterTextField.textProperty().addListener(((observable, oldValue, newValue) -> {

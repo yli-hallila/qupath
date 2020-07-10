@@ -1,13 +1,9 @@
 package qupath.lib.common;
 
-import com.google.common.io.ByteSource;
-import com.google.common.io.CharSource;
-import com.google.common.io.CharStreams;
 import com.google.gson.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.lib.objects.remoteopenslide.ExternalBackup;
-import qupath.lib.objects.remoteopenslide.ExternalOrganization;
+import qupath.lib.objects.remoteopenslide.*;
 
 import java.io.*;
 import java.math.BigInteger;
@@ -113,6 +109,10 @@ public class RemoteOpenslide {
 	}
 
 	/* Roles and Permissions*/
+
+	public static boolean hasRole(fi.ylihallila.remote.commons.Roles role) {
+		return roles.contains(role.name());
+	}
 
 	public static boolean hasRole(String role) {
 		return roles.contains(role);
@@ -220,6 +220,24 @@ public class RemoteOpenslide {
 		setCredentials(null, null);
 		roles.clear();
 		permissions.clear();
+	}
+
+	/* Users */
+
+	public static List<ExternalUser> getAllUsers() {
+		var response = get("/api/v0/users");
+
+		if (isInvalidResponse(response)) {
+			return Collections.emptyList();
+		}
+
+		return List.of(new Gson().fromJson(response.get().body(), ExternalUser[].class));
+	}
+
+	public static boolean editUserRoles(String userId, Map<String, Boolean> roles) {
+		var response = put("/api/v0/users/" + e(userId), roles);
+
+		return !isInvalidResponse(response);
 	}
 
 	/* Projects */
@@ -340,14 +358,14 @@ public class RemoteOpenslide {
 		return Optional.of(slides);
 	}
 
-	public static Optional<String> getSlidesV1() {
+	public static List<ExternalSlide> getSlidesV1() {
 		var response = get("/api/v1/slides/");
 
 		if (isInvalidResponse(response)) {
-			return Optional.empty();
+			return Collections.emptyList();
 		}
 
-		return Optional.of(response.get().body());
+		return List.of(new Gson().fromJson(response.get().body(), ExternalSlide[].class));
 	}
 
 	public static Optional<JsonObject> getSlideProperties(String slideId) {
@@ -433,14 +451,14 @@ public class RemoteOpenslide {
 		return Optional.of(response.get().body());
 	}
 
-	public static Optional<String> getAllWorkspaces() {
+	public static List<ExternalWorkspace> getAllWorkspaces() {
 		var response = get("/api/v0/workspaces");
 
 		if (isInvalidResponse(response)) {
-			return Optional.empty();
+			return Collections.emptyList();
 		}
 
-		return Optional.of(response.get().body());
+		return List.of(new Gson().fromJson(response.get().body(), ExternalWorkspace[].class));
 	}
 
 	public static Result createNewWorkspace(String workspaceName) {
@@ -519,9 +537,8 @@ public class RemoteOpenslide {
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
 			logger.error("Error when making HTTP GET request", e);
+			throw new HttpException(e);
 		}
-
-		return Optional.empty();
 	}
 
 	private static Optional<HttpResponse<String>> post(String path, Map<Object, Object> data) {
@@ -538,9 +555,8 @@ public class RemoteOpenslide {
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (Exception e) {
 			logger.error("Error when making HTTP POST request", e);
+			throw new HttpException(e);
 		}
-
-		return Optional.empty();
 	}
 
 	private static Optional<HttpResponse<String>> delete(String path) {
@@ -556,16 +572,15 @@ public class RemoteOpenslide {
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
 			logger.error("Error when making HTTP DELETE request", e);
+			throw new HttpException(e);
 		}
-
-		return Optional.empty();
 	}
 
-	private static Optional<HttpResponse<String>> put(String path, Map<Object, Object> data) {
+	private static Optional<HttpResponse<String>> put(String path, Map<?, ?> data) {
 		try {
 			HttpClient client = getHttpClient();
 			HttpRequest.Builder builder = HttpRequest.newBuilder()
-				.PUT(ofFormData(data))
+				.PUT(ofFormData((Map<Object, Object>) data))
 				.uri(host.resolve(path))
 				.header("Content-Type", "application/x-www-form-urlencoded");
 
@@ -576,9 +591,8 @@ public class RemoteOpenslide {
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
 			logger.error("Error when making HTTP PUT request", e);
+			throw new HttpException(e);
 		}
-
-		return Optional.empty();
 	}
 
 	private static void addAuthorization(HttpRequest.Builder builder) {

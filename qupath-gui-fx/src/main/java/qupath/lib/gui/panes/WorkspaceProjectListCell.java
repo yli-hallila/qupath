@@ -265,7 +265,7 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
     private void deleteProject() {
         boolean confirm = Dialogs.showConfirmDialog(
         "Are you sure?",
-        "Do you wish to delete this project? This action is un-reversible."
+        "Do you wish to delete this project? This action is irreversible."
         );
 
         if (confirm) {

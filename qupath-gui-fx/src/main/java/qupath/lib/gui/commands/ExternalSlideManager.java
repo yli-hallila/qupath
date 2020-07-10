@@ -1,7 +1,6 @@
 package qupath.lib.gui.commands;
 
 import com.google.common.collect.MoreCollectors;
-import com.google.gson.Gson;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanBinding;
@@ -13,7 +12,6 @@ import javafx.collections.transformation.SortedList;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
-import javafx.geometry.Orientation;
 import javafx.scene.control.*;
 import javafx.scene.control.Button;
 import javafx.scene.control.Dialog;
@@ -21,9 +19,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
-import javafx.scene.layout.Priority;
 import javafx.scene.text.Text;
-import javafx.util.Callback;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +34,6 @@ import qupath.lib.objects.remoteopenslide.ExternalSlide;
 import java.awt.*;
 import java.io.*;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 
@@ -46,7 +41,7 @@ import static qupath.lib.common.RemoteOpenslide.*;
 
 public class ExternalSlideManager {
 
-    private final QuPathGUI qupath = QuPathGUI.getInstance();
+    private static final QuPathGUI qupath = QuPathGUI.getInstance();
 
     private final static Logger logger = LoggerFactory.getLogger(ExternalSlideManager.class);
 
@@ -83,7 +78,7 @@ public class ExternalSlideManager {
 
         table = new TableView<>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        table.setPlaceholder(new Text("No slides or none match search criteria"));
+        table.setPlaceholder(new Text("No slides, none match search criteria or no permissions."));
 
         TableColumn<ExternalSlide, String> slideNameColumn = new TableColumn<>("Name");
         slideNameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
@@ -99,17 +94,12 @@ public class ExternalSlideManager {
 
         table.getColumns().addAll(slideNameColumn, ownerColumn, uuidColumn);
 
-        ExternalSlide[] slides = new Gson().fromJson(
-            RemoteOpenslide.getSlidesV1().orElse("[]"),
-            ExternalSlide[].class
-        );
-
         /* Filter / Search */
 
         TextField filterTextField = new TextField();
         filterTextField.setPromptText("Search by slide name, organization or ID");
 
-        FilteredList<ExternalSlide> filteredData = new FilteredList<>(FXCollections.observableArrayList(slides), data -> true);
+        FilteredList<ExternalSlide> filteredData = new FilteredList<>(FXCollections.observableArrayList(RemoteOpenslide.getSlidesV1()), data -> true);
 
         filterTextField.textProperty().addListener(((observable, oldValue, newValue) -> {
             filteredData.setPredicate(data -> {
@@ -146,7 +136,7 @@ public class ExternalSlideManager {
         btnRename.disableProperty().bind(slideSelected.or(hasWriteAccess).or(canManageSlides));
 
         Button btnOpen = new Button("Open slide");
-        btnOpen.setOnAction(e -> openSlide());
+        btnOpen.setOnAction(e -> openSlide(table.getSelectionModel().getSelectedItem()));
         btnOpen.disableProperty().bind(slideSelected);
 
         Button btnProperties = new Button("View Properties");
@@ -182,20 +172,18 @@ public class ExternalSlideManager {
         dialog.getDialogPane().setContent(pane);
     }
 
-    private void openSlide() {
-        ExternalSlide slide = table.getSelectionModel().getSelectedItem();
-
+    public static void openSlide(final ExternalSlide slide) {
         if (qupath.getProject() != null) {
-            ButtonType closeProject = new ButtonType("Close project and continue", ButtonBar.ButtonData.APPLY);
+            ButtonType closeProject = new ButtonType("Close project and continue", ButtonBar.ButtonData.FINISH);
+            ButtonType addToProject = new ButtonType("Add slide to project",       ButtonBar.ButtonData.OK_DONE);
+
 
             Optional<ButtonType> confirm = Dialogs.builder()
                 .title("Proceed with adding slide to project")
                 .contentText("Opening an slide with a project open will try to add that slide to the current project."
-                    + "\n" +
-                    "Close your project first if you want to only view the slide."
                     + "\n\n" +
-                    "Do you wish to continue?")
-                .buttons(ButtonType.OK, closeProject, ButtonType.CANCEL)
+                    "Do you wish to close your project and continue or add this slide to your current project?")
+                .buttons(closeProject, ButtonType.CANCEL, addToProject)
                 .build()
                 .showAndWait();
 
@@ -203,7 +191,7 @@ public class ExternalSlideManager {
                 return;
             }
 
-            if (confirm.get().getButtonData() == ButtonBar.ButtonData.APPLY) {
+            if (confirm.get().getButtonData() == ButtonBar.ButtonData.FINISH) {
                 qupath.setProject(null);
             }
         }
@@ -216,7 +204,9 @@ public class ExternalSlideManager {
         message.setResult(ButtonType.CLOSE);
         message.show();
 
-        dialog.close();
+        if (dialog != null) {
+            dialog.close();
+        }
 
         Platform.runLater(() -> {
             qupath.openImage(RemoteOpenslide.getHost() + "/" + slide.getId(), true, true);

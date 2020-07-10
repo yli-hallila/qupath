@@ -38,18 +38,14 @@ import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import fi.ylihallila.remote.commons.Roles;
 import javafx.beans.property.*;
 import javafx.collections.ObservableList;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.control.cell.TextFieldTableCell;
-import javafx.scene.input.MouseButton;
 import javafx.scene.layout.VBox;
-import javafx.util.converter.DefaultStringConverter;
+import javafx.scene.text.Text;
 import org.controlsfx.control.CheckComboBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,11 +73,13 @@ import qupath.lib.color.ColorDeconvolutionStains.DefaultColorDeconvolutionStains
 import qupath.lib.color.StainVector;
 import qupath.lib.common.ColorTools;
 import qupath.lib.common.GeneralTools;
+import qupath.lib.common.RemoteOpenslide;
 import qupath.lib.gui.ActionTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.commands.Commands;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.panes.AnnotationPane;
+import qupath.lib.gui.panes.FocusingTextFieldTableCell;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
@@ -96,7 +94,7 @@ import qupath.lib.roi.PointsROI;
 import qupath.lib.roi.RoiTools.CombineOp;
 import qupath.lib.roi.interfaces.ROI;
 
-import static qupath.lib.gui.panes.AnnotationPane.Option;
+import static qupath.lib.gui.panes.AnnotationPane.MultichoiceOption;
 
 /**
  * Assorted static methods to help with JavaFX and QuPath GUI-related tasks.
@@ -746,12 +744,14 @@ public class GuiTools {
 		panel.add(labDescription, 0, 2);
 		panel.add(textAreaDescription, 1, 2);
 
+		/* Answers */
+
 		Label labAnswer = new Label("Answer");
 		TextArea textAreaAnswer = new TextArea(annotation.getAnswer());
 		textAreaAnswer.setPrefRowCount(2);
 		textAreaAnswer.setPrefColumnCount(25);
 
-		TableView<Option> table = createMultiChoiceTable(annotation);
+		TableView<MultichoiceOption> table = createMultiChoiceTable(annotation);
 
 		Button newEntryButton = new Button("Add new");
 		newEntryButton.setOnMouseClicked(e -> {
@@ -765,16 +765,25 @@ public class GuiTools {
 
 		GridPane controlButtons = PaneTools.createColumnGridControls(newEntryButton, deleteEntryButton);
 
-		TabPane tabPane = new TabPane();
-		tabPane.getStyleClass().add("floating");
-		tabPane.getTabs().addAll(
-			new Tab("Multiple choice", new VBox(table, controlButtons)),
-			new Tab("Text answer", textAreaAnswer)
-		);
-		tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-		panel.add(tabPane, 1, 3);
+		if (RemoteOpenslide.hasRole(Roles.MANAGE_PROJECTS)) {
+			TabPane tabPane = new TabPane();
+			tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+			tabPane.getStyleClass().add("floating");
+
+			tabPane.getTabs().addAll(
+				new Tab("Multiple choice", new VBox(table, controlButtons)),
+				new Tab("Text answer", textAreaAnswer)
+			);
+
+			panel.add(tabPane, 1, 3);
+		} else {
+			panel.add(new Text("No permissions to view answers"), 1, 3);
+		}
+
 		panel.add(labAnswer, 0, 3);
+
+		/* Checkbox: Locked */
 
 		CheckBox cbLocked = new CheckBox("");
 		cbLocked.setSelected(annotation.isLocked());
@@ -782,6 +791,8 @@ public class GuiTools {
 		panel.add(labelLocked, 0, 4);
 		labelLocked.setLabelFor(cbLocked);
 		panel.add(cbLocked, 1, 4);
+
+		/* Checkbox: Fill */
 
 		CheckBox cbFill = new CheckBox("");
 		cbFill.setSelected(annotation.shouldFill());
@@ -832,7 +843,7 @@ public class GuiTools {
 			temp.setFill(cbFill.isSelected());
 
 			// Set the answer only if we have to
-			ObservableList<Option> quizItems = table.getItems();
+			ObservableList<MultichoiceOption> quizItems = table.getItems();
 			if (quizItems == null || quizItems.isEmpty()) {
 				// We don't have a quiz but do we have a text answer
 				if (textAreaAnswer.getText() != null) {
@@ -841,17 +852,7 @@ public class GuiTools {
 					annotation.setAnswer(null);
 				}
 			} else {
-				JsonArray jsonArray = new JsonArray();
-
-				for (Option option : quizItems) {
-					JsonObject obj = new JsonObject();
-					obj.addProperty("question", option.getQuestion());
-					obj.addProperty("answer", option.isAnswer());
-
-					jsonArray.add(obj);
-				}
-
-				String json = new Gson().toJson(jsonArray);
+				String json = new Gson().toJson(table.getItems().toArray(new MultichoiceOption[] {} ));
 				annotation.setAnswer(json);
 			}
 		}
@@ -859,67 +860,57 @@ public class GuiTools {
 		return true;
 	}
 
-	private static TableView<Option> createMultiChoiceTable(PathObject annotation) {
-		TableView<Option> table = new TableView<>();
+	private static TableView<MultichoiceOption> createMultiChoiceTable(PathObject annotation) {
+		/* Table */
+
+		TableView<MultichoiceOption> table = new TableView<>();
+		table.setPlaceholder(new Text("No data"));
 		table.setEditable(true);
 
-		TableColumn<Option, String> questions = new TableColumn<>("Choice");
-		TableColumn<Option, Boolean> answers = new TableColumn<>("Answer(s)");
+		TableColumn<MultichoiceOption, String> choicesColumn = new TableColumn<>("Choice");
+		choicesColumn.setEditable(true);
+		choicesColumn.prefWidthProperty().bind(table.widthProperty().multiply(0.70));
+		choicesColumn.setCellValueFactory(new PropertyValueFactory<>("choice"));
+		choicesColumn.setCellFactory(tc -> new FocusingTextFieldTableCell<>());
 
-		questions.setEditable(true);
+		TableColumn<MultichoiceOption, Boolean> answersColumn = new TableColumn<>("Answer(s)");
+		answersColumn.setEditable(true);
+		answersColumn.prefWidthProperty().bind(table.widthProperty().multiply(0.25));
+		answersColumn.setCellValueFactory(new PropertyValueFactory<>("isAnswer"));
+		answersColumn.setCellFactory(col -> new CheckBoxTableCell<>(index -> {
+			BooleanProperty active = new SimpleBooleanProperty(table.getItems().get(index).getIsAnswer());
 
-		questions.prefWidthProperty().bind(table.widthProperty().multiply(0.70));
-		answers.prefWidthProperty().bind(table.widthProperty().multiply(0.25));
-
-		questions.setCellValueFactory(new PropertyValueFactory<>("question"));
-		answers.setCellValueFactory(new PropertyValueFactory<>("answer"));
-
-		questions.setCellFactory(tc -> new TextFieldTableCell<>(new DefaultStringConverter()));
-		answers.setCellFactory(tc -> new CheckBoxTableCell<>());
-
-		questions.setOnEditCommit(event -> {
-			event.getRowValue().questionProperty().set(event.getNewValue());
-		});
-
-		table.getColumns().addAll(questions, answers);
-
-		ContextMenu contextMenu = new ContextMenu();
-		MenuItem miDelete = new MenuItem("Delete");
-		miDelete.setOnAction(e -> table.getItems().remove(table.getSelectionModel().getFocusedIndex()));
-		contextMenu.getItems().add(miDelete);
-
-		table.setRowFactory(tv -> {
-			TableRow<Option> row = new TableRow<>();
-
-			row.setOnMouseClicked(event -> {
-				if (event.getButton() == MouseButton.SECONDARY && !row.isEmpty()) {
-					contextMenu.show(table, event.getScreenX(), event.getScreenY());
-				}
+			active.addListener((obs, wasActive, isNowActive) -> {
+				MultichoiceOption item = table.getItems().get(index);
+				item.setIsAnswer(isNowActive);
 			});
 
-			return row ;
+			return active;
+		}));
+
+		choicesColumn.setOnEditCommit(event -> {
+			if (event.getNewValue() == null || event.getNewValue().isEmpty()) {
+				table.getItems().remove(table.getSelectionModel().getFocusedIndex());
+			} else {
+				event.getRowValue().setChoice(event.getNewValue());
+			}
 		});
 
+		table.getColumns().addAll(choicesColumn, answersColumn);
+
+		/* Populate Table */
+
 		if (annotation.getAnswer() != null && AnnotationPane.isJSON(annotation.getAnswer())) {
-			ArrayList<Option> list = new ArrayList<>();
+			List<MultichoiceOption> options = List.of(new Gson().fromJson(annotation.getAnswer(), MultichoiceOption[].class));
 
-			JsonArray jsonArray = new Gson().fromJson(annotation.getAnswer(), JsonArray.class);
-			for (JsonElement element : jsonArray) {
-				JsonObject obj = element.getAsJsonObject();
-				list.add(new Option(
-						obj.get("question").getAsString(),
-						obj.get("answer").getAsBoolean()
-				));
-			}
-
-			table.getItems().addAll(list);
+			table.getItems().addAll(options);
 		}
 
 		return table;
 	}
 
-	private static void addRowToTable(TableView<Option> table) {
-		table.getItems().add(new Option());
+	private static void addRowToTable(TableView<MultichoiceOption> table) {
+		table.getItems().add(new MultichoiceOption());
 		table.layout();
 		table.getSelectionModel().selectLast();
 		table.edit(table.getItems().size() - 1, table.getColumns().get(0));
@@ -950,8 +941,10 @@ public class GuiTools {
 	
 	private static void createAnnotationsMenuImpl(QuPathGUI qupath, Object menu) {
 		// Add annotation options
+		CheckMenuItem miLockAllAnnotations = new CheckMenuItem("Lock All");
 		CheckMenuItem miLockAnnotations = new CheckMenuItem("Lock");
 		CheckMenuItem miUnlockAnnotations = new CheckMenuItem("Unlock");
+		miLockAllAnnotations.setOnAction(e -> lockAllAnnotations(qupath.getImageData()));
 		miLockAnnotations.setOnAction(e -> setSelectedAnnotationLock(qupath.getImageData(), true));
 		miUnlockAnnotations.setOnAction(e -> setSelectedAnnotationLock(qupath.getImageData(), false));
 		
@@ -1010,6 +1003,8 @@ public class GuiTools {
 				hasSelectedAnnotation = selected != null && selected.isAnnotation();
 				allSelectedAnnotations = allSelected.stream().allMatch(p -> p.isAnnotation());
 			}
+			miLockAllAnnotations.setDisable(!hasSelectedAnnotation);
+			miLockAllAnnotations.setSelected(false);
 			miLockAnnotations.setDisable(!hasSelectedAnnotation);
 			miUnlockAnnotations.setDisable(!hasSelectedAnnotation);
 			if (hasSelectedAnnotation) {
@@ -1041,6 +1036,8 @@ public class GuiTools {
 		
 		MenuTools.addMenuItems(
 				items,
+				miLockAllAnnotations,
+				separator,
 				miLockAnnotations,
 				miUnlockAnnotations,
 				miSetProperties,
@@ -1050,7 +1047,16 @@ public class GuiTools {
 				menuCombine
 				);
 	}
-	
+
+	private static void lockAllAnnotations(ImageData<BufferedImage> imageData) {
+		PathObjectHierarchy hierarchy = imageData.getHierarchy();
+
+	 	hierarchy.getSelectionModel().selectObjects(hierarchy.getAnnotationObjects());
+		setSelectedAnnotationLock(hierarchy, true);
+
+		hierarchy.getSelectionModel().clearSelection();
+	}
+
 	/**
 	 * Set selected TMA cores to have the specified 'locked' status.
 	 * 
