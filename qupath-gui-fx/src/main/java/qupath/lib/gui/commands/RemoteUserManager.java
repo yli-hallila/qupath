@@ -64,7 +64,7 @@ public class RemoteUserManager {
         emailColumn.setReorderable(false);
 
         TableColumn<ExternalUser, String> organizationColumn = new TableColumn<>("Organization");
-        organizationColumn.setCellValueFactory(new PropertyValueFactory<>("organization"));
+        organizationColumn.setCellValueFactory(new PropertyValueFactory<>("organizationName"));
         organizationColumn.setReorderable(false);
 
         table.getColumns().addAll(nameColumn, emailColumn, organizationColumn);
@@ -72,13 +72,16 @@ public class RemoteUserManager {
 
         /* onClick */
         table.setOnMouseClicked(event -> {
-            if (event.getClickCount() > 1 ) {
-                editUser(table.getSelectionModel().getSelectedItem());
+            ExternalUser selectedItem = table.getSelectionModel().getSelectedItem();
+
+            if (event.getClickCount() > 1 && selectedItem != null) {
+                editUser(selectedItem);
             }
         });
 
         pane = new BorderPane();
         pane.setPrefWidth(600);
+        pane.setPrefHeight(400);
         pane.setCenter(table);
     }
 
@@ -105,7 +108,7 @@ public class RemoteUserManager {
         tfEmail.setDisable(true);
 
         TextField tfOrganization = new TextField();
-        tfOrganization.setPromptText(user.getOrganization());
+        tfOrganization.setPromptText(user.getOrganization().getName());
         tfOrganization.setDisable(true);
 
         pane.add(tfName, 0, ++row);

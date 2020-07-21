@@ -1133,8 +1133,6 @@ public class QuPathGUI {
 		} catch (Exception e) {
 			logger.error("Error running startup script", e);
 		}
-
-		registerWatchservice();
 	}
 
 	private void registerWatchservice() {
@@ -2820,7 +2818,17 @@ public class QuPathGUI {
 
 		if (entry != null) {
 			String projectId = getProject().getPath().getParent().getFileName().toString();
-			hasWriteAccess = RemoteOpenslide.hasPermission(projectId);
+
+			try {
+				hasWriteAccess = RemoteOpenslide.hasPermission(projectId);
+			} catch (HttpException e) {
+				logger.error("Error while syncing project.", e);
+
+				return Dialogs.showYesNoDialog(
+				"Sync error",
+				"Error while syncing changes to server. Do you wish to discard your changes?"
+				);
+			}
 		}
 
 		if (RemoteOpenslide.hasRole("MANAGE_PERSONAL_PROJECTS") && !hasWriteAccess) {
@@ -4131,7 +4139,7 @@ public class QuPathGUI {
 		if (currentProject != null) {
 			try {
 				currentProject.syncChanges();
-			} catch (IOException e) {
+			} catch (Exception e) {
 				logger.error("Error syncing project", e);
 				if (!Dialogs.showYesNoDialog("Project error", "A problem occurred while saving the last project - do you want to continue?"))
 					return;

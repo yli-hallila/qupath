@@ -119,10 +119,15 @@ public class ExternalSlideManager {
 
         /* Buttons */
 
-        BooleanBinding hasWriteAccess = Bindings.createBooleanBinding(
-            () -> !(RemoteOpenslide.isOwner(table.getSelectionModel().getSelectedItem().getOwner())),
-            table.getSelectionModel().selectedItemProperty()
-        );
+        BooleanBinding hasWriteAccess = Bindings.createBooleanBinding(() -> {
+            ExternalSlide selectedItem = table.getSelectionModel().getSelectedItem();
+
+            if (selectedItem == null) {
+                return false;
+            } else {
+                return RemoteOpenslide.isOwner(selectedItem.getOwner().getId());
+            }
+        }, table.getSelectionModel().selectedItemProperty());
 
         BooleanBinding slideSelected = table.getSelectionModel().selectedItemProperty().isNull();
         BooleanBinding canManageSlides = new SimpleBooleanProperty(RemoteOpenslide.hasRole("MANAGE_SLIDES")).not();

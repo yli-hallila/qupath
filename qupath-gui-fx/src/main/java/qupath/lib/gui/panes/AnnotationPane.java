@@ -37,6 +37,7 @@ import com.google.gson.*;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.scene.control.*;
+import javafx.scene.input.MouseButton;
 import org.controlsfx.control.MasterDetailPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -158,7 +159,7 @@ public class AnnotationPane implements PathObjectSelectionListener, ChangeListen
 		listAnnotations.getSelectionModel().selectedItemProperty().addListener((v, o, n) -> synchronizeHierarchySelectionToListSelection());
 
 		listAnnotations.setOnMouseClicked(e -> {
-			if (e.getClickCount() > 1) {
+			if (e.getClickCount() > 1 && e.getButton() == MouseButton.PRIMARY) {
 				PathObject pathObject = listAnnotations.getSelectionModel().getSelectedItem();
 				if (pathObject == null || !pathObject.hasROI())
 					return;
@@ -169,7 +170,7 @@ public class AnnotationPane implements PathObjectSelectionListener, ChangeListen
 				viewer.centerROI(roi);
 			}
 		});
-		
+
 		PathPrefs.colorDefaultObjectsProperty().addListener((v, o, n) -> listAnnotations.refresh());
 
 		ContextMenu menuAnnotations = GuiTools.populateAnnotationsMenu(qupath, new ContextMenu());
