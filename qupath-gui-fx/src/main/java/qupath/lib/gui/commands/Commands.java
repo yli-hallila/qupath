@@ -1227,6 +1227,17 @@ public class Commands {
 			qupath.showWorkspaceDialog();
 
 			return true;
+		} else {
+			var confirm = Dialogs.showYesNoDialog(
+			"Not connected",
+			"You're not connected to any server, you can only view your local projects." + "\n\n"
+			   + "Do you wish to login now? If you choose NO you can view your local projects."
+			);
+
+			if (confirm) {
+				qupath.showLoginDialog();
+				return true;
+			}
 		}
 
 		File dir = Dialogs.promptForDirectory(null);
@@ -1258,6 +1269,17 @@ public class Commands {
 			qupath.showWorkspaceDialog();
 
 			return true;
+		} else {
+			var confirm = Dialogs.showYesNoDialog(
+			"Not connected",
+			"You're not connected to any server, you can only view your local projects." + "\n\n"
+			   + "Do you wish to login now? If you choose NO you can view your local projects."
+			);
+
+			if (confirm) {
+				qupath.showLoginDialog();
+				return true;
+			}
 		}
 
 		File fileProject = Dialogs.promptForFile("Choose project file", null, "QuPath projects", new String[]{ProjectIO.getProjectExtension()});
