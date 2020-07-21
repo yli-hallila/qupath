@@ -497,7 +497,7 @@ class DefaultProject implements Project<BufferedImage> {
 		/**
 		 * Randomized name that will be used when masking image names.
 		 */
-		private String randomizedName = UUID.randomUUID().toString();
+		private transient String randomizedName = UUID.randomUUID().toString();
 		
 		/**
 		 * Image name to display.

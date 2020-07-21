@@ -43,11 +43,14 @@ public class ZipUtil {
     private static void zipDirectory(File folder, String folderPath, ZipOutputStream zos) throws IOException {
         for (File file : folder.listFiles()) {
             if (file.isDirectory()) {
-                zipDirectory(file, folderPath + File.separator + file.getName(), zos);
+                zipDirectory(file, folderPath + "/" + file.getName(), zos);
                 continue;
             }
 
-            zos.putNextEntry(new ZipEntry(folderPath + File.separator + file.getName()));
+            ZipEntry entry = new ZipEntry(folderPath + "/" + file.getName());
+            entry.setTime(0);
+
+            zos.putNextEntry(entry);
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
 
             byte[] bytesIn = new byte[BUFFER_SIZE];
@@ -74,7 +77,7 @@ public class ZipUtil {
         ZipEntry entry = zipIn.getNextEntry();
 
         while (entry != null) {
-            String filePath = destDirectory + File.separator + entry.getName();
+            String filePath = destDirectory + "/" + entry.getName();
 
             if (entry.isDirectory()) {
                 Files.createDirectories(Path.of(filePath));
