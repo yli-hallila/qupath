@@ -227,17 +227,32 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 			path = String.format("%s [x=%d,y=%d,w=%d,h=%d]", path, boundsX, boundsY, boundsWidth, boundsHeight);
 		}
 
+		int z = 1;
+
+		if (json.has("openslidex.depth")) {
+			z = json.get("openslidex.depth").getAsInt();
+		}
+
+		String name;
+
+		if (uri.getFragment() != null) {
+			name = RemoteOpenslide.d(uri.getFragment());
+		} else {
+			name = uri.getPath().substring(1);
+		}
+
 		this.args = args;
 		originalMetadata = new ImageServerMetadata.Builder(getClass(),
 				path, boundsWidth, boundsHeight).
 				channels(ImageChannel.getDefaultRGBChannels()). // Assume 3 channels (RGB)
-				name(uri.getPath().substring(1)).
+				name(name).
 				rgb(true).
 				pixelType(PixelType.UINT8).
 				preferredTileSize(tileWidth, tileHeight).
 				pixelSizeMicrons(pixelWidth, pixelHeight).
 				magnification(magnification).
 				levels(levels).
+				sizeZ(z).
 				build();
 
 		// todo: associated images
@@ -466,6 +481,7 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 		int level = tileRequest.getLevel();
 		int tileWidth = tileRequest.getTileWidth();
 		int tileHeight = tileRequest.getTileHeight();
+		int depth = tileRequest.getZ();
 
 		URI uriRegion = RemoteOpenslide.getRenderRegionURL(
 			this.serverURI,
@@ -473,7 +489,8 @@ public class OpenslideImageServer extends AbstractTileableImageServer {
 			tileX, tileY,
 			level,
 			tileWidth,
-			tileHeight
+			tileHeight,
+			depth
 		);
 
 		try {

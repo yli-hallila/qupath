@@ -654,7 +654,7 @@ class ProjectImportImagesCommand {
 		}
 
 		listView.getSelectionModel().getSelectedItems().forEach(item -> {
-			list.add(RemoteOpenslide.getHost() + "/" + RemoteOpenslide.e(item.getId()));
+			list.add(RemoteOpenslide.getHost() + "/" + RemoteOpenslide.e(item.getId())+ "#" + RemoteOpenslide.e(item.getName()));
 		});
 
 		return listView.getSelectionModel().getSelectedItems().size();

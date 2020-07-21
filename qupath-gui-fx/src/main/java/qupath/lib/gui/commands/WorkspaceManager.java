@@ -1,9 +1,7 @@
 package qupath.lib.gui.commands;
 
-import com.google.common.collect.Lists;
 import com.google.common.io.MoreFiles;
 import com.google.common.io.RecursiveDeleteOption;
-import com.google.gson.Gson;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
@@ -42,6 +40,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static qupath.lib.common.RemoteOpenslide.*;
 
@@ -214,14 +213,14 @@ public class WorkspaceManager {
             return;
         }
 
-        List<ExternalSlide> slides = RemoteOpenslide.getSlidesV1();
-        Optional<ExternalSlide> slide = slides.stream().filter(s -> s.getId().equalsIgnoreCase(id)).findFirst();
+        List<ExternalSlide> slides = RemoteOpenslide.getAllSlides();
+        Optional<ExternalSlide> slide = slides.stream().filter(s -> s.getId().equalsIgnoreCase(id.strip())).findFirst();
         if (slide.isPresent()) {
             ExternalSlideManager.openSlide(slide.get());
         } else {
             ExternalProject project = new ExternalProject();
-            project.setId(id);
-            project.setName(id);
+            project.setId(id.strip());
+            project.setName(id.strip());
 
             WorkspaceManager.loadProject(project);
         }
@@ -375,6 +374,15 @@ public class WorkspaceManager {
         QuPathGUI qupath = QuPathGUI.getInstance();
 
         try {
+            // Confirm that the ID is a valid UUID. Otherwise we could supply
+            // e.g. "/home/" as the ID and the home directory would be deleted.
+            UUID.fromString(extProject.getId());
+        } catch (IllegalArgumentException e) {
+            Dialogs.showErrorNotification("Error", "Provided ID was formatted incorrectly.");
+            return;
+        }
+
+        try {
             Path tempPath = Path.of(System.getProperty("java.io.tmpdir"), "qupath-ext-project");
             String tempPathStr = tempPath.toAbsolutePath().toString();
             Files.createDirectories(tempPath);
@@ -411,7 +419,7 @@ public class WorkspaceManager {
             var success = worker.getValue();
 
             if (success) {
-                File projectFile = new File(tempPathStr + "/" + extProject.getId() + "/project.qpproj");
+                File projectFile = Path.of(tempPathStr, extProject.getId(), "project.qpproj").toFile();
                 qupath.lib.projects.Project<BufferedImage> project = ProjectIO.loadProject(projectFile, BufferedImage.class);
                 project.setName(extProject.getName());
 
