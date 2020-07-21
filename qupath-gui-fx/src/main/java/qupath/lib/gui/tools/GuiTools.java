@@ -1037,7 +1037,6 @@ public class GuiTools {
 		MenuTools.addMenuItems(
 				items,
 				miLockAllAnnotations,
-				separator,
 				miLockAnnotations,
 				miUnlockAnnotations,
 				miSetProperties,
