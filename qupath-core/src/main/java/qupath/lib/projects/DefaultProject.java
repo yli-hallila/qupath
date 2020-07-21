@@ -807,7 +807,7 @@ class DefaultProject implements Project<BufferedImage> {
 					logger.warn("Unable to write server to {}", pathServer);
 					Files.deleteIfExists(pathServer);
 				}
-//				syncChanges();
+				syncChanges();
 			}
 			
 			var pathSummary = getDataSummaryPath();
