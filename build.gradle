@@ -707,6 +707,7 @@ task createRuntime(dependsOn:build, type:Exec) {
     	'jdk.zipfs',           // Needed for zip filesystem support
         'jdk.jsobject',
         'java.net.http',
+        'jdk.httpserver'
     ]
     
     def usefulModules = [
