@@ -99,7 +99,7 @@ public class ExternalSlideManager {
         TextField filterTextField = new TextField();
         filterTextField.setPromptText("Search by slide name, organization or ID");
 
-        FilteredList<ExternalSlide> filteredData = new FilteredList<>(FXCollections.observableArrayList(RemoteOpenslide.getSlidesV1()), data -> true);
+        FilteredList<ExternalSlide> filteredData = new FilteredList<>(FXCollections.observableArrayList(RemoteOpenslide.getAllSlides()), data -> true);
 
         filterTextField.textProperty().addListener(((observable, oldValue, newValue) -> {
             filteredData.setPredicate(data -> {

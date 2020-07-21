@@ -1,6 +1,7 @@
 package qupath.lib.common;
 
 import com.google.gson.*;
+import fi.ylihallila.remote.commons.Roles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.lib.objects.remoteopenslide.*;
@@ -136,8 +137,12 @@ public class RemoteOpenslide {
 			return false;
 		}
 
-		return (ownerId.equals(userId) && roles.contains("MANAGE_PERSONAL_PROJECTS")) ||
-				(ownerId.equals(organizationId) && roles.contains("MANAGE_PROJECTS"));
+		if (hasRole(Roles.ADMIN)) {
+			return true;
+		}
+
+		return (ownerId.equals(userId) && hasRole(Roles.MANAGE_PERSONAL_PROJECTS)) ||
+				(ownerId.equals(organizationId) && hasRole(Roles.MANAGE_PROJECTS));
 	}
 
 	private static Map<String, Boolean> permissions = new HashMap<>();
@@ -311,15 +316,15 @@ public class RemoteOpenslide {
 
 	/**
 	 * Creates a new project and places it inside given workspace.
-	 * @param workspaceId Workspace Id, null if personal project.
-	 * @param projectName Name of the project.
-	 * @return Result.OK if status code 200 else Result.FAIL.
+	 * @param workspaceId workspace Id, null if personal project.
+	 * @param projectName name of the project.
+	 * @return Result.OK if success else Result.FAIL.
 	 */
 	public static Result createProject(String workspaceId, String projectName) {
 		var response = post(
 		"/api/v0/projects",
 			Map.of(
-			"workspace-id", workspaceId,
+			"workspace-id", workspaceId == null ? "personal" : workspaceId,
 			"project-name", projectName
 			)
 		);
@@ -347,19 +352,8 @@ public class RemoteOpenslide {
 
 	/* Slides */
 
-	public static Optional<JsonArray> getSlides() {
+	public static List<ExternalSlide> getAllSlides() {
 		var response = get("/api/v0/slides/");
-
-		if (isInvalidResponse(response)) {
-			return Optional.empty();
-		}
-
-		JsonArray slides = JsonParser.parseString(response.get().body()).getAsJsonArray();
-		return Optional.of(slides);
-	}
-
-	public static List<ExternalSlide> getSlidesV1() {
-		var response = get("/api/v1/slides/");
 
 		if (isInvalidResponse(response)) {
 			return Collections.emptyList();
@@ -428,7 +422,7 @@ public class RemoteOpenslide {
 	 * Formats the URI by replacing placeholders with proper values.
 	 * @return formatted string as a URI.
 	 */
-	public static URI getRenderRegionURL(String uri, String slideId, int tileX, int tileY, int level, int tileWidth, int tileHeight) {
+	public static URI getRenderRegionURL(String uri, String slideId, int tileX, int tileY, int level, int tileWidth, int tileHeight, int depth) {
 		return URI.create(uri
 				.replace("{slideId}", e(slideId))
 				.replace("{tileX}", String.valueOf(tileX))
@@ -436,6 +430,7 @@ public class RemoteOpenslide {
 				.replace("{level}", String.valueOf(level))
 				.replace("{tileWidth}", String.valueOf(tileWidth))
 				.replace("{tileHeight}", String.valueOf(tileHeight))
+				.replace("{depth}", String.valueOf(depth))
 		);
 	}
 
@@ -673,6 +668,10 @@ public class RemoteOpenslide {
 	 */
 	public static String e(String toEncode) {
 		return URLEncoder.encode(toEncode, StandardCharsets.UTF_8).replace("+", "%20");
+	}
+
+	public static String d(String toDecode) {
+		return URLDecoder.decode(toDecode, StandardCharsets.UTF_8);
 	}
 
 	private static String basicAuth(String username, String password) {

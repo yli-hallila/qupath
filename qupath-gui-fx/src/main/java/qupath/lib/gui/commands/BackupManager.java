@@ -55,7 +55,7 @@ public class BackupManager {
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPlaceholder(new Text("No backups, none match search criteria or no permissions."));
 
-        TableColumn<ExternalBackup, String> backupNameColumn = new TableColumn<>("Project name");
+        TableColumn<ExternalBackup, String> backupNameColumn = new TableColumn<>("Project / File name");
         backupNameColumn.setCellValueFactory(new PropertyValueFactory<>("readable"));
         backupNameColumn.setReorderable(false);
 

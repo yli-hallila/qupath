@@ -5,7 +5,7 @@ public class ExternalProject {
     private String id;
     private String name;
     private String description;
-    private String owner;
+    private ExternalWorkspace.Owner owner;
     private String ownerReadable;
     private String timestamp;
 
@@ -42,19 +42,19 @@ public class ExternalProject {
     }
 
     public String getOwner() {
-        return owner;
+        return owner.getId();
     }
 
     public void setOwner(String owner) {
-        this.owner = owner;
+        this.owner.setId(owner);
     }
 
     public String getOwnerReadable() {
-        return ownerReadable;
+        return owner.getName();
     }
 
     public void setOwnerReadable(String ownerReadable) {
-        this.ownerReadable = ownerReadable;
+        this.owner.setName(ownerReadable);
     }
 
     public boolean hasTimestamp() {

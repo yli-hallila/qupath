@@ -6,8 +6,7 @@ public class ExternalSlide {
 
     private String name;
     private String id;
-    private String owner;
-    private String ownerReadable;
+    private ExternalWorkspace.Owner owner;
 
     private Map<String, String> parameters;
 
@@ -19,7 +18,7 @@ public class ExternalSlide {
         return id;
     }
 
-    public String getOwner() {
+    public ExternalWorkspace.Owner getOwner() {
         return owner;
     }
 
@@ -28,7 +27,7 @@ public class ExternalSlide {
     }
 
     public String getOwnerReadable() {
-        return ownerReadable;
+        return owner.getName();
     }
 
     @Override
@@ -37,7 +36,6 @@ public class ExternalSlide {
                 "name='" + name + '\'' +
                 ", id='" + id + '\'' +
                 ", owner='" + owner + '\'' +
-                ", ownerReadable='" + ownerReadable + '\'' +
                 ", parameters=" + parameters +
                 '}';
     }

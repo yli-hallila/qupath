@@ -7,8 +7,7 @@ public class ExternalUser {
     private String id;
     private String name;
     private String email;
-    private String organization;
-    private String organizationId;
+    private ExternalOrganization organization;
     private List<String> roles;
 
     public String getId() {
@@ -23,12 +22,16 @@ public class ExternalUser {
         return email;
     }
 
-    public String getOrganization() {
+    public ExternalOrganization getOrganization() {
         return organization;
     }
 
+    public String getOrganizationName() {
+        return organization.getName();
+    }
+
     public String getOrganizationId() {
-        return organizationId;
+        return organization.getId();
     }
 
     public List<String> getRoles() {
