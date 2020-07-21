@@ -29,9 +29,9 @@ import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.objects.remoteopenslide.ExternalOrganization;
 
-import java.net.MalformedURLException;
+import java.awt.*;
 import java.net.URI;
-import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
@@ -120,15 +120,21 @@ public class RemoteServerLoginManager {
         pane.setPadding(new Insets(0));
     }
 
+    /**
+     * Selects the previous organization the user had selected. If no organization was selected
+     * (e.g. first startup) then the 1st organization is selected.
+     *
+     * @param cbLogos list of ComboBoxes
+     */
     private void selectPreviousOrganization(ComboBox<ExternalOrganization> cbLogos) {
+        cbLogos.getSelectionModel().select(0);
+
         if (PathPrefs.previousOrganization().get() != null) {
-            cbLogos.getItems().forEach(organization -> {
+            for (ExternalOrganization organization : cbLogos.getItems()) {
                 if (organization.getId().equals(PathPrefs.previousOrganization().get())) {
                     cbLogos.getSelectionModel().select(organization);
                 }
-            });
-        } else {
-            cbLogos.getSelectionModel().select(0);
+            }
         }
     }
 
@@ -210,14 +216,19 @@ public class RemoteServerLoginManager {
 
             Set<String> scopes = Set.of("user.read", "openid", "profile", "email");
 
+            SystemBrowserOptions options = SystemBrowserOptions
+                .builder()
+                .openBrowserAction(new JavaFXOpenBrowserAction())
+                .build();
+
             InteractiveRequestParameters parameters = InteractiveRequestParameters
                 .builder(new URI("http://localhost:51820"))
+                .systemBrowserOptions(options)
                 .scopes(scopes)
                 .build();
 
             Task<IAuthenticationResult> task = new Task<>() {
-                @Override
-                protected IAuthenticationResult call() {
+                @Override protected IAuthenticationResult call() {
                     return app.acquireToken(parameters).join();
                 }
             };
@@ -235,11 +246,25 @@ public class RemoteServerLoginManager {
                         qupath.showWorkspaceDialog();
                     });
                 } else {
-                    Dialogs.showErrorNotification(
-                    "Error",
-                    "Error while authenticating with Microsoft."
+                    Dialogs.showErrorMessage(
+                    "Authentication error",
+                    "Error while authenticating with Microsoft, try retrying in a few minutes."
                     );
                 }
+            });
+
+            task.setOnFailed(event -> {
+                Dialogs.showErrorMessage(
+                "Authentication error",
+                "Error while authenticating, try retrying in a few minutes."
+                );
+            });
+
+            task.setOnCancelled(event -> {
+                Dialogs.showErrorMessage(
+                "Authentication cancelled",
+                "Authentication was cancelled, try retrying in a few minutes."
+                );
             });
 
             ProgressDialog progress = new ProgressDialog(task);
@@ -249,7 +274,7 @@ public class RemoteServerLoginManager {
             progress.getDialogPane().setGraphic(null);
             progress.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
             progress.getDialogPane().lookupButton(ButtonType.CANCEL).addEventFilter(ActionEvent.ACTION, e -> {
-                task.cancel();
+                task.cancel(true);
                 progress.setHeaderText("Cancelling...");
                 progress.getDialogPane().lookupButton(ButtonType.CANCEL).setDisable(true);
 
@@ -258,7 +283,7 @@ public class RemoteServerLoginManager {
 
             QuPathGUI.getInstance().submitShortTask(task);
             progress.showAndWait();
-        } catch (MalformedURLException | URISyntaxException e) {
+        } catch (Exception e) {
             Dialogs.showErrorNotification("Error", "Error while logging in. See log for more details");
             logger.error(e.getLocalizedMessage(), e);
         }
@@ -305,6 +330,23 @@ public class RemoteServerLoginManager {
                 imageView.setCache(true);
 
                 setGraphic(imageView);
+            }
+        }
+    }
+
+    static class JavaFXOpenBrowserAction implements OpenBrowserAction {
+
+        @Override
+        public void openBrowser(URL url){
+            try {
+                Desktop.getDesktop().browse(url.toURI());
+            } catch (Exception e) {
+                logger.error("Error while opening browser", e);
+                Dialogs.showInputDialog(
+                "Not supported",
+                "Open this web page to authenticate yourself.",
+                    url.toExternalForm()
+                );
             }
         }
     }
