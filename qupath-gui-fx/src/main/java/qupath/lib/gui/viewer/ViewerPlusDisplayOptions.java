@@ -33,11 +33,20 @@ import javafx.beans.property.SimpleBooleanProperty;
  *
  */
 public class ViewerPlusDisplayOptions {
-	
+
+	private BooleanProperty showSlideTour = new SimpleBooleanProperty(false);
 	private BooleanProperty showOverview = new SimpleBooleanProperty(true);
 	private BooleanProperty showLocation = new SimpleBooleanProperty(true);
 	private BooleanProperty showScalebar = new SimpleBooleanProperty(true);
-	
+
+	/**
+	 * Show Slide Tour.
+	 * @return
+	 */
+	public BooleanProperty showSlideTourProperty() {
+		return showSlideTour;
+	}
+
 	/**
 	 * Show the overview image.
 	 * @return
@@ -61,7 +70,15 @@ public class ViewerPlusDisplayOptions {
 	public BooleanProperty showScalebarProperty() {
 		return showScalebar;
 	}
-	
+
+	/**
+	 * Get the value of {@link #showSlideTourProperty()} ()}.
+	 * @return
+	 */
+	public boolean getShowSlideTour() {
+		return showSlideTour.get();
+	}
+
 	/**
 	 * Get the value of {@link #showOverviewProperty()}.
 	 * @return
@@ -84,6 +101,14 @@ public class ViewerPlusDisplayOptions {
 	 */
 	public boolean getShowScalebar() {
 		return showScalebar.get();
+	}
+
+	/**
+	 * Set the value of {@link #showLocationProperty()}
+	 * @param show
+	 */
+	private void setShowSlideTour(final boolean show) {
+		showSlideTour.set(show);
 	}
 
 	/**

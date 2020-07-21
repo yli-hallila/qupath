@@ -498,6 +498,11 @@ public class QuPathGUI {
 		 */
 		@ActionIcon(PathIcons.OVERVIEW)
 		public final Action SHOW_OVERVIEW = ActionTools.createSelectableAction(viewerDisplayOptions.showOverviewProperty(), "Show slide overview");
+
+		/**
+		 * Toggle the Slide Tour display on the viewer.
+		 */
+		public final Action SHOW_SLIDE_TOUR = ActionTools.createSelectableAction(viewerDisplayOptions.showSlideTourProperty(), "Show slide tour");
 		/**
 		 * Toggle the cursor location display on the viewers.
 		 */
@@ -4251,6 +4256,10 @@ public class QuPathGUI {
 			lastDividerLocation = splitPane.getDividers().get(0).getPosition();
 			pane.setCenter(tabbedPanel);
 		}
+	}
+
+	public void setShowAnalyisPanel(final boolean show) {
+		this.showAnalysisPane.set(show);
 	}
 
 	private boolean analysisPanelVisible() {

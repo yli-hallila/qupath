@@ -58,12 +58,14 @@ public class QuPathViewerPlus extends QuPathViewer {
 
 	private ViewerPlusDisplayOptions viewerDisplayOptions;
 	
-	private ChangeListener<Boolean> locationListener = (v, o, n) -> setLocationVisible(n);
-	private ChangeListener<Boolean> overviewListener = (v, o, n) -> setOverviewVisible(n);
-	private ChangeListener<Boolean> scalebarListener = (v, o, n) -> setScalebarVisible(n);
+	private ChangeListener<Boolean> locationListener  = (v, o, n) -> setLocationVisible(n);
+	private ChangeListener<Boolean> slideTourListener = (v, o, n) -> setSlideTourVisible(n);
+	private ChangeListener<Boolean> overviewListener  = (v, o, n) -> setOverviewVisible(n);
+	private ChangeListener<Boolean> scalebarListener  = (v, o, n) -> setScalebarVisible(n);
 
 	private AnchorPane basePane = new AnchorPane();
-	
+
+	private SlideTour slideTour = new SlideTour(this);
 	private ImageOverview overview = new ImageOverview(this);
 	private Scalebar scalebar = new Scalebar(this);
 
@@ -112,6 +114,14 @@ public class QuPathViewerPlus extends QuPathViewer {
 		basePane.getChildren().add(overviewNode);
 		AnchorPane.setTopAnchor(overviewNode, (double)padding);
 		AnchorPane.setRightAnchor(overviewNode, (double)padding);
+
+		// Add Slide Tour
+		if (imageData != null)
+			slideTour.imageDataChanged(this, null, imageData);
+		Node slideTourNode = slideTour.getNode();
+		basePane.getChildren().add(slideTourNode);
+		AnchorPane.setTopAnchor(slideTourNode, (double)padding);
+		AnchorPane.setLeftAnchor(slideTourNode, (double)padding);
 
 		// Add the location label
 		labelLocation.setTextFill(Color.WHITE);
@@ -178,7 +188,8 @@ public class QuPathViewerPlus extends QuPathViewer {
 		setLocationVisible(viewerDisplayOptions.getShowLocation());
 		setOverviewVisible(viewerDisplayOptions.getShowOverview());
 		setScalebarVisible(viewerDisplayOptions.getShowScalebar());
-		
+
+		viewerDisplayOptions.showSlideTourProperty().addListener(slideTourListener);
 		viewerDisplayOptions.showLocationProperty().addListener(locationListener);
 		viewerDisplayOptions.showOverviewProperty().addListener(overviewListener);
 		viewerDisplayOptions.showScalebarProperty().addListener(scalebarListener);
@@ -260,6 +271,18 @@ public class QuPathViewerPlus extends QuPathViewer {
 	}
 
 	/**
+	 * Returns true if the Slide Tour is visible, false otherwise.
+	 * @return boolean
+	 */
+	public boolean isSlideTourVisible() {
+		return slideTour.isVisible();
+	}
+
+	private void setSlideTourVisible(boolean slideTourVisible) {
+		slideTour.setVisible(slideTourVisible);
+	}
+
+	/**
 	 * Returns true if the image overview is visible, false otherwise.
 	 * @return
 	 */
@@ -286,6 +309,7 @@ public class QuPathViewerPlus extends QuPathViewer {
 	@Override
 	public void closeViewer() {
 		super.closeViewer();
+		viewerDisplayOptions.showSlideTourProperty().removeListener(slideTourListener);
 		viewerDisplayOptions.showLocationProperty().removeListener(locationListener);
 		viewerDisplayOptions.showOverviewProperty().removeListener(overviewListener);
 		viewerDisplayOptions.showScalebarProperty().removeListener(scalebarListener);

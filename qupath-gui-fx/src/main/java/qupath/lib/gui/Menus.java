@@ -730,6 +730,8 @@ class Menus {
 		
 		@ActionDescription("Toggle showing the image overview in the viewer. This is a clickable thumbnail used for navigation.")
 		public final Action SHOW_OVERVIEW = actionManager.SHOW_OVERVIEW;
+		@ActionDescription("Toggle showing the slide tour.")
+		public final Action SHOW_SLIDE_TOUR = actionManager.SHOW_SLIDE_TOUR;
 		@ActionDescription("Toggle showing the cursor location in the viewer.")
 		public final Action SHOW_LOCATION = actionManager.SHOW_LOCATION;
 		@ActionDescription("Toggle showing the scalebar in the viewer.")
