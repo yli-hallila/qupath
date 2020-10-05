@@ -300,6 +300,18 @@ public class QuPathGUI {
 	private BorderPane pane; // Main component, to hold toolbar & splitpane
 	private TabPane analysisPanel = new TabPane();
 	private Region mainViewerPane;
+
+	public Region getMainViewerPane() {
+		return mainViewerPane;
+	}
+
+	public void setMainViewerPane(Region mainViewerPane) {
+		this.mainViewerPane = mainViewerPane;
+	}
+
+	public TabPane getAnalysisPanel() {
+		return analysisPanel;
+	}
 	
 	private ViewerPlusDisplayOptions viewerDisplayOptions = new ViewerPlusDisplayOptions();
 	
@@ -2037,7 +2049,7 @@ public class QuPathGUI {
 		return null;
 	}
 	
-	private Image loadIcon(int size) {
+	public Image loadIcon(int size) {
 		String path = "icons/QuPath_" + size + ".png";
 		try (InputStream stream = getExtensionClassLoader().getResourceAsStream(path)) {
 			if (stream != null) {
@@ -2714,7 +2726,7 @@ public class QuPathGUI {
 	}
 	
 	
-	ProjectImageEntry<BufferedImage> getProjectImageEntry(ImageData<BufferedImage> imageData) {
+	public ProjectImageEntry<BufferedImage> getProjectImageEntry(ImageData<BufferedImage> imageData) {
 		var project = getProject();
 		return project == null ? null : project.getEntry(imageData);
 	}
@@ -4057,7 +4069,7 @@ public class QuPathGUI {
 	private BooleanProperty showAnalysisPane = new SimpleBooleanProperty(true);
 	protected double lastDividerLocation;
 	
-	private void setAnalysisPaneVisible(boolean visible) {
+	public void setAnalysisPaneVisible(boolean visible) {
 		if (visible) {
 			if (analysisPanelVisible())
 				return;

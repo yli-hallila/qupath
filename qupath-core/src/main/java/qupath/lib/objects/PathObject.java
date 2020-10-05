@@ -769,7 +769,7 @@ public abstract class PathObject implements Externalizable {
 	 * 
 	 * @see #retrieveMetadataValue
 	 */
-	protected Object storeMetadataValue(final String key, final String value) {
+	public Object storeMetadataValue(final String key, final String value) {
 		if (metadata == null)
 			metadata = new MetadataMap();
 		return metadata.put(key, value);
@@ -783,7 +783,7 @@ public abstract class PathObject implements Externalizable {
 	 * 
 	 * @see #storeMetadataValue
 	 */
-	protected Object retrieveMetadataValue(final String key) {
+	public Object retrieveMetadataValue(final String key) {
 		return metadata == null ? null : metadata.get(key);
 	}
 	

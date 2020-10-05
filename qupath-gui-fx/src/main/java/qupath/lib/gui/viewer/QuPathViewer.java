@@ -2705,6 +2705,31 @@ public class QuPathViewer implements TileListener<BufferedImage>, PathObjectHier
 		setCenterPixelLocation(x, y);
 	}
 
+	public void zoomROI(ROI roi) {
+		double areaROI;
+
+		if (roi.isLine()) {
+			// Estimate area as an square
+			areaROI = Math.pow(
+				roi.getScaledLength(
+					getServer().getPixelCalibration().getPixelWidthMicrons(),
+					getServer().getPixelCalibration().getPixelHeightMicrons()
+				), 2
+			);
+		} else {
+			areaROI = roi.getScaledArea(
+				getServer().getPixelCalibration().getPixelWidthMicrons(),
+				getServer().getPixelCalibration().getPixelHeightMicrons()
+			);
+		}
+
+		double defaultPixelCalibration = getServer().getPixelCalibration().getPixelHeightMicrons() * getServer().getMetadata().getMagnification();
+		double areaViewerDefault = (getHeight() * defaultPixelCalibration) * (getWidth() * defaultPixelCalibration);
+
+		double magnification = Math.min(60, Math.sqrt(areaViewerDefault / (areaROI * 2)));
+
+		setMagnification(magnification);
+	}
 
 
 	protected void updateAffineTransform() {

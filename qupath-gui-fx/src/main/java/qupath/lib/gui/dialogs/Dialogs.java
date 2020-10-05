@@ -873,7 +873,7 @@ public class Dialogs {
 		public Dialog<ButtonType> build() {
 			Dialog<ButtonType> dialog;
 			if (alertType == null)
-				dialog = new Alert(AlertType.NONE);
+				dialog = new Dialog<>();
 			else
 				dialog = new Alert(alertType);
 			

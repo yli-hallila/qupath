@@ -45,7 +45,7 @@ import java.util.Set;
  * @author Pete Bankhead
  *
  */
-class MetadataMap implements Map<String, String>, Externalizable {
+public class MetadataMap implements Map<String, String>, Externalizable {
 	
 	private static final long serialVersionUID = 1L;
 	
