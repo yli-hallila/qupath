@@ -420,7 +420,7 @@ public class WorkspaceManager {
 
             if (success) {
                 File projectFile = Path.of(tempPathStr, extProject.getId(), "project.qpproj").toFile();
-                qupath.lib.projects.Project<BufferedImage> project = ProjectIO.loadProject(projectFile, BufferedImage.class);
+                RemoteProject project = new RemoteProject(projectFile);
                 project.setName(extProject.getName());
 
                 if (manager != null) {
