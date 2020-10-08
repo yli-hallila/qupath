@@ -183,8 +183,11 @@ public class QuPathViewerPlus extends QuPathViewer {
 		viewerDisplayOptions.showOverviewProperty().addListener(overviewListener);
 		viewerDisplayOptions.showScalebarProperty().addListener(scalebarListener);
 	}
-	
-	
+
+	public AnchorPane getBasePane() {
+		return basePane;
+	}
+
 	private void updateSliders() {
 		if (sliderZ == null || sliderT == null)
 			return;
