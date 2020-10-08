@@ -259,14 +259,8 @@ public interface Project<T> {
 	 * @return
 	 */
 	public Manager<PixelClassifier> getPixelClassifiers();
-
-    void setName(String name);
-
-	Object storeMetadataValue(String key, String value);
-
-	Object retrieveMetadataValue(String key);
-
-
+	
+	
 //	public List<String> listPixelClassifiers();
 //	
 //	public PixelClassifier loadPixelClassifier(String name);

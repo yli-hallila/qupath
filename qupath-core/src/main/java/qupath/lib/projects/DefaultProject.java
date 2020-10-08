@@ -66,7 +66,6 @@ import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerBuilder.ServerBuilder;
 import qupath.lib.io.GsonTools;
 import qupath.lib.io.PathIO;
-import qupath.lib.objects.MetadataMap;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.classes.PathClass;
@@ -81,7 +80,7 @@ import qupath.lib.projects.ResourceManager.Manager;
  * @author Pete Bankhead
  *
  */
-public class DefaultProject implements Project<BufferedImage> {
+class DefaultProject implements Project<BufferedImage> {
 
 	public final static String IMAGE_ID = "PROJECT_ENTRY_ID";
 
@@ -92,8 +91,6 @@ public class DefaultProject implements Project<BufferedImage> {
 	private final String LATEST_VERSION = GeneralTools.getVersion();
 	
 	private String version = null;
-
-	private MetadataMap metadata = null;
 
 	/**
 	 * Base directory.
@@ -230,7 +227,7 @@ public class DefaultProject implements Project<BufferedImage> {
 		return true;
 	}
 	
-	public File getFile() {
+	private File getFile() {
 		return file;
 	}
 	
@@ -244,7 +241,7 @@ public class DefaultProject implements Project<BufferedImage> {
 		return getFile().toURI();
 	}
 	
-	public File getBaseDirectory() {
+	private File getBaseDirectory() {
 		return dirBase;
 	}
 	
@@ -396,27 +393,10 @@ public class DefaultProject implements Project<BufferedImage> {
 		}
 		return dirBase.getName();
 	}
-
-	@Override
-	public void setName(String name) {
-		this.name = name;
-	}
 	
 	@Override
 	public String toString() {
 		return "Project: " + Project.getNameFromURI(getURI());
-	}
-
-	@Override
-	public Object storeMetadataValue(final String key, final String value) {
-		if (metadata == null)
-			metadata = new MetadataMap();
-		return metadata.put(key, value);
-	}
-
-	@Override
-	public Object retrieveMetadataValue(final String key) {
-		return metadata == null ? null : metadata.get(key);
 	}
 	
 	@Override
@@ -1010,10 +990,6 @@ public class DefaultProject implements Project<BufferedImage> {
 		builder.addProperty("modifyTimestamp", getModificationTimestamp());
 		builder.addProperty("uri", fileProject.toURI().toString());
 		builder.addProperty("lastID", counter.get());
-
-		if (metadata != null) {
-			builder.addProperty("metadata", gson.toJson(metadata));
-		}
 //		if (pathClassArray != null) {
 //			builder.add("pathClasses", pathClassArray);			
 //		}
@@ -1106,9 +1082,6 @@ public class DefaultProject implements Project<BufferedImage> {
 			}
 			counter.set(lastID);
 
-			if (element.has("metadata")) {
-				metadata = gson.fromJson(element.get("metadata").getAsString(), MetadataMap.class);
-			}
 			
 			pathClasses.addAll(loadPathClasses());
 			
