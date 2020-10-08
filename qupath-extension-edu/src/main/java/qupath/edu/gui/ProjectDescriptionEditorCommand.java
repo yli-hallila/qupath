@@ -2,14 +2,11 @@ package qupath.edu.gui;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.lib.common.GeneralTools;
+import qupath.edu.lib.RemoteProject;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
-import qupath.lib.projects.Project;
 
-import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.util.Optional;
 
 public class ProjectDescriptionEditorCommand {
 
@@ -17,18 +14,21 @@ public class ProjectDescriptionEditorCommand {
     private static final Logger logger = LoggerFactory.getLogger(ProjectDescriptionEditorCommand.class);
 
     public static void openDescriptionEditor() {
-        String initialInput = (String) qupath.getProject().retrieveMetadataValue("Description");
+        if (qupath.getProject() instanceof RemoteProject) {
+            RemoteProject project = (RemoteProject) qupath.getProject();
+
+            String initialInput = (String) project.retrieveMetadataValue("Description");
 //        Optional<String> result = Dialogs.showWysiwygEditor(initialInput);
-        String result = Dialogs.showInputDialog("Description", "", initialInput);
+            String result = Dialogs.showInputDialog("Description", "", initialInput);
 
-        if (result != null) {
-            Project<BufferedImage> project = qupath.getProject();
-            project.storeMetadataValue("Description", result);
+            if (result != null) {
+                project.storeMetadataValue("Description", result);
 
-            try {
-                project.syncChanges();
-            } catch (IOException e) {
-                logger.error("Error while syncing project changes.");
+                try {
+                    project.syncChanges();
+                } catch (IOException e) {
+                    logger.error("Error while syncing project changes.");
+                }
             }
         }
     }

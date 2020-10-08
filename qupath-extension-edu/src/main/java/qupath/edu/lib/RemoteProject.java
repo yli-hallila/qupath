@@ -3,11 +3,16 @@ package qupath.edu.lib;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
+import javafx.application.Platform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.edu.EduExtension;
+import qupath.edu.exceptions.HttpException;
+import qupath.edu.gui.WorkspaceManager;
 import qupath.lib.classifiers.object.ObjectClassifier;
 import qupath.lib.classifiers.pixel.PixelClassifier;
 import qupath.lib.common.GeneralTools;
+import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.ImageServerBuilder;
@@ -52,6 +57,8 @@ public class RemoteProject implements Project<BufferedImage> {
 	private String name;
 	private File file;
 
+	private String id;
+
 	private boolean maskNames = false;
 	private MetadataMap metadata = null;
 
@@ -83,6 +90,8 @@ public class RemoteProject implements Project<BufferedImage> {
 				metadata = gson.fromJson(element.get("metadata").getAsString(), MetadataMap.class);
 			}
 
+			// todo: temp
+			this.id = file.getParentFile().getName();
 		} catch (Exception e) {
 			throw new IOException(e);
 		}
@@ -236,8 +245,94 @@ public class RemoteProject implements Project<BufferedImage> {
 		logger.debug("Renaming project to {}", pathProject);
 		Files.move(pathTempNew, pathProject, StandardCopyOption.REPLACE_EXISTING);
 
-		// TODO: Upload new version to server. This perhaps isn't the best place to sync, as this
-		//       method is executed multiple times without the user specifically asking to save.
+		syncChangesToServer();
+	}
+
+	private boolean askedToLogin = false;
+
+	// TODO: WIP
+	private void syncChangesToServer() throws IOException {
+		var hasWriteAccess = false;
+		var makeCopy = false;
+
+		try {
+			hasWriteAccess = RemoteOpenslide.hasPermission(getId());
+		} catch (HttpException e) {
+			logger.error("Error while syncing project.", e);
+
+			// TODO: Store a local copy of changes and sync again when connection works again?
+
+			Dialogs.showErrorMessage(
+			"Sync error",
+			"Error while syncing changes to server. If you exit now your changes will be lost; please retry later."
+			);
+		}
+
+		if (RemoteOpenslide.hasRole("MANAGE_PERSONAL_PROJECTS") && !hasWriteAccess) {
+			var response = Dialogs.showYesNoDialog("Save changes",
+			"You've made changes to this project but you don't have the required permissions to save these changes." +
+				"\n\n" +
+				"Do you want to make a personal copy of this project which you can edit?");
+
+			if (response) {
+				makeCopy = true;
+			} else {
+				return;
+			}
+		} else if (!askedToLogin) {
+			var login = Dialogs.showYesNoDialog("Save changes",
+			"You've made changes to this project but you're not logged in." +
+				"\n\n" +
+				"Do you wish to login?");
+
+			askedToLogin = true;
+
+			if (login) {
+				RemoteOpenslide.logout();
+				EduExtension.showWorkspaceOrLoginDialog();
+			}
+
+			return;
+		}
+
+		if (makeCopy) {
+			Optional<String> query = RemoteOpenslide.createPersonalProject(getName());
+
+			try {
+				String projectId = query.orElseThrow(IOException::new);
+
+				Path dest = Path.of(System.getProperty("java.io.tmpdir"), "qupath-ext-project", projectId, File.separator);
+				Path src = file.getParentFile().toPath();
+
+				Files.createDirectory(dest.toAbsolutePath());
+
+				FileUtil.copy(src.toFile(), dest.toFile());
+
+				Path projectZipFile = Files.createTempFile("qupath-project-", ".zip");
+
+				ZipUtil.zip(dest, projectZipFile);
+
+				RemoteOpenslide.uploadProject(projectId, projectZipFile.toFile());
+				Files.delete(projectZipFile);
+
+				Platform.runLater(() -> WorkspaceManager.loadProject(projectId, "Copy of " + getName()));
+			} catch (IOException e) {
+				logger.error("Error while creating personal project", e);
+			}
+		} else {
+			logger.debug("Uploading project to server");
+
+			File projectFolder = file.getParentFile();
+			Path projectZipFile = Files.createTempFile("qupath-project-", ".zip");
+
+			ZipUtil.zip(projectFolder.toPath(), projectZipFile);
+
+			RemoteOpenslide.uploadProject(file.getParentFile().getName(), projectZipFile.toFile());
+			Files.delete(projectZipFile);
+
+			Dialogs.showInfoNotification("[Debug]", "Changes synced to server.");
+			logger.debug("Uploaded to server");
+		}
 	}
 
 	@Override
@@ -250,9 +345,12 @@ public class RemoteProject implements Project<BufferedImage> {
 		return name;
 	}
 
-	@Override
 	public void setName(String name) {
 		this.name = name;
+	}
+
+	public String getId() {
+		return id;
 	}
 
 	@Override
@@ -280,14 +378,12 @@ public class RemoteProject implements Project<BufferedImage> {
 		throw new UnsupportedOperationException();
 	}
 
-	@Override
 	public Object storeMetadataValue(String key, String value) {
 		if (metadata == null)
 			metadata = new MetadataMap();
 		return metadata.put(key, value);
 	}
 
-	@Override
 	public Object retrieveMetadataValue(String key) {
 		return metadata == null ? null : metadata.get(key);
 	}
@@ -448,14 +544,20 @@ public class RemoteProject implements Project<BufferedImage> {
 			if (containsMetadata("imageData")) {
 				InputStream is = new ByteArrayInputStream(getMetadataValue("imageData").getBytes());
 
-				return PathIO.readImageData(is, null, null, BufferedImage.class);
+				ImageData<BufferedImage> imageData = PathIO.readImageData(is, null, null, BufferedImage.class);
+				imageData.setChanged(false);
+
+				is.close();
+
+				return imageData;
 			}
 
 			// TODO: What if serverBuilder is null? Can it be null?
 
 			try {
-				ImageData<BufferedImage> imageData = new ImageData<>(serverBuilder.build(), null, ImageData.ImageType.BRIGHTFIELD_H_E);
+				ImageData<BufferedImage> imageData = new ImageData<>(serverBuilder.build(), null, null);
 				imageData.setProperty(IMAGE_ID, entryID.toString());
+				imageData.setChanged(false);
 
 				return imageData;
 			} catch (Exception e) {
