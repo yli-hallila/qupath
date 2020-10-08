@@ -4,9 +4,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.lib.RemoteProject;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.dialogs.Dialogs;
 
 import java.io.IOException;
+import java.util.Optional;
 
 public class ProjectDescriptionEditorCommand {
 
@@ -17,12 +17,11 @@ public class ProjectDescriptionEditorCommand {
         if (qupath.getProject() instanceof RemoteProject) {
             RemoteProject project = (RemoteProject) qupath.getProject();
 
-            String initialInput = (String) project.retrieveMetadataValue("Description");
-//        Optional<String> result = Dialogs.showWysiwygEditor(initialInput);
-            String result = Dialogs.showInputDialog("Description", "", initialInput);
+            String initialInput = (String) project.retrieveMetadataValue(RemoteProject.PROJECT_INFORMATION);
+            Optional<String> result = CustomDialogs.showWysiwygEditor(initialInput);
 
-            if (result != null) {
-                project.storeMetadataValue("Description", result);
+            if (result.isPresent()) {
+                project.storeMetadataValue(RemoteProject.PROJECT_INFORMATION, result.get());
 
                 try {
                     project.syncChanges();

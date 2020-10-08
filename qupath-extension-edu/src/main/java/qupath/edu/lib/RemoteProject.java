@@ -46,6 +46,7 @@ import java.util.*;
 public class RemoteProject implements Project<BufferedImage> {
 
 	public final static String IMAGE_ID = "PROJECT_ENTRY_ID";
+	public final static String PROJECT_INFORMATION = "PROJECT_INFORMATION";
 
 	private final Logger logger = LoggerFactory.getLogger(getClass());
 

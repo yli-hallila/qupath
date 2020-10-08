@@ -34,6 +34,8 @@ public class EduExtension implements QuPathExtension {
     private QuPathGUI qupath;
 
     private static final SimpleBooleanProperty noWriteAccess = new SimpleBooleanProperty(true);
+    private final Browser projectInformation = new Browser();
+    private final TabPane tabbedPanel = new TabPane();
 
     @Override
     public void installExtension(QuPathGUI qupath) {
@@ -63,6 +65,34 @@ public class EduExtension implements QuPathExtension {
         if (EduOptions.showLoginDialogOnStartup().get()) {
             showWorkspaceOrLoginDialog();
         }
+
+        onProjectChange();
+        onSlideChange();
+    }
+
+    private void onSlideChange() {
+        qupath.imageDataProperty().addListener((obs, o, n) -> {
+            qupath.getAnalysisPanel().getSelectionModel().select(0);
+            tabbedPanel.getSelectionModel().select(1);
+        });
+    }
+
+    private void onProjectChange() {
+        qupath.projectProperty().addListener((obs, o, n) -> {
+            if (n == null) {
+                projectInformation.setContent("No project open");
+            } else if (n instanceof RemoteProject) {
+                RemoteProject project = (RemoteProject) n;
+
+                Object informationText = project.retrieveMetadataValue(RemoteProject.PROJECT_INFORMATION);
+
+                if (informationText == null) {
+                    projectInformation.setContent("No information available for this project");
+                } else {
+                    projectInformation.setContent((String) informationText);
+                }
+            }
+        });
     }
 
     private void initializeTools(QuPathGUI qupath) {
@@ -118,7 +148,6 @@ public class EduExtension implements QuPathExtension {
     }
 
     private void replaceViewer() {
-        Browser projectInformation = new Browser();
         projectInformation.setTextHighlightable(false);
         projectInformation.setOnMouseClicked(event -> {
             if (event.getClickCount() > 1 && qupath.getProject() != null) {
@@ -130,9 +159,6 @@ public class EduExtension implements QuPathExtension {
             }
         });
 
-        // TODO: Hook this up to update the text when loading a project
-
-        TabPane tabbedPanel = new TabPane();
         tabbedPanel.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         tabbedPanel.getTabs().add(new Tab("Project Information", projectInformation));
         tabbedPanel.getTabs().add(new Tab("Viewer", qupath.getMainViewerPane()));
