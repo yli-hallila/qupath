@@ -2,17 +2,21 @@ package qupath.edu;
 
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.scene.Node;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
+import javafx.scene.layout.AnchorPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.gui.*;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.RemoteProject;
+import qupath.edu.tours.SlideTour;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.extensions.QuPathExtension;
 import qupath.lib.gui.panes.PreferencePane;
+import qupath.lib.gui.viewer.QuPathViewerPlus;
 
 import java.io.IOException;
 
@@ -59,6 +63,7 @@ public class EduExtension implements QuPathExtension {
 
         replaceAnnotationsPane();
         replaceViewer();
+        registerSlideTours();
 
         initializeTools(qupath);
 
@@ -168,6 +173,20 @@ public class EduExtension implements QuPathExtension {
         // Refreshes the pane and makes the tabs visible
         qupath.setAnalysisPaneVisible(false);
         qupath.setAnalysisPaneVisible(true);
+    }
+
+    private void registerSlideTours() {
+        QuPathViewerPlus viewer = qupath.getViewer();
+
+        SlideTour slideTour = new SlideTour(viewer);
+        Node slideTourNode = slideTour.getNode();
+
+        viewer.getBasePane().getChildren().add(slideTour.getNode());
+
+        AnchorPane.setTopAnchor(slideTourNode, 10d);
+        AnchorPane.setLeftAnchor(slideTourNode, 10d);
+
+        qupath.getViewer().addViewerListener(new SlideTour(qupath.getViewer()));
     }
 
     private void checkSaveChanges() {
