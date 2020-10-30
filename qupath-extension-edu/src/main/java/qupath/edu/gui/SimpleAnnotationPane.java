@@ -38,11 +38,14 @@ import java.awt.image.BufferedImage;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static qupath.lib.gui.ActionTools.createAction;
+import static qupath.lib.gui.ActionTools.createMenuItem;
+
 public class SimpleAnnotationPane implements PathObjectSelectionListener, ChangeListener<ImageData<BufferedImage>>, PathObjectHierarchyListener {
 
     private final static Logger logger = LoggerFactory.getLogger(SimpleAnnotationPane.class);
 
-    private final String ANSWER_KEY = "eduAnswer";
+    public static final String ANSWER_KEY = "eduAnswer";
 
     private QuPathGUI qupath;
     private ImageData<BufferedImage> imageData;
@@ -77,6 +80,13 @@ public class SimpleAnnotationPane implements PathObjectSelectionListener, Change
     private StringProperty answerProperty = new SimpleStringProperty();
     private StringProperty showAnswerTextProperty = new SimpleStringProperty("No answer defined");
 
+    public ListView<PathObject> getListAnnotations() {
+        return listAnnotations;
+    }
+
+    public PathObjectHierarchy getHierarchy() {
+        return hierarchy;
+    }
 
     /**
      * Constructor.
@@ -134,6 +144,10 @@ public class SimpleAnnotationPane implements PathObjectSelectionListener, Change
         PathPrefs.colorDefaultObjectsProperty().addListener((v, o, n) -> listAnnotations.refresh());
 
         ContextMenu menuAnnotations = GuiTools.populateAnnotationsMenu(qupath, new ContextMenu());
+        menuAnnotations.getItems().add(3,
+            createMenuItem(createAction(() -> EditAnnotationAnswerDialog.openDialog(this), "Set answer properties"))
+        );
+
         listAnnotations.setContextMenu(menuAnnotations);
 
         // Add the main annotation list

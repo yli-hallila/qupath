@@ -20,9 +20,7 @@ import org.slf4j.LoggerFactory;
 import qupath.edu.EduExtension;
 import qupath.edu.EduOptions;
 import qupath.edu.lib.RemoteOpenslide;
-import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.dialogs.Dialogs;
-import qupath.lib.gui.prefs.PathPrefs;
+import qupath.edu.lib.RemoteProject;
 import qupath.edu.lib.ZipUtil;
 import qupath.edu.models.ExternalProject;
 import qupath.edu.models.ExternalSlide;
@@ -56,6 +54,11 @@ public class WorkspaceManager {
     private boolean filterWorkspaces = true;
 
     public static void showWorkspace(QuPathGUI qupath) {
+        if (!RemoteOpenslide.isAuthenticated()) {
+            RemoteServerLoginManager.showLoginDialog();
+            return;
+        }
+
         WorkspaceManager manager = new WorkspaceManager(qupath);
 
         dialog = Dialogs.builder()

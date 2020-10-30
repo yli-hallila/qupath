@@ -280,7 +280,7 @@ public class RemoteProject implements Project<BufferedImage> {
 			} else {
 				return;
 			}
-		} else if (!askedToLogin) {
+		} else if (!hasWriteAccess && !askedToLogin) {
 			var login = Dialogs.showYesNoDialog("Save changes",
 			"You've made changes to this project but you're not logged in." +
 				"\n\n" +
@@ -320,7 +320,7 @@ public class RemoteProject implements Project<BufferedImage> {
 			} catch (IOException e) {
 				logger.error("Error while creating personal project", e);
 			}
-		} else {
+		} else if (hasWriteAccess) {
 			logger.debug("Uploading project to server");
 
 			File projectFolder = file.getParentFile();
@@ -380,8 +380,10 @@ public class RemoteProject implements Project<BufferedImage> {
 	}
 
 	public Object storeMetadataValue(String key, String value) {
-		if (metadata == null)
+		if (metadata == null) {
 			metadata = new MetadataMap();
+		}
+
 		return metadata.put(key, value);
 	}
 
@@ -390,6 +392,8 @@ public class RemoteProject implements Project<BufferedImage> {
 	}
 
 	class RemoteProjectImageEntry implements ProjectImageEntry<BufferedImage> {
+
+		private transient final String IMAGE_DATA = "imageData";
 
 		/**
 		 * ServerBuilder. This should be lightweight & capable of being JSON-ified.
@@ -542,8 +546,8 @@ public class RemoteProject implements Project<BufferedImage> {
 
 		@Override
 		public ImageData<BufferedImage> readImageData() throws IOException {
-			if (containsMetadata("imageData")) {
-				InputStream is = new ByteArrayInputStream(getMetadataValue("imageData").getBytes());
+			if (containsMetadata(IMAGE_DATA)) {
+				ByteArrayInputStream is = new ByteArrayInputStream(Base64.getDecoder().decode(getMetadataValue(IMAGE_DATA)));
 
 				ImageData<BufferedImage> imageData = PathIO.readImageData(is, null, null, BufferedImage.class);
 				imageData.setChanged(false);
@@ -570,10 +574,10 @@ public class RemoteProject implements Project<BufferedImage> {
 		public void saveImageData(ImageData<BufferedImage> imageData) throws IOException {
 			imageData.getHistoryWorkflow().clear();
 
-			OutputStream os = new ByteArrayOutputStream();
+			ByteArrayOutputStream os = new ByteArrayOutputStream();
 			PathIO.writeImageData(os, imageData);
 
-			putMetadataValue("imageData", os.toString());
+			putMetadataValue(IMAGE_DATA, Base64.getEncoder().encodeToString(os.toByteArray()));
 		}
 
 		@Override
@@ -583,7 +587,7 @@ public class RemoteProject implements Project<BufferedImage> {
 
 		@Override
 		public boolean hasImageData() {
-			return containsMetadata("imageData");
+			return containsMetadata(IMAGE_DATA);
 		}
 
 		@Override
@@ -595,7 +599,7 @@ public class RemoteProject implements Project<BufferedImage> {
 
 			if (!getMetadataMap().isEmpty()) {
 				for (Map.Entry<String, String> mapEntry : getMetadataMap().entrySet()) {
-					if (mapEntry.getKey().equals("imageData")) {
+					if (mapEntry.getKey().equals(IMAGE_DATA)) {
 						continue;
 					}
 
