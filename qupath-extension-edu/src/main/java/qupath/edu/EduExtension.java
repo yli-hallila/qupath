@@ -24,7 +24,6 @@ import static qupath.lib.gui.ActionTools.*;
 
 /**
  * TODO:
- *  - Automatically update host path when editing preferences
  *  - ArrowTool and its respective ROI
  *  - Saving & syncing to server
  *  - Annotation properties
@@ -50,22 +49,20 @@ public class EduExtension implements QuPathExtension {
             return;
         }
 
+        initializePreferences();
+
         if (!EduOptions.extensionEnabled().get()) {
             return;
         }
 
-        initializePreferences();
         initializeMenus();
 
         RemoteOpenslide.setHost(EduOptions.remoteOpenslideHost().get());
-
-        disableButtons();
+        EduOptions.remoteOpenslideHost().addListener(((obs, oldHost, newHost) -> RemoteOpenslide.setHost(newHost)));
 
         replaceAnnotationsPane();
         replaceViewer();
         registerSlideTours();
-
-        initializeTools(qupath);
 
         if (EduOptions.showLoginDialogOnStartup().get()) {
             showWorkspaceOrLoginDialog();
@@ -73,6 +70,8 @@ public class EduExtension implements QuPathExtension {
 
         onProjectChange();
         onSlideChange();
+
+        disableButtons();
     }
 
     private void onSlideChange() {
@@ -98,10 +97,6 @@ public class EduExtension implements QuPathExtension {
                 }
             }
         });
-    }
-
-    private void initializeTools(QuPathGUI qupath) {
-        // TODO: Add support for Arrow ROI
     }
 
     @Override
@@ -131,15 +126,20 @@ public class EduExtension implements QuPathExtension {
     private void initializePreferences() {
         PreferencePane prefs = QuPathGUI.getInstance().getPreferencePane();
 
+        prefs.addPropertyPreference(EduOptions.extensionEnabled(), Boolean.class,
+            "Extension Enabled",
+            "Edu",
+            "Restart needed for changes to take effect");
+
         prefs.addPropertyPreference(EduOptions.remoteOpenslideHost(), String.class,
-                "Edu Host",
-                "Edu",
-                "Server used with QuPath Education");
+            "Edu Host",
+            "Edu",
+            "Server used with QuPath Education");
 
         prefs.addPropertyPreference(EduOptions.showLoginDialogOnStartup(), Boolean.class,
-                "Show login dialog on startup",
-                "Edu",
-                "If enabled, opens the login dialog on startup.");
+            "Show login dialog on startup",
+            "Edu",
+        "   If enabled, opens the login dialog on startup.");
     }
 
     public static void setWriteAccess(boolean hasWriteAccess) {
