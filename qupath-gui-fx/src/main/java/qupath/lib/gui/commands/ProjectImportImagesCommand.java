@@ -100,7 +100,7 @@ import qupath.lib.projects.ProjectImageEntry;
  * 
  * @author Pete Bankhead
  */
-class ProjectImportImagesCommand {
+public class ProjectImportImagesCommand {
 	
 	private final static Logger logger = LoggerFactory.getLogger(ProjectImportImagesCommand.class);
 		

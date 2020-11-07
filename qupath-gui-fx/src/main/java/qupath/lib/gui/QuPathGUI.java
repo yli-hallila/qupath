@@ -281,7 +281,11 @@ public class QuPathGUI {
 	private ObjectProperty<Project<BufferedImage>> projectProperty = new SimpleObjectProperty<>();
 	
 	private ProjectBrowser projectBrowser;
-	
+
+	public ProjectBrowser getProjectBrowser() {
+		return projectBrowser;
+	}
+
 	/**
 	 * Preference panel, which may be used by extensions to add in their on preferences if needed
 	 */
