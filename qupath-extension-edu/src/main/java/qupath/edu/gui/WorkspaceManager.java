@@ -1,7 +1,5 @@
 package qupath.edu.gui;
 
-import com.google.common.io.MoreFiles;
-import com.google.common.io.RecursiveDeleteOption;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
@@ -25,14 +23,13 @@ import qupath.edu.lib.ZipUtil;
 import qupath.edu.models.ExternalProject;
 import qupath.edu.models.ExternalSlide;
 import qupath.edu.models.ExternalWorkspace;
-import qupath.lib.projects.ProjectIO;
+import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.dialogs.Dialogs;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -54,11 +51,6 @@ public class WorkspaceManager {
     private boolean filterWorkspaces = true;
 
     public static void showWorkspace(QuPathGUI qupath) {
-        if (!RemoteOpenslide.isAuthenticated()) {
-            RemoteServerLoginManager.showLoginDialog();
-            return;
-        }
-
         WorkspaceManager manager = new WorkspaceManager(qupath);
 
         dialog = Dialogs.builder()

@@ -17,6 +17,7 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
@@ -26,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.commands.ProjectImportImagesCommand;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.images.servers.ImageServerBuilder;
@@ -36,9 +38,8 @@ import java.awt.*;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.List;
 
 import static qupath.edu.lib.RemoteOpenslide.*;
 
@@ -62,7 +63,6 @@ public class ExternalSlideManager {
                 .content(manager.getPane())
                 .buttons(ButtonType.CLOSE)
                 .width(Math.min(800, screenSize.getWidth() / 2))
-                .resizable()
                 .build();
 
         dialog.showAndWait();
@@ -82,6 +82,12 @@ public class ExternalSlideManager {
         table = new TableView<>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPlaceholder(new Text("No slides, none match search criteria or no permissions."));
+        table.setEditable(true);
+
+        TableColumn<ExternalSlide, Boolean> selectedColumn = new TableColumn<>("Selected");
+        selectedColumn.setCellValueFactory(new PropertyValueFactory<>("selected"));
+        selectedColumn.setCellFactory(tc -> new CheckBoxTableCell<>());
+        selectedColumn.setEditable(true);
 
         TableColumn<ExternalSlide, String> slideNameColumn = new TableColumn<>("Name");
         slideNameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
@@ -95,7 +101,7 @@ public class ExternalSlideManager {
         uuidColumn.setCellValueFactory(new PropertyValueFactory<>("id"));
         uuidColumn.setReorderable(false);
 
-        table.getColumns().addAll(slideNameColumn, ownerColumn, uuidColumn);
+        table.getColumns().addAll(selectedColumn, slideNameColumn, ownerColumn, uuidColumn);
 
         /* Filter / Search */
 
@@ -106,7 +112,7 @@ public class ExternalSlideManager {
 
         filterTextField.textProperty().addListener(((observable, oldValue, newValue) -> {
             filteredData.setPredicate(data -> {
-                if (newValue == null || newValue.isEmpty()) {
+                if (newValue == null || newValue.isEmpty() || data.isSelected()) {
                     return true;
                 }
 
@@ -135,25 +141,22 @@ public class ExternalSlideManager {
         BooleanBinding slideSelected = table.getSelectionModel().selectedItemProperty().isNull();
         BooleanBinding canManageSlides = new SimpleBooleanProperty(RemoteOpenslide.hasRole("MANAGE_SLIDES")).not();
 
-        Button btnDelete = new Button("Delete");
-        btnDelete.setOnAction(e -> deleteSlide());
-        btnDelete.disableProperty().bind(slideSelected.or(hasWriteAccess.not()).or(canManageSlides));
-
-        Button btnRename = new Button("Rename");
-        btnRename.setOnAction(e -> renameSlide());
-        btnRename.disableProperty().bind(slideSelected.or(hasWriteAccess.not()).or(canManageSlides));
+        Button btnAdd = new Button("Add selected");
+        btnAdd.setTooltip(new Tooltip("Add selected slides to current project"));
+        btnAdd.disableProperty().bind(qupath.projectProperty().isNull());
+        btnAdd.setOnAction(e -> addImages());
 
         Button btnOpen = new Button("Open slide");
         btnOpen.setOnAction(e -> openSlide(table.getSelectionModel().getSelectedItem()));
         btnOpen.disableProperty().bind(slideSelected);
 
-        Button btnProperties = new Button("View Properties");
-        btnProperties.setOnAction(e -> viewProperties());
-        btnProperties.disableProperty().bind(slideSelected);
+        Button btnRename = new Button("Rename");
+        btnRename.setOnAction(e -> renameSlide());
+        btnRename.disableProperty().bind(slideSelected.or(hasWriteAccess.not()).or(canManageSlides));
 
-        Button btnUpload = new Button("Upload new slide");
-        btnUpload.setOnAction(e -> uploadSlide());
-        btnUpload.disableProperty().bind(canManageSlides);
+        Button btnDelete = new Button("Delete");
+        btnDelete.setOnAction(e -> deleteSlide());
+        btnDelete.disableProperty().bind(slideSelected.or(hasWriteAccess.not()).or(canManageSlides));
 
         MenuItem miCopyID = new MenuItem("Copy ID");
         miCopyID.setOnAction(e -> copySlideID());
@@ -161,11 +164,19 @@ public class ExternalSlideManager {
         MenuItem miCopyURL = new MenuItem("Copy URL");
         miCopyURL.setOnAction(e -> copySlideURL());
 
-        MenuButton menuCopy = new MenuButton("Copy ...");
-        menuCopy.getItems().addAll(miCopyID, miCopyURL);
-        menuCopy.disableProperty().bind(slideSelected);
+        MenuItem miViewProperties = new MenuItem("View properties");
+        miViewProperties.setOnAction(e -> viewProperties());
+        miViewProperties.disableProperty().bind(slideSelected);
 
-        GridPane paneButtons = PaneTools.createColumnGridControls(btnDelete, btnRename, btnOpen, btnProperties, btnUpload, menuCopy);
+        MenuButton menuMore = new MenuButton("...");
+        menuMore.getItems().addAll(miCopyID, miCopyURL, miViewProperties);
+        menuMore.disableProperty().bind(slideSelected);
+
+        Button btnUpload = new Button("Upload new slide");
+        btnUpload.setOnAction(e -> uploadSlide());
+        btnUpload.disableProperty().bind(canManageSlides);
+
+        GridPane paneButtons = PaneTools.createColumnGridControls(btnAdd, btnOpen, btnRename, btnDelete, menuMore, btnUpload);
         paneButtons.setHgap(5);
 
         /* Pane */
@@ -179,6 +190,18 @@ public class ExternalSlideManager {
         pane.setCenter(table);
         pane.setBottom(paneButtons);
         pane.setPadding(new Insets(10));
+    }
+
+    private void addImages() {
+        List<String> urls = new ArrayList<>();
+
+        table.getItems().stream().filter(ExternalSlide::isSelected).forEach(slide -> {
+            urls.add(RemoteOpenslide.getHost() + "/" + RemoteOpenslide.e(slide.getId()) + "#" + RemoteOpenslide.e(slide.getName()));
+        });
+
+        dialog.close();
+
+        Platform.runLater(() -> ProjectImportImagesCommand.promptToImportImages(qupath, urls.toArray(new String[0])));
     }
 
     private void copySlideURL() {

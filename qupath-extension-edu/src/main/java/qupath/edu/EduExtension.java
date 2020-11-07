@@ -2,20 +2,27 @@ package qupath.edu;
 
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.geometry.Insets;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.GridPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.gui.*;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.RemoteProject;
 import qupath.edu.tours.SlideTour;
+import qupath.lib.gui.ActionTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.extensions.QuPathExtension;
 import qupath.lib.gui.panes.PreferencePane;
+import qupath.lib.gui.panes.ProjectBrowser;
+import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.gui.viewer.QuPathViewerPlus;
 
 import java.io.IOException;
@@ -25,14 +32,13 @@ import static qupath.lib.gui.ActionTools.*;
 /**
  * TODO:
  *  - ArrowTool and its respective ROI
- *  - Saving & syncing to server
- *  - Annotation properties
  *  - Tons of minor changes
+ *  - Figure out why "Save as" syncs changes but not "Save"
  *
  */
 public class EduExtension implements QuPathExtension {
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private static final Logger logger = LoggerFactory.getLogger(EduExtension.class);
 
     private QuPathGUI qupath;
 
@@ -62,6 +68,7 @@ public class EduExtension implements QuPathExtension {
 
         replaceAnnotationsPane();
         replaceViewer();
+        replaceProjectBrowserButtons();
         registerSlideTours();
 
         if (EduOptions.showLoginDialogOnStartup().get()) {
@@ -82,11 +89,11 @@ public class EduExtension implements QuPathExtension {
     }
 
     private void onProjectChange() {
-        qupath.projectProperty().addListener((obs, o, n) -> {
-            if (n == null) {
+        qupath.projectProperty().addListener((obs, oldProject, newProject) -> {
+            if (newProject == null) {
                 projectInformation.setContent("No project open");
-            } else if (n instanceof RemoteProject) {
-                RemoteProject project = (RemoteProject) n;
+            } else if (newProject instanceof RemoteProject) {
+                RemoteProject project = (RemoteProject) newProject;
 
                 Object informationText = project.retrieveMetadataValue(RemoteProject.PROJECT_INFORMATION);
 
@@ -95,6 +102,8 @@ public class EduExtension implements QuPathExtension {
                 } else {
                     projectInformation.setContent((String) informationText);
                 }
+            } else {
+                projectInformation.setContent("No information available for this project");
             }
         });
     }
@@ -118,7 +127,7 @@ public class EduExtension implements QuPathExtension {
             createMenuItem(createAction(ExternalSlideManager::showExternalSlideManager, "Manage slides")),
             createMenuItem(createAction(BackupManager::showBackupManagerPane, "Manage backups")),
             createMenuItem(createAction(RemoteUserManager::showManagementDialog, "Manage users")),
-            createMenuItem(createAction(() -> WorkspaceManager.showWorkspace(qupath), "Show workspaces")),
+            createMenuItem(createAction(EduExtension::showWorkspaceOrLoginDialog, "Show workspaces")),
             createMenuItem(createAction(this::checkSaveChanges, "Sync changes"))
         );
     }
@@ -139,7 +148,7 @@ public class EduExtension implements QuPathExtension {
         prefs.addPropertyPreference(EduOptions.showLoginDialogOnStartup(), Boolean.class,
             "Show login dialog on startup",
             "Edu",
-        "   If enabled, opens the login dialog on startup.");
+            "If enabled, opens the login dialog on startup.");
     }
 
     public static void setWriteAccess(boolean hasWriteAccess) {
@@ -173,6 +182,29 @@ public class EduExtension implements QuPathExtension {
         // Refreshes the pane and makes the tabs visible
         qupath.setAnalysisPaneVisible(false);
         qupath.setAnalysisPaneVisible(true);
+    }
+
+    private void replaceProjectBrowserButtons() {
+        ProjectBrowser projectBrowser = qupath.getProjectBrowser();
+
+        Button btnOpen = ActionTools.createButton(
+            ActionTools.createAction(EduExtension::showWorkspaceOrLoginDialog, "Open project"), false
+        );
+
+        Button btnCreate = ActionTools.createButton(
+            ActionTools.createAction(EduExtension::showWorkspaceOrLoginDialog, "Create project"), false
+        );
+
+        Button btnAdd = ActionTools.createButton(
+            ActionTools.createAction(ExternalSlideManager::showExternalSlideManager, "Add images"), false
+        );
+
+        btnAdd.disableProperty().bind(qupath.projectProperty().isNull());
+
+        GridPane paneButtons = PaneTools.createColumnGridControls(btnCreate, btnOpen, btnAdd);
+        paneButtons.prefWidthProperty().bind(projectBrowser.getPane().widthProperty());
+        paneButtons.setPadding(new Insets(5, 5, 5, 5));
+        ((BorderPane) projectBrowser.getPane()).setTop(paneButtons);
     }
 
     private void registerSlideTours() {
@@ -231,7 +263,7 @@ public class EduExtension implements QuPathExtension {
             "Check your internet connection and that you're connecting to the right server. See log for more details."
             );
 
-//            logger.error("Error when connecting to server", e);
+            logger.error("Error when connecting to server", e);
 
             RemoteOpenslide.logout();
         }

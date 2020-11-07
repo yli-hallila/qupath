@@ -1,5 +1,7 @@
 package qupath.edu.models;
 
+import javafx.beans.property.SimpleBooleanProperty;
+
 import java.util.Map;
 
 public class ExternalSlide {
@@ -9,6 +11,8 @@ public class ExternalSlide {
     private ExternalWorkspace.Owner owner;
 
     private Map<String, String> parameters;
+
+    private SimpleBooleanProperty selected = new SimpleBooleanProperty(false);
 
     public String getName() {
         return name;
@@ -28,6 +32,14 @@ public class ExternalSlide {
 
     public String getOwnerReadable() {
         return owner.getName();
+    }
+
+    public boolean isSelected() {
+        return selected.get();
+    }
+
+    public SimpleBooleanProperty selectedProperty() {
+        return selected;
     }
 
     @Override

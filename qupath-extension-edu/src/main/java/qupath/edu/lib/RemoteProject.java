@@ -195,15 +195,23 @@ public class RemoteProject implements Project<BufferedImage> {
 	 * removing an image will remove all of its data also.
 	 *
 	 * @param entry ProjectImageEntry to remove
-	 * @param removeAllData ignored
+	 * @param removeAllData ignored: all data always removed
 	 */
-	@Override public void removeImage(ProjectImageEntry<?> entry, boolean removeAllData) {
-		images.remove(entry);
+	@Override
+	public void removeImage(ProjectImageEntry<?> entry, boolean removeAllData) {
+		// TODO: Is this an irrelevant check?
+		if (entry instanceof RemoteProjectImageEntry) {
+			images.remove(entry);
+		} else {
+			logger.error("Cannot remove image, is not instance of RemoteProjectImageEntry. [{}]", entry.toString());
+		}
 	}
 
 	@Override
 	public void removeAllImages(Collection<ProjectImageEntry<BufferedImage>> projectImageEntries, boolean removeAllData) {
-		images.clear();
+		for (var entry : projectImageEntries) {
+			removeImage(entry, removeAllData);
+		}
 	}
 
 	@Override
