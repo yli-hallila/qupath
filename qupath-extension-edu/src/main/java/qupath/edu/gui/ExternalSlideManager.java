@@ -84,10 +84,14 @@ public class ExternalSlideManager {
         table.setPlaceholder(new Text("No slides, none match search criteria or no permissions."));
         table.setEditable(true);
 
-        TableColumn<ExternalSlide, Boolean> selectedColumn = new TableColumn<>("Selected");
+        TableColumn<ExternalSlide, Boolean> selectedColumn = new TableColumn<>();
         selectedColumn.setCellValueFactory(new PropertyValueFactory<>("selected"));
         selectedColumn.setCellFactory(tc -> new CheckBoxTableCell<>());
         selectedColumn.setEditable(true);
+        selectedColumn.setReorderable(false);
+        selectedColumn.setResizable(false);
+        selectedColumn.setMinWidth(28);
+        selectedColumn.setMaxWidth(28);
 
         TableColumn<ExternalSlide, String> slideNameColumn = new TableColumn<>("Name");
         slideNameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
