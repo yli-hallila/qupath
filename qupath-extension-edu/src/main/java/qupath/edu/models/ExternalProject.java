@@ -5,9 +5,10 @@ public class ExternalProject {
     private String id;
     private String name;
     private String description;
-    private ExternalWorkspace.Owner owner;
-    private String ownerReadable;
+    private String subject;
+    private String owner;
     private String timestamp;
+    private boolean hidden;
 
     public String getId() {
         return id;
@@ -41,20 +42,20 @@ public class ExternalProject {
         this.description = description;
     }
 
+    public String getSubject() {
+        return subject;
+    }
+
+    public void setSubject(String subject) {
+        this.subject = subject;
+    }
+
     public String getOwner() {
-        return owner.getId();
+        return owner;
     }
 
     public void setOwner(String owner) {
-        this.owner.setId(owner);
-    }
-
-    public String getOwnerReadable() {
-        return owner.getName();
-    }
-
-    public void setOwnerReadable(String ownerReadable) {
-        this.owner.setName(ownerReadable);
+        this.owner = owner;
     }
 
     public boolean hasTimestamp() {
@@ -67,5 +68,13 @@ public class ExternalProject {
 
     public void setTimestamp(String timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public boolean isHidden() {
+        return hidden;
+    }
+
+    public void setHidden(boolean hidden) {
+        this.hidden = hidden;
     }
 }

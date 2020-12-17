@@ -12,6 +12,7 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontPosture;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
+import org.controlsfx.control.GridCell;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.lib.RemoteOpenslide;
@@ -26,7 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static qupath.edu.lib.RemoteOpenslide.Result;
 
-public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
+public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
 
     private final QuPathGUI qupath = QuPathGUI.getInstance();
     private final WorkspaceManager manager;
@@ -34,7 +35,7 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
 
     private boolean hasWriteAccess = false;
 
-    private ListCell<ExternalProject> thisCell;
+    private GridCell<ExternalProject> thisCell;
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -90,7 +91,7 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
             boolean success = false;
 
             if (db.hasString() && getProjectFromListView(db.getString()).isPresent()) {
-                ObservableList<ExternalProject> items = getListView().getItems();
+                ObservableList<ExternalProject> items = getGridView().getItems();
                 ExternalProject clipboardProject = getProjectFromListView(db.getString()).get();
 
                 int draggedIdx = items.indexOf(clipboardProject);
@@ -99,8 +100,8 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
                 items.set(draggedIdx, getItem());
                 items.set(thisIdx, clipboardProject);
 
-                List<ExternalProject> itemsTemp = new ArrayList<>(getListView().getItems());
-                getListView().getItems().setAll(itemsTemp);
+                List<ExternalProject> itemsTemp = new ArrayList<>(getGridView().getItems());
+                getGridView().getItems().setAll(itemsTemp);
 
                 success = true;
             }
@@ -113,15 +114,9 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
     }
 
     private Optional<ExternalProject> getProjectFromListView(String id) {
-        AtomicReference<ExternalProject> toReturn = new AtomicReference<>(null);
-
-        getListView().getItems().forEach(project -> {
-            if (project.getId().equals(id)) {
-                toReturn.set(project);
-            }
-        });
-
-        return Optional.ofNullable(toReturn.get());
+        return getGridView().getItems().stream().filter(
+            p -> p.getId().equalsIgnoreCase(id)
+        ).findFirst();
     }
 
     @Override
@@ -144,7 +139,7 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
         GridPane pane = new GridPane();
         pane.setPadding(new Insets(5));
         pane.setHgap(5);
-        pane.setPrefWidth(getListView().getPrefWidth());
+        pane.setPrefWidth(getGridView().getPrefWidth());
         pane.setBorder(new Border(
             new BorderStroke(null, null, Color.LIGHTGRAY, null,
             null, null, BorderStrokeStyle.SOLID, null,
@@ -261,11 +256,11 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
         }
 
         Result result = RemoteOpenslide.editProject(project.getId(), newName, project.getDescription());
-        int currentIndex = manager.getTabPane().getSelectionModel().getSelectedIndex();
+        TitledPane expanded = manager.getAccordion().getExpandedPane();
 
         if (result == Result.OK) {
             manager.refreshDialog();
-            manager.getTabPane().getSelectionModel().select(currentIndex);
+            manager.getAccordion().setExpandedPane(expanded);
         } else {
             Dialogs.showErrorNotification(
             "Error when editing project name",
@@ -282,11 +277,11 @@ public class WorkspaceProjectListCell extends ListCell<ExternalProject> {
 
         if (confirm) {
             Result result = RemoteOpenslide.deleteProject(project.getId());
-            int currentIndex = manager.getTabPane().getSelectionModel().getSelectedIndex();
+            TitledPane expanded = manager.getAccordion().getExpandedPane();
 
             if (result == Result.OK) {
                 manager.refreshDialog();
-                manager.getTabPane().getSelectionModel().select(currentIndex);
+                manager.getAccordion().setExpandedPane(expanded);
             } else {
                 Dialogs.showErrorNotification(
                 "Error when deleting project",

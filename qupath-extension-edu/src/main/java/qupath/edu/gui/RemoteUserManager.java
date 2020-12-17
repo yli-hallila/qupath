@@ -11,8 +11,10 @@ import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
 import javafx.scene.text.Text;
+import org.controlsfx.glyphfont.FontAwesome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.edu.gui.buttons.IconButtons;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.edu.models.ExternalUser;
@@ -95,34 +97,60 @@ public class RemoteUserManager {
         pane.setVgap(10);
         pane.getColumnConstraints().add(new ColumnConstraints(300));
 
-        /* Textfields */
+        /* Name */
+
+        TextField tfName = new TextField();
+        tfName.setText(user.getName());
+        tfName.setDisable(true);
+
+        Button btnEditName = IconButtons.createIconButton(FontAwesome.Glyph.PENCIL);
+        btnEditName.setOnAction(e -> tfName.setDisable(false));
+
+        /* Email */
+
+        TextField tfEmail = new TextField();
+        tfEmail.setText(user.getEmail());
+        tfEmail.setDisable(true);
+
+        Button btnEditEmail = IconButtons.createIconButton(FontAwesome.Glyph.PENCIL);
+        btnEditEmail.setOnAction(e -> tfEmail.setDisable(false));
+
+        /* Organization */
+
+        TextField tfOrganization = new TextField();
+        tfOrganization.setText(user.getOrganization().getName());
+        tfOrganization.setDisable(true);
+
+        /* Password */
+
+        PasswordField tfPassword = new PasswordField();
+        tfPassword.setText("**************");
+        tfPassword.setDisable(true);
+
+        Button btnEditPassword = IconButtons.createIconButton(FontAwesome.Glyph.PENCIL);
+        btnEditPassword.setOnAction(e -> tfPassword.setDisable(false));
+        btnEditPassword.setDisable(!RemoteOpenslide.hasRole(Roles.ADMIN));
+
+        /* Pane */
 
         int row = 0;
 
-        TextField tfName = new TextField();
-        tfName.setPromptText(user.getName());
-        tfName.setDisable(true);
-
-        TextField tfEmail = new TextField();
-        tfEmail.setPromptText(user.getEmail());
-        tfEmail.setDisable(true);
-
-        TextField tfOrganization = new TextField();
-        tfOrganization.setPromptText(user.getOrganization().getName());
-        tfOrganization.setDisable(true);
-
         pane.add(tfName, 0, ++row);
+        pane.add(btnEditName, 1, row);
+
         pane.add(tfEmail, 0, ++row);
+        pane.add(btnEditEmail, 1, row);
+
         pane.add(tfOrganization, 0, ++row);
+
+        pane.add(tfPassword, 0, ++row);
+        pane.add(btnEditPassword, 1, row);
 
         /* Separator */
 
         Separator separator = new Separator(Orientation.HORIZONTAL);
         pane.add(separator, 0, ++row);
         GridPane.setColumnSpan(separator, 2);
-        GridPane.setColumnSpan(tfName, 2);
-        GridPane.setColumnSpan(tfEmail, 2);
-        GridPane.setColumnSpan(tfOrganization, 2);
 
         /* Checkboxes */
 
@@ -161,23 +189,30 @@ public class RemoteUserManager {
         if (result.isPresent() && result.get().equals(ButtonType.OK)) {
             var confirm = Dialogs.showYesNoDialog(
                 "Save changes",
-                "Save any changes made to users roles?"
+                "Save any changes made to user?"
             );
 
             if (!confirm) {
                 return;
             }
 
-            Map<String, Boolean> formData = new HashMap<>();
+            Map<String, Object> formData = new HashMap<>();
             for (Map.Entry<Roles, CheckBox> entry : checkboxes.entrySet()) {
                 formData.put(entry.getKey().name(), entry.getValue().isSelected());
             }
 
-            if (RemoteOpenslide.editUserRoles(user.getId(), formData)) {
-                Dialogs.showInfoNotification("Success", "Successfully edited roles.");
+            formData.put("name", tfName.getText());
+            formData.put("email", tfEmail.getText());
+
+            if (!tfPassword.isDisabled()) {
+                formData.put("password", tfPassword.getText());
+            }
+
+            if (RemoteOpenslide.editUser(user.getId(), formData)) {
+                Dialogs.showInfoNotification("Success", "Successfully edited user.");
                 refresh();
             } else {
-                Dialogs.showErrorNotification("Error", "Error while editing roles. See log for possibly more details.");
+                Dialogs.showErrorNotification("Error", "Error while editing user. See log for possibly more details.");
             }
         }
     }

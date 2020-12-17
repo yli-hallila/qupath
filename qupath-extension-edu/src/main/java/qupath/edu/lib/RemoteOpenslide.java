@@ -246,10 +246,41 @@ public class RemoteOpenslide {
 		return List.of(new Gson().fromJson(response.get().body(), ExternalUser[].class));
 	}
 
-	public static boolean editUserRoles(String userId, Map<String, Boolean> roles) {
-		var response = put("/api/v0/users/" + e(userId), roles);
+	public static boolean editUser(String userId, Map<String, Object> data) {
+		var response = put("/api/v0/users/" + e(userId), data);
 
 		return !isInvalidResponse(response);
+	}
+
+	/* Subjects */
+
+	public static Result createSubject(String workspaceId, String name) {
+		var response = post(
+		"/api/v0/subjects",
+			Map.of(
+			"workspace-id", workspaceId,
+			"subject-name", name
+			)
+		);
+
+		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
+	}
+
+	public static Result deleteSubject(String subjectId) {
+		var response = delete("/api/v0/subjects/" + e(subjectId));
+
+		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
+	}
+
+	public static Result renameSubject(String subjectId, String newName) {
+		var response = put(
+			"/api/v0/subjects/" + e(subjectId),
+			Map.of(
+			"subject-name", newName
+			)
+		);
+
+		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
 	}
 
 	/* Projects */
@@ -322,16 +353,16 @@ public class RemoteOpenslide {
 	}
 
 	/**
-	 * Creates a new project and places it inside given workspace.
-	 * @param workspaceId workspace Id, null if personal project.
+	 * Creates a new project and places it inside given subject.
+	 * @param subjectId subject Id, null if personal project.
 	 * @param projectName name of the project.
 	 * @return Result.OK if success else Result.FAIL.
 	 */
-	public static Result createProject(String workspaceId, String projectName) {
+	public static Result createProject(String subjectId, String projectName) {
 		var response = post(
 		"/api/v0/projects",
 			Map.of(
-			"workspace-id", workspaceId == null ? "personal" : workspaceId,
+			"subject-id", subjectId == null ? "personal" : subjectId,
 			"project-name", projectName
 			)
 		);
@@ -463,7 +494,7 @@ public class RemoteOpenslide {
 		return List.of(new Gson().fromJson(response.get().body(), ExternalWorkspace[].class));
 	}
 
-	public static Result createNewWorkspace(String workspaceName) {
+	public static Result createWorkspace(String workspaceName) {
 		var response = post(
 		"/api/v0/workspaces",
 			Map.of("workspace-name", workspaceName)

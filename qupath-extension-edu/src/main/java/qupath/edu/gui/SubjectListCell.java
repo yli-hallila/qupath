@@ -1,0 +1,51 @@
+package qupath.edu.gui;
+
+import javafx.geometry.Pos;
+import javafx.scene.control.Button;
+import javafx.scene.control.ListCell;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.text.Text;
+import org.controlsfx.glyphfont.FontAwesome;
+import qupath.edu.gui.buttons.IconButtons;
+import qupath.edu.models.ExternalSubject;
+
+public class SubjectListCell extends ListCell<ExternalSubject> {
+
+    @Override
+    protected void updateItem(ExternalSubject item, boolean empty) {
+        super.updateItem(item, empty);
+
+        if (empty || item == null) {
+            return;
+        }
+
+        /* Subject name */
+
+        HBox name = new HBox(new Text(item.getName()));
+        name.setFillHeight(true);
+        name.setAlignment(Pos.CENTER_LEFT);
+
+        /* Buttons */
+
+        Button btnModify = IconButtons.createIconButton(FontAwesome.Glyph.EDIT,  "Edit");
+        Button btnDelete = IconButtons.createIconButton(FontAwesome.Glyph.TRASH, "Delete");
+
+        HBox buttons = new HBox(btnModify, btnDelete);
+        buttons.setSpacing(5D);
+        buttons.setVisible(false);
+
+        /* Pane */
+
+        HBox hbox = new HBox(name, buttons);
+        HBox.setHgrow(name, Priority.ALWAYS);
+        hbox.setFillHeight(true);
+
+        /* Hover */
+
+        hbox.setOnMouseEntered(e -> buttons.setVisible(true));
+        hbox.setOnMouseExited(e  -> buttons.setVisible(false));
+
+        setGraphic(hbox);
+    }
+}

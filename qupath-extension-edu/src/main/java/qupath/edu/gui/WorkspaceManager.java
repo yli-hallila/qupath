@@ -2,16 +2,21 @@ package qupath.edu.gui;
 
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ChangeListener;
+import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
 import javafx.scene.control.*;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.text.Font;
+import org.controlsfx.control.GridView;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +27,7 @@ import qupath.edu.lib.RemoteProject;
 import qupath.edu.lib.ZipUtil;
 import qupath.edu.models.ExternalProject;
 import qupath.edu.models.ExternalSlide;
+import qupath.edu.models.ExternalSubject;
 import qupath.edu.models.ExternalWorkspace;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
@@ -35,20 +41,25 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static qupath.edu.lib.RemoteOpenslide.*;
+import static qupath.edu.lib.RemoteOpenslide.Result;
 
 public class WorkspaceManager {
 
     private final static Logger logger = LoggerFactory.getLogger(WorkspaceManager.class);
 
-    private SimpleBooleanProperty hasAccessProperty = new SimpleBooleanProperty(false);
+    private final SimpleBooleanProperty hasAccessProperty = new SimpleBooleanProperty(false);
+    private final SimpleStringProperty  currentWorkspace  = new SimpleStringProperty();
+    private final SimpleStringProperty  currentSubject    = new SimpleStringProperty();
 
     private static Dialog<ButtonType> dialog;
     private final QuPathGUI qupath;
 
     private BorderPane pane;
-    private TabPane tabPane;
+    private SplitPane splitPane;
     private boolean filterWorkspaces = true;
+
+    private final Accordion accordion = new Accordion();
+    private final GridView<ExternalProject> projectsGridView = new GridView<>();
 
     public static void showWorkspace(QuPathGUI qupath) {
         WorkspaceManager manager = new WorkspaceManager(qupath);
@@ -56,12 +67,14 @@ public class WorkspaceManager {
         dialog = Dialogs.builder()
                 .title("Select project")
                 .content(manager.getPane())
-                .size(400, 500)
+                .size(1000, 600)
                 .build();
 
         dialog.getDialogPane().getStylesheets().add(RemoteServerLoginManager.class.getClassLoader().getResource("css/remove_buttonbar.css").toExternalForm());
         dialog.setResult(ButtonType.CLOSE);
-        dialog.showAndWait();
+        dialog.show();
+
+        manager.getSplitPane().setDividerPositions(0.2);
     }
 
     private WorkspaceManager(QuPathGUI qupath) {
@@ -76,11 +89,17 @@ public class WorkspaceManager {
         return pane;
     }
 
-    public TabPane getTabPane() {
-        return tabPane;
+    public Accordion getAccordion() {
+        return accordion;
+    }
+
+    public SplitPane getSplitPane() {
+        return splitPane;
     }
 
     private synchronized void initializePane() {
+        pane = new BorderPane();
+
         List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
 
         /* Filter Checkbox */
@@ -100,22 +119,32 @@ public class WorkspaceManager {
         btnOpenById.setFont(new Font(10));
         btnOpenById.setOnAction(this::openById);
 
-        /* Tabs */
+        /* Header */
 
-        tabPane = new TabPane();
-        tabPane.setPrefWidth(360);
-        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.SELECTED_TAB);
-        tabPane.getStyleClass().add("floating");
-        tabPane.getSelectionModel().selectedItemProperty().addListener(onTabChange());
+        GridPane header = new GridPane();
+        ColumnConstraints constraint = new ColumnConstraints();
+        constraint.setPercentWidth(50);
 
-        createTabs(tabPane, workspaces);
-        selectPreviousWorkspace(tabPane);
+        header.getColumnConstraints().addAll(constraint, constraint);
+        header.addRow(0, btnOpenById, cbFilter);
+
+        GridPane.setHalignment(btnOpenById, HPos.LEFT);
+        GridPane.setHalignment(cbFilter,    HPos.RIGHT);
 
         /* Buttons */
 
-        Button btnCreate = new Button("Create project");
-        btnCreate.setOnAction(action -> createNewProject());
-        btnCreate.disableProperty().bind(hasAccessProperty.not());
+        MenuItem miCreateWorkspace = new MenuItem("Workspace");
+        miCreateWorkspace.setOnAction(action -> createNewWorkspace());
+
+        MenuItem miCreateSubject = new MenuItem("Subject");
+        miCreateSubject.setOnAction(action -> createNewSubject());
+
+        MenuItem miCreateProject = new MenuItem("Project");
+        miCreateProject.setOnAction(action -> createNewProject());
+
+        MenuButton menuCreate = new MenuButton("Create ...");
+        menuCreate.getItems().addAll(miCreateWorkspace, miCreateSubject, miCreateProject);
+        menuCreate.disableProperty().bind(hasAccessProperty.not());
 
         Button btnLogout = new Button("Logout");
         btnLogout.setOnAction(action -> logout());
@@ -123,75 +152,87 @@ public class WorkspaceManager {
         Button btnClose = new Button("Close");
         btnClose.setOnAction(action -> closeDialog());
 
-        ButtonBar.setButtonData(btnCreate, ButtonBar.ButtonData.LEFT);
+        /* Footer */
+
+        ButtonBar.setButtonData(menuCreate, ButtonBar.ButtonData.LEFT);
         ButtonBar.setButtonData(btnLogout, ButtonBar.ButtonData.LEFT);
         ButtonBar.setButtonData(btnClose, ButtonBar.ButtonData.RIGHT);
         ButtonBar.setButtonUniformSize(btnLogout, false);
         ButtonBar.setButtonUniformSize(btnClose, false);
 
-        ButtonBar buttonBar = new ButtonBar();
-        buttonBar.getButtons().addAll(btnCreate, btnLogout, btnClose);
+        ButtonBar footer = new ButtonBar();
+        footer.getButtons().addAll(menuCreate, btnLogout, btnClose);
 
-        /* Pane */
+        /* Content */
 
-        BorderPane.setMargin(buttonBar, new Insets(10, 0, 0, 0));
+        projectsGridView.setCellFactory(f -> new WorkspaceProjectListCell(this));
+        projectsGridView.setCellWidth(350);
+        projectsGridView.setItems(FXCollections.emptyObservableList());
 
-        GridPane top = new GridPane();
-        ColumnConstraints constraint = new ColumnConstraints();
-        constraint.setPercentWidth(50);
+        splitPane = new SplitPane();
+        splitPane.setPrefWidth(1000);
+        splitPane.setOrientation(Orientation.HORIZONTAL);
+        splitPane.getItems().addAll(accordion, projectsGridView);
 
-        top.getColumnConstraints().addAll(constraint, constraint);
-        top.addRow(0, btnOpenById, cbFilter);
+        createTabs(accordion, workspaces);
 
-        GridPane.setHalignment(btnOpenById, HPos.LEFT);
-        GridPane.setHalignment(cbFilter,    HPos.RIGHT);
+        accordion.expandedPaneProperty().addListener(onWorkspaceChange(workspaces));
 
-        pane = new BorderPane();
-        pane.setTop(top);
-        pane.setCenter(tabPane);
-        pane.setBottom(buttonBar);
+        selectPreviousWorkspace(accordion);
+
+        pane.setPadding(new Insets(0));
+        pane.setPrefHeight(600);
+        pane.setTop(header);
+        pane.setCenter(splitPane);
+        pane.setBottom(footer);
+
+        BorderPane.setMargin(footer, new Insets(10));
+        BorderPane.setMargin(header, new Insets(10));
     }
 
-    private void createTabs(TabPane tabPane, List<ExternalWorkspace> workspaces) {
-        workspaces.forEach(workspace -> {
+    private void createTabs(Accordion accordion, List<ExternalWorkspace> workspaces) {
+        accordion.getPanes().clear();
+
+        for (ExternalWorkspace workspace : workspaces) {
             if (filterWorkspaces && !workspace.getOwner().equals(RemoteOpenslide.getOrganizationId())
                     && !workspace.getName().equals("My Projects")) {
                 return;
             }
 
-            ListView<ExternalProject> listView = new ListView<>();
-            listView.getStyleClass().clear();
-            listView.prefWidthProperty().bind(tabPane.widthProperty());
-            listView.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
-            listView.setCellFactory(f -> new WorkspaceProjectListCell(this));
-            listView.getItems().addAll(workspace.getProjects());
+            ListView<ExternalSubject> lvSubjects = new ListView<>();
+            lvSubjects.setCellFactory(f -> new SubjectListCell());
+            lvSubjects.getItems().addAll(workspace.getSubjects());
 
-            Tab tab = new Tab(workspace.getName(), listView);
-            tab.setClosable(false);
+            lvSubjects.setOnMouseClicked(e -> {
+                ExternalSubject selectedSubject = lvSubjects.getSelectionModel().getSelectedItem();
 
-            if (!workspace.getName().equals("My Projects")) {
-                var hasWriteAccess = RemoteOpenslide.isOwner(workspace.getOwner());
-
-                if (hasWriteAccess) {
-                    MenuItem miRename = new MenuItem("Rename");
-                    miRename.setOnAction(a -> renameWorkspace(workspace));
-
-                    MenuItem miDelete = new MenuItem("Delete");
-                    miDelete.setOnAction(e -> deleteWorkspace(workspace));
-
-                    tab.setContextMenu(new ContextMenu(miRename, miDelete));
+                if (selectedSubject == null) {
+                    return;
                 }
+
+                if (e.getButton() == MouseButton.PRIMARY) {
+                    currentSubject.set(selectedSubject.getId());
+                    projectsGridView.setItems(FXCollections.observableArrayList(selectedSubject.getProjects()));
+                }
+            });
+
+            TitledPane tpWorkspace = new TitledPane(workspace.getName(), lvSubjects);
+            tpWorkspace.setUserData(workspace.getId());
+
+            var hasWriteAccess = RemoteOpenslide.isOwner(workspace.getOwner());
+
+            if (hasWriteAccess) {
+                MenuItem miRename = new MenuItem("Rename workspace");
+                miRename.setOnAction(a -> renameWorkspace(workspace));
+
+                MenuItem miDelete = new MenuItem("Delete workspace");
+                miDelete.setOnAction(e -> deleteWorkspace(workspace));
+
+                // TODO: ContextMenu only on TitledPane header
+                tpWorkspace.setContextMenu(new ContextMenu(miRename, miDelete));
             }
 
-            tab.setUserData(workspace.getId());
-
-            tabPane.getTabs().add(tab);
-        });
-
-        if (RemoteOpenslide.hasRole("MANAGE_PROJECTS")) {
-            Tab newWorkspaceTab = new Tab("+");
-            newWorkspaceTab.setClosable(false);
-            tabPane.getTabs().add(newWorkspaceTab);
+            accordion.getPanes().add(tpWorkspace);
         }
     }
 
@@ -221,34 +262,29 @@ public class WorkspaceManager {
         closeDialog();
     }
 
-    private void selectPreviousWorkspace(TabPane tabPane) {
+    private void selectPreviousWorkspace(Accordion accordion) {
         if (EduOptions.previousWorkspace().get() != null) {
-            tabPane.getTabs().forEach(workspace -> {
+            accordion.getPanes().forEach(workspace -> {
                 String id = (String) workspace.getUserData();
 
                 if (id != null && id.equals(EduOptions.previousWorkspace().get())) {
-                    tabPane.getSelectionModel().select(workspace);
+                    accordion.setExpandedPane(workspace);
                 }
             });
         }
     }
 
-    private ChangeListener<Tab> onTabChange() {
-        return (ov, oldTab, newTab) -> {
-            if (newTab.getText().equals("+")) {
-                tabPane.getSelectionModel().select(oldTab);
-                createNewWorkspace();
-            } else if (newTab.getText().equals("My Projects")) {
-                hasAccessProperty.set(true);
-            } else {
-                String workspaceId = (String) newTab.getUserData();
-                hasAccessProperty.set(RemoteOpenslide.hasPermission(workspaceId));
+    private ChangeListener<TitledPane> onWorkspaceChange(List<ExternalWorkspace> workspaces) {
+        return (obs, oldWorkspace, newWorkspace) -> {
+            if (newWorkspace == null) {
+                return;
+            }
 
-                // onTabChange() is fired when the TabPane is drawn and the first tab is selected.
-                // This check avoids setting the previous workspace to always the first workspace.
-                if (oldTab != null) {
-                    EduOptions.previousWorkspace().set(workspaceId);
-                }
+            String workspaceId = (String) newWorkspace.getUserData();
+
+            if (workspaceId != null) {
+                currentWorkspace.set(workspaceId);
+                hasAccessProperty.set(RemoteOpenslide.hasPermission(workspaceId));
             }
         };
     }
@@ -258,28 +294,58 @@ public class WorkspaceManager {
             Platform.runLater(this::refreshDialog);
         }
 
-        initializePane();
-        dialog.getDialogPane().setContent(pane);
+        String expandedWorkspaceId = (String) accordion.getExpandedPane().getUserData();
+
+        List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
+        createTabs(accordion, workspaces);
+
+        // Restore the previously open TitlePane
+
+        for (TitledPane titledPane : accordion.getPanes()) {
+            if (expandedWorkspaceId.equalsIgnoreCase((String) titledPane.getUserData())) {
+                accordion.setExpandedPane(titledPane);
+
+                // TODO: Refresh projects
+
+                return;
+            }
+        }
     }
 
     private void createNewProject() {
         String projectName = Dialogs.showInputDialog("Project name", "", "");
-        String workspaceId = (String) tabPane.getSelectionModel().getSelectedItem().getUserData();
-        int tabIndex = tabPane.getSelectionModel().getSelectedIndex();
 
         if (projectName == null) {
             return;
         }
 
-        Result result = RemoteOpenslide.createProject(workspaceId, projectName);
+        Result result = RemoteOpenslide.createProject(currentSubject.get(), projectName);
 
         if (result == Result.OK) {
             refreshDialog();
-            tabPane.getSelectionModel().select(tabIndex);
         } else {
             Dialogs.showErrorNotification(
             "Error when creating project",
             "See log for possibly more details."
+            );
+        }
+    }
+
+    public void createNewSubject() {
+        String subjectName = Dialogs.showInputDialog("Subject name", "", "");
+
+        if (subjectName == null) {
+            return;
+        }
+
+        Result result = RemoteOpenslide.createSubject(currentWorkspace.get(), subjectName);
+
+        if (result == Result.OK) {
+            refreshDialog();
+        } else {
+            Dialogs.showErrorNotification(
+                "Error when creating subject",
+                "See log for possibly more details."
             );
         }
     }
@@ -291,15 +357,15 @@ public class WorkspaceManager {
             return;
         }
 
-        Result result = RemoteOpenslide.createNewWorkspace(workspaceName);
+        Result result = RemoteOpenslide.createWorkspace(workspaceName);
 
         if (result == Result.OK) {
             refreshDialog();
-            tabPane.getSelectionModel().select(tabPane.getTabs().size() - 3);
+            accordion.setExpandedPane(accordion.getPanes().get(accordion.getPanes().size() - 1));
         } else {
             Dialogs.showErrorNotification(
-            "Error when creating workspace",
-            "See log for possibly more details."
+                "Error when creating workspace",
+                "See log for possibly more details."
             );
         }
     }
@@ -317,8 +383,9 @@ public class WorkspaceManager {
             refreshDialog();
         } else {
             Dialogs.showErrorNotification(
-            "Error when renaming workspace",
-            "See log for possibly more details.");
+                "Error when renaming workspace",
+                "See log for possibly more details."
+            );
         }
 
     }
@@ -339,6 +406,49 @@ public class WorkspaceManager {
             Dialogs.showErrorNotification(
             "Error when deleting workspace",
             "See log for possibly more details.."
+            );
+        } else {
+            refreshDialog();
+        }
+    }
+
+    private void renameSubject(ExternalSubject subject) {
+        String newName = Dialogs.showInputDialog("Subject name", "", subject.getName());
+
+        if (newName == null) {
+            return;
+        }
+
+        Result result = RemoteOpenslide.renameSubject(subject.getId(), newName);
+
+        if (result == Result.OK) {
+            refreshDialog();
+        } else {
+            Dialogs.showErrorNotification(
+                "Error when renaming subject",
+                "See log for possibly more details."
+            );
+        }
+    }
+
+    private void deleteSubject(ExternalSubject subject) {
+        boolean confirm = Dialogs.showConfirmDialog(
+            "Delete subject",
+            "Are you sure you wish to delete this subject?" +
+            "\n\n" +
+            "This will also delete all the projects belonging to this subject.This is irreversible."
+        );
+
+        if (!confirm) {
+            return;
+        }
+
+        Result result = RemoteOpenslide.deleteSubject(subject.getId());
+
+        if (result == Result.FAIL) {
+            Dialogs.showErrorNotification(
+                "Error when deleting subject",
+                "See log for possibly more details.."
             );
         } else {
             refreshDialog();

@@ -8,7 +8,7 @@ public class ExternalSlide {
 
     private String name;
     private String id;
-    private ExternalWorkspace.Owner owner;
+    private ExternalOwner owner;
 
     private Map<String, String> parameters;
 
@@ -22,7 +22,7 @@ public class ExternalSlide {
         return id;
     }
 
-    public ExternalWorkspace.Owner getOwner() {
+    public ExternalOwner getOwner() {
         return owner;
     }
 
