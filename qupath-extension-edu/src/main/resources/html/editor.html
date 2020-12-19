@@ -2,121 +2,103 @@
 <html id="content">
 <head>
     <base href="{{qupath-resource-root}}" />
-    <script>
-        var project_dir = "{{qupath-project-dir}}";
-        var images = {{qupath-images}};
-        var dialogOpenedOnce = false;
-
-        var CKEDITOR_IMAGE_URL_CONTAINER = ".cke_dialog_image_url";
-        var CKEDITOR_IMAGE_URL_INPUT     = ".cke_dialog_image_url input";
-    </script>
-    <style>
-        #loading {
-            font-family: Calibri, sans-serif;
-            text-align: center;
-        }
-    </style>
+    <link rel="stylesheet" type="text/css" href="css/ckeditor.css">
 </head>
-<body>
+<body data-editor="DecoupledDocumentEditor" data-collaboration="false">
 
-<p id="loading">Loading editor ...</p>
+<main>
+    <div class="row">
+        <div class="document-editor__toolbar"></div>
+    </div>
 
-<div id="editor-container" style="display: none">
-    <textarea cols="80" id="editor" name="editor" rows="20">{{qupath-input}}</textarea>
-</div>
+    <div class="row row-editor">
+        <div class="editor" id="qupath-editor">
+            {{qupath-input}}
+        </div>
+    </div>
+</main>
 
 <script src="ckeditor/ckeditor.js"></script>
 <script>
-    CKEDITOR.disableAutoInline = true;
-    CKEDITOR.config.defaultLanguage = 'en';
+    DecoupledDocumentEditor.create( document.querySelector( '.editor' ), {
+        toolbar: {
+            viewportTopOffset: 50,
+            items: [
+                'heading',
+                '|',
+                'fontSize',
+                'fontFamily',
+                '|',
+                'bold',
+                'italic',
+                'underline',
+                'strikethrough',
+                'highlight',
+                'fontColor',
+                'fontBackgroundColor',
+                'specialCharacters',
+                'horizontalLine',
+                '|',
+                'alignment',
+                '|',
+                'numberedList',
+                'bulletedList',
+                '|',
+                'subscript',
+                'superscript',
+                '|',
+                'indent',
+                'outdent',
+                '|',
+                'todoList',
+                'link',
+                'blockQuote',
+                'imageUpload',
+                'imageInsert',
+                'insertTable',
+                'mediaEmbed',
+                '|',
+                'undo',
+                'redo'
+            ]
+        },
+        language: 'en',
+        image: {
+            styles: [
+                'alignLeft', 'alignCenter', 'alignRight'
+            ],
+            toolbar: [
+                'imageStyle:alignLeft', 'imageStyle:alignCenter', 'imageStyle:alignRight',
+                '|',
+                'imageTextAlternative'
+            ]
+        },
+        table: {
+            contentToolbar: [
+                'tableColumn',
+                'tableRow',
+                'mergeTableCells'
+            ]
+        },
+        licenseKey: '',
+        simpleUpload: {
+            uploadUrl: 'http://localhost:7777/api/v0/upload/ckeditor',
 
-    CKEDITOR.replace('editor', {
-        toolbar: [
-            { name: 'clipboard', items: [ 'Undo', 'Redo', 'Source' ] },
-            { name: 'styles', items: [ 'Format', 'Font', 'FontSize' ] },
-            { name: 'basicstyles', items: [ 'Bold', 'Italic', 'Underline', 'Strike', 'RemoveFormat' ] },
-            { name: 'colors', items: [ 'TextColor', 'BGColor' ] },
-            { name: 'align', items: [ 'JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock' ] },
-            { name: 'links', items: [ 'Link', 'Unlink' ] },
-            { name: 'paragraph', items: [ 'NumberedList', 'BulletedList', '-', 'Outdent', 'Indent', '-', 'Blockquote' ] },
-            { name: 'insert', items: [ 'Image', 'Table' ] }
-        ],
-        height: 600,
-        extraPlugins: 'autoembed,embedsemantic,sourcedialog,image2',
-        removePlugins: 'image,elementspath',
-        format_tags: 'p;h1;h2;h3;pre',
-        removeDialogTabs: 'image:advanced;link:advanced',
-        stylesSet: [
-            /* Inline Styles */
-            { name: 'Marker', element: 'span', attributes: { 'class': 'marker' } },
-            { name: 'Cited Work', element: 'cite' },
-            { name: 'Inline Quotation', element: 'q' },
-            /* Object Styles */
-            {
-                name: 'Special Container',
-                element: 'div',
-                styles: {
-                    padding: '5px 10px',
-                    background: '#eee',
-                    border: '1px solid #ccc'
-                }
-            },
-            {
-                name: 'Compact table',
-                element: 'table',
-                attributes: {
-                    cellpadding: '5',
-                    cellspacing: '0',
-                    border: '1',
-                    bordercolor: '#ccc'
-                },
-                styles: {
-                    'border-collapse': 'collapse'
-                }
-            },
-            { name: 'Borderless Table', element: 'table', styles: { 'border-style': 'hidden', 'background-color': '#E6E6FA' } },
-            { name: 'Square Bulleted List', element: 'ul', styles: { 'list-style-type': 'square' } }
-        ]
+            headers: {
+                {{qupath-auth}}
+            }
+        },
+
+    }).then( editor => {
+        window.editor = editor;
+
+        document.querySelector( '.document-editor__toolbar' ).appendChild( editor.ui.view.toolbar.element );
+        document.querySelector( '.ck-toolbar' ).classList.add( 'ck-reset_all' );
+
+    }).catch( error => {
+        console.error( 'Oops, something went wrong!' );
+        console.error( error );
     });
-
-    CKEDITOR.instances["editor"].on('change', function() {
-        document.getElementById("editor").innerHTML = CKEDITOR.instances.editor.getData();
-    });
-
-    CKEDITOR.instances["editor"].on("dialogShow", function(dialog) {
-        if (dialog.data.definition.title !== "Image Properties" || dialogOpenedOnce) {
-            return;
-        }
-
-        dialogOpenedOnce = true;
-        let element = document.querySelectorAll(CKEDITOR_IMAGE_URL_CONTAINER)[0];
-        let HTML = `
-            <br>
-			<label> ... or select image from project</label><br>
-			<select class="cke_dialog_ui_input_select" onChange="addImage(this.value)">
-			<option>Select image</option>
-        `;
-
-        images.forEach(i => {
-            HTML += ('<option>' + i + '</option>');
-        });
-
-        HTML += '</select>';
-
-        element.innerHTML += HTML;
-    });
-
-    CKEDITOR.instances["editor"].on('instanceReady', function() {
-        document.getElementById("loading").innerHTML = null;
-        document.getElementById("editor-container").style.display = "block";
-    });
-
-    function addImage(value) {
-        let text = (value === "Select image") ? "" : (project_dir + value);
-        let element = document.querySelectorAll(CKEDITOR_IMAGE_URL_INPUT)[0];
-
-        element.value = text;
-    }
 </script>
 </body>
 </html>

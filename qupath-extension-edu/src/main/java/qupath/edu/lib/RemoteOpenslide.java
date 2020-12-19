@@ -106,6 +106,10 @@ public class RemoteOpenslide {
 		return token;
 	}
 
+	public static String getBasicAuthHeader() {
+		return basicAuth(username, password);
+	}
+
 	public static void setToken(String token) {
 		if (token == null) {
 			setAuthType(AuthType.UNAUTHENTICATED);

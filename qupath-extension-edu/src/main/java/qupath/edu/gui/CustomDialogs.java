@@ -1,6 +1,5 @@
 package qupath.edu.gui;
 
-import com.google.gson.Gson;
 import javafx.application.Platform;
 import javafx.event.EventHandler;
 import javafx.geometry.Rectangle2D;
@@ -12,11 +11,18 @@ import javafx.stage.Screen;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Element;
+import qupath.edu.lib.RemoteOpenslide;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import java.io.IOException;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,9 +60,15 @@ public class CustomDialogs {
 			});
 
 			HTML = HTML.replace("{{qupath-input}}", input)
-					.replace("{{qupath-images}}", new Gson().toJson(images))
-					.replace("{{qupath-project-dir}}", dataFolderURI)
-					.replace("{{qupath-resource-root}}", resourceRoot);
+					   .replace("{{qupath-resource-root}}", resourceRoot);
+
+			if (RemoteOpenslide.getAuthType() == RemoteOpenslide.AuthType.TOKEN) {
+				HTML = HTML.replace("{{qupath-auth}}", "'Token': '" + RemoteOpenslide.getToken() + "'");
+			} else if (RemoteOpenslide.getAuthType() == RemoteOpenslide.AuthType.USERNAME) {
+				HTML = HTML.replace("{{qupath-auth}}", "Authorization: '" + RemoteOpenslide.getBasicAuthHeader() + "'");
+			} else {
+				HTML = HTML.replace("{{qupath-auth}}", "");
+			}
 
 			result = CustomDialogs.showHTML(HTML);
 		} catch (IOException e) {
@@ -100,8 +112,18 @@ public class CustomDialogs {
 
 		dialog.setResultConverter(dialogButton -> {
 			if (dialogButton == btnSave) {
-				Element textArea = browser.getWebEngine().getDocument().getElementById("editor");
-				return textArea.getTextContent();
+				try {
+					Element editor = browser.getWebEngine().getDocument().getElementById("qupath-editor");
+
+					StringWriter writer = new StringWriter();
+
+					Transformer transformer = TransformerFactory.newInstance().newTransformer();;
+					transformer.transform(new DOMSource(editor), new StreamResult(writer));
+
+					return writer.toString();
+				} catch (TransformerException e) {
+					Dialogs.showErrorNotification("Error when saving project information", e);
+				}
 			}
 
 			return null;
@@ -113,6 +135,7 @@ public class CustomDialogs {
 	}
 
 	private static EventHandler<DialogEvent> confirmCloseEventHandler = event -> {
+		// TODO: This doesn't cancel when closing via display manager
 		boolean cancel = Dialogs.showYesNoDialog("Exit", "Are you sure you want to exit?");
 
 		if (!cancel) {
