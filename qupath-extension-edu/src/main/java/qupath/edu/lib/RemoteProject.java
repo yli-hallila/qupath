@@ -2,16 +2,14 @@ package qupath.edu.lib;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.google.gson.reflect.TypeToken;
-import javafx.application.Platform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.EduExtension;
 import qupath.edu.exceptions.HttpException;
-import qupath.edu.gui.WorkspaceManager;
 import qupath.lib.classifiers.object.ObjectClassifier;
 import qupath.lib.classifiers.pixel.PixelClassifier;
 import qupath.lib.common.GeneralTools;
+import qupath.lib.gui.commands.ProjectImportImagesCommand;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
@@ -25,8 +23,11 @@ import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
 import qupath.lib.projects.ResourceManager;
 
+import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -70,11 +71,13 @@ public class RemoteProject implements Project<BufferedImage> {
 		creationTimestamp = element.get("createTimestamp").getAsLong();
 		modificationTimestamp = element.get("modifyTimestamp").getAsLong();
 
-		if (element.has("version"))
+		if (element.has("version")) {
 			version = element.get("version").getAsString();
+		}
 
-		if (version == null)
+		if (version == null) {
 			throw new IOException("Older projects are not supported in this version of QuPath, sorry!");
+		}
 
 		if (element.has("images")) {
 			RemoteProjectImageEntry[] images = gson.fromJson(element.get("images"), RemoteProjectImageEntry[].class);
@@ -383,27 +386,35 @@ public class RemoteProject implements Project<BufferedImage> {
 		/**
 		 * Thumbnail for this slide.
 		 */
-		private transient BufferedImage thumbnail;
+		private transient BufferedImage cachedThumbnail;
 
-		RemoteProjectImageEntry(final ImageServerBuilder.ServerBuilder<BufferedImage> builder, final Long entryID, final String imageName, final String description, final Map<String, String> metadataMap) {
+		/**
+		 * Base64 decoded PNG thumbnail
+		 */
+		private String thumbnail;
+
+		RemoteProjectImageEntry(ImageServerBuilder.ServerBuilder<BufferedImage> builder, Long entryID, String imageName, String description, Map<String, String> metadataMap) {
 			this.serverBuilder = builder;
 
-			if (entryID == null)
+			if (entryID == null) {
 				this.entryID = UUID.randomUUID().getMostSignificantBits() & Long.MAX_VALUE;
-			else
+			} else {
 				this.entryID = entryID;
+			}
 
-			if (imageName == null)
+			if (imageName == null) {
 				this.imageName = "Image " + entryID;
-			else
+			} else {
 				this.imageName = imageName;
+			}
 
-			if (description != null)
+			if (description != null) {
 				setDescription(description);
+			}
 
-			if (metadataMap != null)
+			if (metadataMap != null) {
 				metadata.putAll(metadataMap);
-
+			}
 		}
 
 		public RemoteProjectImageEntry(RemoteProjectImageEntry entry) {
@@ -413,6 +424,7 @@ public class RemoteProject implements Project<BufferedImage> {
 			this.description = entry.description;
 			this.metadata = entry.metadata;
 			this.imageData = entry.imageData;
+			this.thumbnail = entry.thumbnail;
 		}
 
 		@Override
@@ -562,22 +574,45 @@ public class RemoteProject implements Project<BufferedImage> {
 
 		@Override
 		public BufferedImage getThumbnail() {
+			if (cachedThumbnail != null) {
+				return cachedThumbnail;
+			}
+
 			if (thumbnail != null) {
-				return thumbnail;
+				byte[] bytes = Base64.getDecoder().decode(thumbnail);
+
+				try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+					cachedThumbnail = ImageIO.read(bis);
+				} catch (IOException e) {
+					logger.error("Error while reading thumbnail for {}. Generating a new one...", entryID, e);
+					generateThumbnail();
+				}
+			} else {
+				generateThumbnail();
 			}
 
-			try {
-				thumbnail = serverBuilder.build().getDefaultThumbnail(0, 0);
-			} catch (Exception e) {
-				logger.error("Unable to generate thumbnail for {}", entryID, e);
-			}
-
-			return thumbnail;
+			return cachedThumbnail;
 		}
 
 		@Override
 		public void setThumbnail(BufferedImage img) {
-			this.thumbnail = img;
+			this.cachedThumbnail = img;
+
+			try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+				ImageIO.write(cachedThumbnail, "png", os);
+
+				thumbnail = Base64.getEncoder().encodeToString(os.toByteArray());
+			} catch (Exception e) {
+				logger.error("Unable to generate thumbnail for {}", entryID, e);
+			}
+		}
+
+		private void generateThumbnail() {
+			try {
+				setThumbnail(ProjectImportImagesCommand.getThumbnailRGB(serverBuilder.build(), null));
+			} catch (Exception e) {
+				logger.error("Unable to generate thumbnail for {}", entryID, e);
+			}
 		}
 
 		@Override
