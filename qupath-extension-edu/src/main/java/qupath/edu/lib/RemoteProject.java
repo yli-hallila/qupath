@@ -29,9 +29,7 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.*;
 
 /**
@@ -56,8 +54,6 @@ public class RemoteProject implements Project<BufferedImage> {
 	private String version = null;
 
 	private String name;
-	private File file;
-
 	private String id;
 
 	private boolean maskNames = false;
@@ -66,35 +62,27 @@ public class RemoteProject implements Project<BufferedImage> {
 	private long creationTimestamp;
 	private long modificationTimestamp;
 
-	public RemoteProject(File fileProject) throws IOException {
-		this.file = fileProject;
+	public RemoteProject(String projectData) throws IOException {
+		Gson gson = GsonTools.getInstance();
+		JsonObject element = gson.fromJson(projectData, JsonObject.class);
 
-		try (BufferedReader fileReader = Files.newBufferedReader(fileProject.toPath(), StandardCharsets.UTF_8)) {
-			Gson gson = GsonTools.getInstance();
-			JsonObject element = gson.fromJson(fileReader, JsonObject.class);
+		id = element.get("id").getAsString();
+		creationTimestamp = element.get("createTimestamp").getAsLong();
+		modificationTimestamp = element.get("modifyTimestamp").getAsLong();
 
-			creationTimestamp = element.get("createTimestamp").getAsLong();
-			modificationTimestamp = element.get("modifyTimestamp").getAsLong();
+		if (element.has("version"))
+			version = element.get("version").getAsString();
 
-			if (element.has("version"))
-				version = element.get("version").getAsString();
+		if (version == null)
+			throw new IOException("Older projects are not supported in this version of QuPath, sorry!");
 
-			if (version == null)
-				throw new IOException("Older projects are not supported in this version of QuPath, sorry!");
+		if (element.has("images")) {
+			RemoteProjectImageEntry[] images = gson.fromJson(element.get("images"), RemoteProjectImageEntry[].class);
+			addImages(images);
+		}
 
-			List<RemoteProjectImageEntry> images = element.has("images") ? gson.fromJson(element.get("images"), new TypeToken<ArrayList<RemoteProjectImageEntry>>() {}.getType()) : Collections.emptyList();
-			for (RemoteProjectImageEntry entry: images) {
-				addImage(new RemoteProjectImageEntry(entry));
-			}
-
-			if (element.has("metadata")) {
-				metadata = gson.fromJson(element.get("metadata").getAsString(), MetadataMap.class);
-			}
-
-			// todo: temp
-			this.id = file.getParentFile().getName();
-		} catch (Exception e) {
-			throw new IOException(e);
+		if (element.has("metadata")) {
+			metadata = gson.fromJson(new String(Base64.getDecoder().decode(element.get("metadata").getAsString()), StandardCharsets.UTF_8), MetadataMap.class);
 		}
 	}
 
@@ -120,7 +108,7 @@ public class RemoteProject implements Project<BufferedImage> {
 
 	@Override
 	public URI getURI() {
-		return file.toURI();
+		return null;
 	}
 
 	@Override
@@ -135,7 +123,7 @@ public class RemoteProject implements Project<BufferedImage> {
 
 	@Override
 	public Path getPath() {
-		return file.toPath();
+		return null;
 	}
 
 	@Override
@@ -149,12 +137,18 @@ public class RemoteProject implements Project<BufferedImage> {
 	}
 
 	@Override
-	public ProjectImageEntry<BufferedImage> addImage(ImageServerBuilder.ServerBuilder<BufferedImage> builder) throws IOException {
+	public ProjectImageEntry<BufferedImage> addImage(ImageServerBuilder.ServerBuilder<BufferedImage> builder) {
 		var entry = new RemoteProjectImageEntry(builder, null, null, null, null);
 
 		images.add(entry);
 
 		return entry;
+	}
+
+	public void addImages(RemoteProjectImageEntry... entries) {
+		for (RemoteProjectImageEntry entry : entries) {
+			addImage(new RemoteProjectImageEntry(entry));
+		}
 	}
 
 	private boolean addImage(ProjectImageEntry<BufferedImage> entry) {
@@ -216,51 +210,27 @@ public class RemoteProject implements Project<BufferedImage> {
 
 	@Override
 	public void syncChanges() throws IOException {
-		if (file == null) {
-			throw new IOException("No file found, cannot write project: " + this);
-		}
-
 		Gson gson = GsonTools.getInstance(true);
 
 		JsonObject builder = new JsonObject();
+		builder.addProperty("id", id);
 		builder.addProperty("version", LATEST_VERSION);
 		builder.addProperty("createTimestamp", getCreationTimestamp());
 		builder.addProperty("modifyTimestamp", getModificationTimestamp());
-		builder.addProperty("uri", file.toURI().toString());
 
 		if (metadata != null) {
-			builder.addProperty("metadata", gson.toJson(metadata));
+			builder.addProperty("metadata", Base64.getEncoder().encodeToString(gson.toJson(metadata).getBytes(StandardCharsets.UTF_8)));
 		}
 
 		builder.add("images", gson.toJsonTree(images));
 
-		// Write project to a new file
-		var pathProject = file.toPath();
-		var pathTempNew = new File(file.getAbsolutePath() + ".tmp").toPath();
-		logger.debug("Writing project to {}", pathTempNew);
-
-		try (var writer = Files.newBufferedWriter(pathTempNew, StandardCharsets.UTF_8)) {
-			gson.toJson(builder, writer);
-		}
-
-		// If we already have a project, back it up
-		if (file.exists()) {
-			var pathBackup = new File(file.getAbsolutePath() + ".backup").toPath();
-			logger.debug("Backing up existing project to {}", pathBackup);
-			Files.move(pathProject, pathBackup, StandardCopyOption.REPLACE_EXISTING);
-		}
-
-		// If this succeeded, rename files
-		logger.debug("Renaming project to {}", pathProject);
-		Files.move(pathTempNew, pathProject, StandardCopyOption.REPLACE_EXISTING);
-
-		syncChangesToServer();
+		syncChangesToServer(gson.toJson(builder));
 	}
 
 	private boolean askedToLogin = false;
 
 	// TODO: WIP
-	private void syncChangesToServer() throws IOException {
+	private void syncChangesToServer(String projectData) {
 		var hasWriteAccess = false;
 		var makeCopy = false;
 
@@ -272,16 +242,17 @@ public class RemoteProject implements Project<BufferedImage> {
 			// TODO: Store a local copy of changes and sync again when connection works again?
 
 			Dialogs.showErrorMessage(
-			"Sync error",
-			"Error while syncing changes to server. If you exit now your changes will be lost; please retry later."
+				"Sync error",
+				"Error while syncing changes to server. If you exit now your changes will be lost; please retry later."
 			);
 		}
 
 		if (RemoteOpenslide.hasRole("MANAGE_PERSONAL_PROJECTS") && !hasWriteAccess) {
 			var response = Dialogs.showYesNoDialog("Save changes",
-			"You've made changes to this project but you don't have the required permissions to save these changes." +
+				"You've made changes to this project but you don't have the required permissions to save these changes." +
 				"\n\n" +
-				"Do you want to make a personal copy of this project which you can edit?");
+				"Do you want to make a personal copy of this project which you can edit?"
+			);
 
 			if (response) {
 				makeCopy = true;
@@ -290,9 +261,10 @@ public class RemoteProject implements Project<BufferedImage> {
 			}
 		} else if (!hasWriteAccess && !askedToLogin) {
 			var login = Dialogs.showYesNoDialog("Save changes",
-			"You've made changes to this project but you're not logged in." +
+				"You've made changes to this project but you're not logged in." +
 				"\n\n" +
-				"Do you wish to login?");
+				"Do you wish to login?"
+			);
 
 			askedToLogin = true;
 
@@ -305,39 +277,11 @@ public class RemoteProject implements Project<BufferedImage> {
 		}
 
 		if (makeCopy) {
-			Optional<String> query = RemoteOpenslide.createPersonalProject(getName());
-
-			try {
-				String projectId = query.orElseThrow(IOException::new);
-
-				Path dest = Path.of(System.getProperty("java.io.tmpdir"), "qupath-ext-project", projectId, File.separator);
-				Path src = file.getParentFile().toPath();
-
-				Files.createDirectory(dest.toAbsolutePath());
-
-				FileUtil.copy(src.toFile(), dest.toFile());
-
-				Path projectZipFile = Files.createTempFile("qupath-project-", ".zip");
-
-				ZipUtil.zip(dest, projectZipFile);
-
-				RemoteOpenslide.uploadProject(projectId, projectZipFile.toFile());
-				Files.delete(projectZipFile);
-
-				Platform.runLater(() -> WorkspaceManager.loadProject(projectId, "Copy of " + getName()));
-			} catch (IOException e) {
-				logger.error("Error while creating personal project", e);
-			}
+			// TODO: Reimplement personal projects
 		} else if (hasWriteAccess) {
 			logger.debug("Uploading project to server");
 
-			File projectFolder = file.getParentFile();
-			Path projectZipFile = Files.createTempFile("qupath-project-", ".zip");
-
-			ZipUtil.zip(projectFolder.toPath(), projectZipFile);
-
-			RemoteOpenslide.uploadProject(file.getParentFile().getName(), projectZipFile.toFile());
-			Files.delete(projectZipFile);
+			RemoteOpenslide.uploadProject(id, projectData);
 
 			Dialogs.showInfoNotification("[Debug]", "Changes synced to server.");
 			logger.debug("Uploaded to server");
@@ -401,8 +345,6 @@ public class RemoteProject implements Project<BufferedImage> {
 
 	class RemoteProjectImageEntry implements ProjectImageEntry<BufferedImage> {
 
-		private transient final String IMAGE_DATA = "imageData";
-
 		/**
 		 * ServerBuilder. This should be lightweight & capable of being JSON-ified.
 		 */
@@ -434,9 +376,9 @@ public class RemoteProject implements Project<BufferedImage> {
 		private Map<String, String> metadata = new LinkedHashMap<>();
 
 		/**
-		 * Serialized ImageData.
+		 * ImageData Base64 encoded.
 		 */
-		private ImageData<BufferedImage> imageData;
+		private String imageData;
 
 		/**
 		 * Thumbnail for this slide.
@@ -554,8 +496,8 @@ public class RemoteProject implements Project<BufferedImage> {
 
 		@Override
 		public ImageData<BufferedImage> readImageData() throws IOException {
-			if (containsMetadata(IMAGE_DATA)) {
-				ByteArrayInputStream is = new ByteArrayInputStream(Base64.getDecoder().decode(getMetadataValue(IMAGE_DATA)));
+			if (imageData != null) {
+				ByteArrayInputStream is = new ByteArrayInputStream(Base64.getDecoder().decode(imageData));
 
 				ImageData<BufferedImage> imageData = PathIO.readImageData(is, null, null, BufferedImage.class);
 				imageData.setChanged(false);
@@ -572,6 +514,8 @@ public class RemoteProject implements Project<BufferedImage> {
 				imageData.setProperty(IMAGE_ID, entryID.toString());
 				imageData.setChanged(false);
 
+				saveImageData(imageData);
+
 				return imageData;
 			} catch (Exception e) {
 				throw new IOException(e);
@@ -585,7 +529,7 @@ public class RemoteProject implements Project<BufferedImage> {
 			ByteArrayOutputStream os = new ByteArrayOutputStream();
 			PathIO.writeImageData(os, imageData);
 
-			putMetadataValue(IMAGE_DATA, Base64.getEncoder().encodeToString(os.toByteArray()));
+			this.imageData = Base64.getEncoder().encodeToString(os.toByteArray());
 		}
 
 		@Override
@@ -595,7 +539,7 @@ public class RemoteProject implements Project<BufferedImage> {
 
 		@Override
 		public boolean hasImageData() {
-			return containsMetadata(IMAGE_DATA);
+			return imageData != null;
 		}
 
 		@Override
@@ -607,10 +551,6 @@ public class RemoteProject implements Project<BufferedImage> {
 
 			if (!getMetadataMap().isEmpty()) {
 				for (Map.Entry<String, String> mapEntry : getMetadataMap().entrySet()) {
-					if (mapEntry.getKey().equals(IMAGE_DATA)) {
-						continue;
-					}
-
 					sb.append(mapEntry.getKey()).append(":\t").append(mapEntry.getValue()).append("\n");
 				}
 

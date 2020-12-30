@@ -24,7 +24,6 @@ import qupath.edu.EduExtension;
 import qupath.edu.EduOptions;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.RemoteProject;
-import qupath.edu.lib.ZipUtil;
 import qupath.edu.models.ExternalProject;
 import qupath.edu.models.ExternalSlide;
 import qupath.edu.models.ExternalSubject;
@@ -32,11 +31,7 @@ import qupath.edu.models.ExternalWorkspace;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -192,6 +187,7 @@ public class WorkspaceManager {
 
     private void createTabs(Accordion accordion, List<ExternalWorkspace> workspaces) {
         accordion.getPanes().clear();
+        projectsGridView.getItems().clear();
 
         for (ExternalWorkspace workspace : workspaces) {
             if (filterWorkspaces && !workspace.getOwner().equals(RemoteOpenslide.getOrganizationId())
@@ -305,6 +301,19 @@ public class WorkspaceManager {
             if (expandedWorkspaceId.equalsIgnoreCase((String) titledPane.getUserData())) {
                 accordion.setExpandedPane(titledPane);
 
+                for (ExternalWorkspace workspace : workspaces) {
+                    if (workspace.getId().equalsIgnoreCase((String) titledPane.getUserData())) {
+                        for (ExternalSubject subject : workspace.getSubjects()) {
+                            if (subject.getId().equals(currentSubject.get())) {
+                                projectsGridView.getItems().setAll(subject.getProjects());
+
+                                break;
+                            }
+                        }
+
+                        break;
+                    }
+                }
                 // TODO: Refresh projects
 
                 return;
@@ -478,8 +487,7 @@ public class WorkspaceManager {
         QuPathGUI qupath = QuPathGUI.getInstance();
 
         try {
-            // Confirm that the ID is a valid UUID. Otherwise we could supply
-            // e.g. "/home/" as the ID and the home directory would be deleted.
+            // Confirm that the ID is a valid UUID
             UUID.fromString(extProject.getId());
         } catch (IllegalArgumentException e) {
             Dialogs.showErrorNotification("Error", "Provided ID was formatted incorrectly.");
@@ -488,31 +496,20 @@ public class WorkspaceManager {
         }
 
         try {
-            Path tempPath = Path.of(System.getProperty("java.io.tmpdir"), "qupath-ext-project");
-            String tempPathStr = tempPath.toAbsolutePath().toString();
-            Files.createDirectories(tempPath);
-
-            try {
-                MoreFiles.deleteDirectoryContents(Path.of(tempPathStr, extProject.getId()), RecursiveDeleteOption.ALLOW_INSECURE);
-            } catch (NoSuchFileException ignored) {}
-
-            Task<Boolean> worker = new Task<>() {
+            Task<Optional<String>> worker = new Task<>() {
                 @Override
-                protected Boolean call() throws Exception {
-                    Optional<InputStream> projectInputStream = RemoteOpenslide.downloadProject(extProject.getIdWithTimestamp());
+                protected Optional<String> call() {
+                    updateMessage("Downloading project");
+                    Optional<String> projectData = RemoteOpenslide.downloadProject(extProject.getIdWithTimestamp());
 
-                    if (projectInputStream.isEmpty()) {
+                    if (projectData.isEmpty()) {
                         updateMessage("Error when downloading project, see log.");
-                        return false;
+                        return Optional.empty();
                     }
 
-                    updateMessage("Downloading project");
-                    ZipUtil.unzip(projectInputStream.get(), tempPathStr);
                     updateMessage("Downloaded. Opening project...");
 
-                    projectInputStream.get().close();
-
-                    return true;
+                    return projectData;
                 }
             };
 
@@ -521,11 +518,10 @@ public class WorkspaceManager {
             qupath.submitShortTask(worker);
             progress.showAndWait();
 
-            var success = worker.getValue();
+            var projectData = worker.getValue();
 
-            if (success) {
-                File projectFile = Path.of(tempPathStr, extProject.getId(), "project.qpproj").toFile();
-                RemoteProject project = new RemoteProject(projectFile);
+            if (projectData.isPresent()) {
+                RemoteProject project = new RemoteProject(projectData.get());
                 project.setName(extProject.getName());
 
                 if (manager != null) {
@@ -539,8 +535,8 @@ public class WorkspaceManager {
             }
         } catch (IOException e) {
             Dialogs.showErrorMessage(
-            "Error when trying to load project. ",
-            "See log for more information."
+                "Error when trying to load project. ",
+                "See log for more information."
             );
 
             logger.error("Error when loading external project", e);

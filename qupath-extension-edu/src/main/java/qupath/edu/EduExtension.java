@@ -24,7 +24,9 @@ import qupath.lib.gui.panes.PreferencePane;
 import qupath.lib.gui.panes.ProjectBrowser;
 import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.gui.viewer.QuPathViewerPlus;
+import qupath.lib.projects.Project;
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 
 import static qupath.lib.gui.ActionTools.*;
@@ -43,7 +45,7 @@ public class EduExtension implements QuPathExtension {
     private QuPathGUI qupath;
 
     private static final SimpleBooleanProperty noWriteAccess = new SimpleBooleanProperty(true);
-    private final Browser projectInformation = new Browser();
+    private static final Browser projectInformation = new Browser();
     private final TabPane tabbedPanel = new TabPane();
 
     @Override
@@ -155,6 +157,10 @@ public class EduExtension implements QuPathExtension {
         noWriteAccess.set(!hasWriteAccess);
     }
 
+    public static void setProjectInformation(String information) {
+        projectInformation.setContent(information);
+    }
+
     private void replaceAnnotationsPane() {
         SimpleAnnotationPane simpleAnnotationPane = new SimpleAnnotationPane(qupath);
 
@@ -164,8 +170,10 @@ public class EduExtension implements QuPathExtension {
     private void replaceViewer() {
         projectInformation.setTextHighlightable(false);
         projectInformation.setOnMouseClicked(event -> {
-            if (event.getClickCount() > 1 && qupath.getProject() != null) {
-                String projectId = qupath.getProject().getPath().getParent().getFileName().toString();
+            Project<BufferedImage> project = qupath.getProject();
+
+            if (event.getClickCount() > 1 && project instanceof RemoteProject) {
+                String projectId = ((RemoteProject) project).getId();
 
                 if (RemoteOpenslide.hasPermission(projectId)) {
                     ProjectDescriptionEditorCommand.openDescriptionEditor();

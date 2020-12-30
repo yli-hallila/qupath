@@ -2,6 +2,7 @@ package qupath.edu.gui;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.edu.EduExtension;
 import qupath.edu.lib.RemoteProject;
 import qupath.lib.gui.QuPathGUI;
 
@@ -22,6 +23,7 @@ public class ProjectDescriptionEditorCommand {
 
             if (result.isPresent()) {
                 project.storeMetadataValue(RemoteProject.PROJECT_INFORMATION, result.get());
+                EduExtension.setProjectInformation(result.get());
 
                 try {
                     project.syncChanges();

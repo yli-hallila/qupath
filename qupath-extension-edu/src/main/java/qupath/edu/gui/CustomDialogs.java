@@ -32,16 +32,10 @@ public class CustomDialogs {
 
 	private static final Logger logger = LoggerFactory.getLogger(CustomDialogs.class);
 
-	private static final String[] imageExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".gif" };
-
 	// TODO: This could be rewritten / looked into
 	public static Optional<String> showWysiwygEditor(String input) {
-		QuPathGUI qupath = QuPathGUI.getInstance();
-		String dataFolderURI = qupath.getProject().getPath().getParent().toUri().toString();
 		String resourceRoot = QuPathGUI.class.getResource("/ckeditor/ckeditor.js").toString();
 		resourceRoot = resourceRoot.substring(0, resourceRoot.length() - 20); // Hacky wacky way to get jar:file: ... URI
-
-		String result = null;
 
 		if (input == null) {
 			input = "";
@@ -49,16 +43,6 @@ public class CustomDialogs {
 
 		try {
 			String HTML = GeneralTools.readInputStreamAsString(QuPathGUI.class.getResourceAsStream("/html/editor.html"));
-
-			List<String> images = new ArrayList<>();
-			Files.list(qupath.getProject().getPath().getParent()).forEach(item -> {
-				String fileName = item.getName(item.getNameCount() - 1).toString().toLowerCase();
-
-				if (GeneralTools.checkExtensions(fileName, imageExtensions)) {
-					images.add(fileName);
-				}
-			});
-
 			HTML = HTML.replace("{{qupath-input}}", input)
 					   .replace("{{qupath-resource-root}}", resourceRoot);
 
@@ -70,18 +54,13 @@ public class CustomDialogs {
 				HTML = HTML.replace("{{qupath-auth}}", "");
 			}
 
-			result = CustomDialogs.showHTML(HTML);
+			return Optional.ofNullable(CustomDialogs.showHTML(HTML));
 		} catch (IOException e) {
 			logger.error("Error when opening editor", e);
 			Dialogs.showErrorNotification("Error when opening editor", e);
 		}
 
-		if (result != null) {
-			return Optional.of(result.replace(dataFolderURI, "qupath://"));
-		}
-
 		return Optional.empty();
-
 	}
 
 	public static String showHTML(String content) {

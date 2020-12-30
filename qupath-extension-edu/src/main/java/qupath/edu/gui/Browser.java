@@ -121,20 +121,13 @@ public class Browser extends Region {
     }
 
     private String getHtml(String content, boolean body) {
-        String DATA_FOLDER_URI = "";
         content = content == null ? "" : content;
-
-        if (QuPathGUI.getInstance().getProject() != null) {
-            DATA_FOLDER_URI = QuPathGUI.getInstance().getProject().getPath().toString(); // TODO: Is this correct?
-        }
 
         String CSS = "#content{border:1px solid var(--ck-color-base-border);border-radius:var(--ck-border-radius);max-height:700px;display:flex;flex-flow:column nowrap}#content__toolbar{z-index:1;box-shadow:0 0 5px hsla(0,0%,0%,.2);border-bottom:1px solid var(--ck-color-toolbar-border)}#content__toolbar .ck-toolbar{border:0;border-radius:0}#content__editable-container{padding:calc(2 * var(--ck-spacing-large));background:var(--ck-color-base-foreground);overflow-y:scroll}#content__editable-container #content__editable.ck-editor__editable{width:15.8cm;min-height:21cm;padding:1cm 2cm 2cm;border:1px hsl(0,0%,82.7%) solid;border-radius:var(--ck-border-radius);background:#fff;box-shadow:0 0 5px hsla(0,0%,0%,.1);margin:0 auto}.main__content-wide #content__editable-container #content__editable.ck-editor__editable{width:18cm}#content .ck-content,#content .ck-heading-dropdown .ck-list .ck-button__label{font:16px/1.6 \"Helvetica Neue\",Helvetica,Arial,sans-serif}#content .ck-heading-dropdown .ck-list .ck-button__label{line-height:calc(1.7 * var(--ck-line-height-base) * var(--ck-font-size-base));min-width:6em}#content .ck-heading-dropdown .ck-list .ck-heading_heading1 .ck-button__label,#content .ck-heading-dropdown .ck-list .ck-heading_heading2 .ck-button__label{transform:scale(.8);transform-origin:left}#content .ck-content h2,#content .ck-heading-dropdown .ck-heading_heading1 .ck-button__label{font-size:2.18em;font-weight:400}#content .ck-content h2{line-height:1.37em;padding-top:.342em;margin-bottom:.142em}#content .ck-content h3,#content .ck-heading-dropdown .ck-heading_heading2 .ck-button__label{font-size:1.75em;font-weight:400;color:#009dff}#content .ck-heading-dropdown .ck-heading_heading2.ck-on .ck-button__label{color:var(--ck-color-list-button-on-text)}#content .ck-content h3{line-height:1.86em;padding-top:.171em;margin-bottom:.357em}#content .ck-content h4,#content .ck-heading-dropdown .ck-heading_heading3 .ck-button__label{font-size:1.31em;font-weight:700}#content .ck-content h4{line-height:1.24em;padding-top:.286em;margin-bottom:.952em}#content .ck-content blockquote{font-family:Georgia,serif;margin-left:calc(2 * var(--ck-spacing-large));margin-right:calc(2 * var(--ck-spacing-large))}";
 
         if (!isTextHighlightable()) {
             CSS += "#content { -webkit-user-select: none; cursor: default; }";
         }
-
-        content = content.replace("qupath://", DATA_FOLDER_URI);
 
         if (body) {
             return ("<html>" +

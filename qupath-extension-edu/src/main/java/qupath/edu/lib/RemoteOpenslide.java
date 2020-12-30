@@ -289,56 +289,34 @@ public class RemoteOpenslide {
 
 	/* Projects */
 
-	public static Optional<InputStream> downloadProject(String id) throws IOException {
-		try {
-			String path;
+	public static Optional<String> downloadProject(String id) {
+		String path;
 
-			if (id.contains(":")) {
-				String[] parts = id.split(":");
-				path = "/api/v0/projects/" + e(parts[0]) + "?timestamp=" + parts[1];
-			} else {
-				path = "/api/v0/projects/" + e(id);
-			}
-
-			HttpClient client = HttpClient.newHttpClient();
-			HttpRequest.Builder builder = HttpRequest.newBuilder()
-				.uri(host.resolve(path));
-
-			addAuthorization(builder);
-			HttpRequest request = builder.build();
-
-			return Optional.of(client.send(request, BodyHandlers.ofInputStream()).body());
-		} catch (IOException | InterruptedException e) {
-			logger.error("Error when making HTTP GET request", e);
+		if (id.contains(":")) {
+			String[] parts = id.split(":");
+			path = "/api/v0/projects/" + e(parts[0]) + "?timestamp=" + parts[1];
+		} else {
+			path = "/api/v0/projects/" + e(id);
 		}
 
-		return Optional.empty();
+		var response = get(path);
+
+		if (isInvalidResponse(response)) {
+			return Optional.empty();
+		}
+
+		return Optional.of(response.get().body());
 	}
 
-	public static Result uploadProject(String projectId, File projectFile) {
-		try {
-			String boundary = new BigInteger(256, new Random()).toString();
-			Map<Object, Object> data = new LinkedHashMap<>();
-			data.put("project", projectFile.toPath());
+	public static Result uploadProject(String projectId, String projectData) {
+		var response = post(
+			"/api/v0/projects/" + e(projectId),
+			Map.of(
+				"project-data", projectData
+			)
+		);
 
-			HttpClient client = getHttpClient();
-			HttpRequest.Builder builder = HttpRequest.newBuilder()
-				.uri(host.resolve(
-					"/api/v0/projects/" + e(projectId)
-				))
-				.POST(ofMimeMultipartData(data, boundary))
-				.header("Content-Type", "multipart/form-data;boundary=" + boundary);
-
-			addAuthorization(builder);
-			HttpRequest request = builder.build();
-
-			HttpResponse<String> response = client.send(request, BodyHandlers.ofString());
-			return response.statusCode() == 200 ? Result.OK : Result.FAIL;
-		} catch (IOException | InterruptedException e) {
-			logger.error("Error when making uploading project", e);
-		}
-
-		return Result.FAIL;
+		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
 	}
 
 	public static Optional<String> createPersonalProject(String projectName) {
