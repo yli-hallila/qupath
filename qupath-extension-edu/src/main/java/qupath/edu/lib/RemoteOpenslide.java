@@ -370,6 +370,17 @@ public class RemoteOpenslide {
 		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
 	}
 
+	public static Result setProjectHidden(String projectId, boolean hidden) {
+		var response = put(
+			"/api/v0/projects/" + e(projectId),
+			Map.of(
+				"hidden", hidden
+			)
+		);
+
+		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
+	}
+
 	/* Slides */
 
 	public static List<ExternalSlide> getAllSlides() {

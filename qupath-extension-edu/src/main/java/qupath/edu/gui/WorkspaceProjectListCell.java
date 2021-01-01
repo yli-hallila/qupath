@@ -23,7 +23,6 @@ import qupath.lib.gui.dialogs.Dialogs;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static qupath.edu.lib.RemoteOpenslide.Result;
 
@@ -132,6 +131,12 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
 
         this.hasWriteAccess = RemoteOpenslide.isOwner(project.getOwner());
 
+        if (!hasWriteAccess && project.isHidden()) {
+            setText(null);
+            setGraphic(null);
+            return;
+        }
+
 //        if (hasWriteAccess) {
 //            enableReordering();
 //        }
@@ -140,11 +145,22 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
         pane.setPadding(new Insets(5));
         pane.setHgap(5);
         pane.setPrefWidth(getGridView().getPrefWidth());
-        pane.setBorder(new Border(
-            new BorderStroke(null, null, Color.LIGHTGRAY, null,
-            null, null, BorderStrokeStyle.SOLID, null,
-            CornerRadii.EMPTY, new BorderWidths(1), Insets.EMPTY))
-        );
+
+        if (project.isHidden()) {
+            pane.setBorder(new Border(new BorderStroke(
+                Color.DARKGRAY,           Color.DARKGRAY,           Color.DARKGRAY,           Color.DARKGRAY,
+                BorderStrokeStyle.DASHED, BorderStrokeStyle.DASHED, BorderStrokeStyle.DASHED, BorderStrokeStyle.DASHED,
+                CornerRadii.EMPTY, new BorderWidths(1), Insets.EMPTY
+            )));
+
+            pane.setBackground(new Background(new BackgroundFill(Color.LIGHTGRAY, null, null)));
+        } else {
+            pane.setBorder(new Border(new BorderStroke(
+                null, null, Color.DARKGRAY,          null,
+                null, null, BorderStrokeStyle.SOLID, null,
+                CornerRadii.EMPTY, new BorderWidths(1), Insets.EMPTY
+            )));
+        }
 
         /* Constraints */
         ColumnConstraints logoColumnConstraint = new ColumnConstraints(48);
@@ -207,13 +223,16 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
                     MenuItem miDelete = new MenuItem("Delete");
                     miDelete.setOnAction(action -> deleteProject());
 
-                    menu.getItems().addAll(miRename, miEditDescription, miDelete, new SeparatorMenuItem());
+                    MenuItem miToggleVisibility = new MenuItem(project.isHidden() ? "Reveal project" : "Hide project");
+                    miToggleVisibility.setOnAction(action -> toggleVisibility());
+
+                    menu.getItems().addAll(miRename, miEditDescription, miDelete, miToggleVisibility, new SeparatorMenuItem());
                 }
 
                 MenuItem miShare = new MenuItem("Share");
                 miShare.setOnAction(action -> Dialogs.showInputDialog(
-                "Project ID",
-                "You can enter this ID to: Remote Openslide > Open project by ID",
+                    "Project ID",
+                    "You can enter this ID to: Remote Openslide > Open project by ID",
                     project.getId()
                 ));
 
@@ -291,4 +310,25 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
         }
     }
 
+    private void toggleVisibility() {
+        boolean confirm = Dialogs.showConfirmDialog(
+            "Are you sure?",
+            "Do you wish to set this project " + (project.isHidden() ? "visible" : "hidden")
+        );
+
+        if (confirm) {
+            Result result = RemoteOpenslide.setProjectHidden(project.getId(), !project.isHidden());
+            TitledPane expanded = manager.getAccordion().getExpandedPane();
+
+            if (result == Result.OK) {
+                manager.refreshDialog();
+                manager.getAccordion().setExpandedPane(expanded);
+            } else {
+                Dialogs.showErrorNotification(
+                    "Error while setting project visibility",
+                    "See log for more details"
+                );
+            }
+        }
+    }
 }
