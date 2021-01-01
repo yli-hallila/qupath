@@ -131,16 +131,6 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
 
         this.hasWriteAccess = RemoteOpenslide.isOwner(project.getOwner());
 
-        if (!hasWriteAccess && project.isHidden()) {
-            setText(null);
-            setGraphic(null);
-            return;
-        }
-
-//        if (hasWriteAccess) {
-//            enableReordering();
-//        }
-
         GridPane pane = new GridPane();
         pane.setPadding(new Insets(5));
         pane.setHgap(5);

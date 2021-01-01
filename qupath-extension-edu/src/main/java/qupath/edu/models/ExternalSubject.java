@@ -1,5 +1,7 @@
 package qupath.edu.models;
 
+import qupath.edu.lib.RemoteOpenslide;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -8,7 +10,7 @@ public class ExternalSubject {
 
     private String id;
     private String name;
-    private String organization;
+    private String workspace;
 
     private List<ExternalProject> projects;
 
@@ -28,20 +30,23 @@ public class ExternalSubject {
         this.name = name;
     }
 
-    public String getOrganization() {
-        return organization;
+    public String getWorkspace() {
+        return workspace;
     }
 
-    public void setOrganization(String organization) {
-        this.organization = organization;
+    public void setWorkspace(String workspace) {
+        this.workspace = workspace;
     }
 
     /**
-     * Returns an alphabetically sorted list of projects
-     * @return
+     * Returns an alphabetically sorted list of projects with hidden projects filtered out
+     * @return List of ExternalProjects
      */
     public List<ExternalProject> getProjects() {
-        return projects.stream().sorted(Comparator.comparing(ExternalProject::getName)).collect(Collectors.toList());
+        return projects.stream()
+                .filter(project -> !(project.isHidden() && !RemoteOpenslide.isOwner(project.getOwner())))
+                .sorted(Comparator.comparing(ExternalProject::getName))
+                .collect(Collectors.toList());
     }
 
     public void setProjects(List<ExternalProject> projects) {
