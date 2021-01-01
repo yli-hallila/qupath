@@ -7,9 +7,7 @@ import org.slf4j.LoggerFactory;
 import qupath.edu.exceptions.HttpException;
 import qupath.edu.models.*;
 
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -260,10 +258,10 @@ public class RemoteOpenslide {
 
 	public static Result createSubject(String workspaceId, String name) {
 		var response = post(
-		"/api/v0/subjects",
+			"/api/v0/subjects",
 			Map.of(
-			"workspace-id", workspaceId,
-			"subject-name", name
+				"workspace-id", workspaceId,
+				"subject-name", name
 			)
 		);
 
@@ -280,7 +278,7 @@ public class RemoteOpenslide {
 		var response = put(
 			"/api/v0/subjects/" + e(subjectId),
 			Map.of(
-			"subject-name", newName
+				"subject-name", newName
 			)
 		);
 
@@ -321,9 +319,9 @@ public class RemoteOpenslide {
 
 	public static Optional<String> createPersonalProject(String projectName) {
 		var response = post(
-		"/api/v0/projects/personal",
+			"/api/v0/projects/personal",
 			Map.of(
-			"project-name", projectName
+				"project-name", projectName
 			)
 		);
 
@@ -342,10 +340,10 @@ public class RemoteOpenslide {
 	 */
 	public static Result createProject(String subjectId, String projectName) {
 		var response = post(
-		"/api/v0/projects",
+			"/api/v0/projects",
 			Map.of(
-			"subject-id", subjectId == null ? "personal" : subjectId,
-			"project-name", projectName
+				"subject-id", subjectId == null ? "personal" : subjectId,
+				"project-name", projectName
 			)
 		);
 
@@ -354,10 +352,10 @@ public class RemoteOpenslide {
 
 	public static Result editProject(String projectId, String name, String description) {
 		var response = put(
-		"/api/v0/projects/" + e(projectId),
+			"/api/v0/projects/" + e(projectId),
 			Map.of(
-			"name", name,
-			"description", description
+				"name", name,
+				"description", description
 			)
 		);
 
@@ -373,9 +371,7 @@ public class RemoteOpenslide {
 	public static Result setProjectHidden(String projectId, boolean hidden) {
 		var response = put(
 			"/api/v0/projects/" + e(projectId),
-			Map.of(
-				"hidden", hidden
-			)
+			Map.of("hidden", hidden)
 		);
 
 		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
@@ -407,9 +403,7 @@ public class RemoteOpenslide {
 	public static Result editSlide(String slideId, String name) {
 		var response = put(
 			"/api/v0/slides/" + e(slideId),
-			Map.of(
-				"slide-name", name
-			)
+			Map.of("slide-name", name)
 		);
 
 		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
@@ -489,7 +483,7 @@ public class RemoteOpenslide {
 
 	public static Result createWorkspace(String workspaceName) {
 		var response = post(
-		"/api/v0/workspaces",
+			"/api/v0/workspaces",
 			Map.of("workspace-name", workspaceName)
 		);
 
@@ -498,7 +492,7 @@ public class RemoteOpenslide {
 
 	public static Result renameWorkspace(String workspaceId, String newName) {
 		var response = put(
-		"/api/v0/workspaces/" + e(workspaceId),
+			"/api/v0/workspaces/" + e(workspaceId),
 			Map.of("workspace-name", newName)
 		);
 
@@ -662,8 +656,7 @@ public class RemoteOpenslide {
 
 	private static HttpRequest.BodyPublisher ofMimeMultipartData(Map<Object, Object> data, String boundary) throws IOException {
 		var byteArrays = new ArrayList<byte[]>();
-		byte[] separator = ("--" + boundary + LINE_FEED
-				+"Content-Disposition: form-data; name=").getBytes();
+		byte[] separator = ("--" + boundary + LINE_FEED + "Content-Disposition: form-data; name=").getBytes();
 
 		for (Map.Entry<Object, Object> entry : data.entrySet()) {
 			byteArrays.add(separator);

@@ -234,9 +234,9 @@ public class WorkspaceManager {
 
     private void openById(ActionEvent actionEvent) {
         String id = Dialogs.showInputDialog(
-        "Project or slide ID",
-        "All IDs are similar to 6ce7a026-e023-47b5-9b2e-0fc5eb523e49",
-        ""
+            "Project or slide ID",
+            "All IDs are similar to 6ce7a026-e023-47b5-9b2e-0fc5eb523e49",
+            ""
         );
 
         if (id == null) {
@@ -334,8 +334,8 @@ public class WorkspaceManager {
             refreshDialog();
         } else {
             Dialogs.showErrorNotification(
-            "Error when creating project",
-            "See log for possibly more details."
+                "Error when creating project",
+                "See log for possibly more details."
             );
         }
     }
@@ -401,8 +401,8 @@ public class WorkspaceManager {
 
     private void deleteWorkspace(ExternalWorkspace workspace) {
         boolean confirm = Dialogs.showConfirmDialog(
-        "Delete workspace",
-        "Are you sure you wish to delete this workspace? This is irreversible."
+            "Delete workspace",
+            "Are you sure you wish to delete this workspace? This is irreversible."
         );
 
         if (!confirm) {
@@ -411,13 +411,13 @@ public class WorkspaceManager {
 
         Result result = RemoteOpenslide.deleteWorkspace(workspace.getId());
 
-        if (result == Result.FAIL) {
-            Dialogs.showErrorNotification(
-            "Error when deleting workspace",
-            "See log for possibly more details.."
-            );
-        } else {
+        if (result == Result.OK) {
             refreshDialog();
+        } else {
+            Dialogs.showErrorNotification(
+                    "Error when deleting workspace",
+                    "See log for possibly more details.."
+            );
         }
     }
 
@@ -454,13 +454,13 @@ public class WorkspaceManager {
 
         Result result = RemoteOpenslide.deleteSubject(subject.getId());
 
-        if (result == Result.FAIL) {
-            Dialogs.showErrorNotification(
-                "Error when deleting subject",
-                "See log for possibly more details.."
-            );
-        } else {
+        if (result == Result.OK) {
             refreshDialog();
+        } else {
+            Dialogs.showErrorNotification(
+                    "Error when deleting subject",
+                    "See log for possibly more details.."
+            );
         }
     }
 
