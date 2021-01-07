@@ -2,19 +2,19 @@ package qupath.edu.models;
 
 public class ExternalOrganization {
 
-	private String logoUrl;
-	private String name;
 	private String id;
+	private String name;
+	private String logoUrl;
 
-	public String getLogoUrl() {
-		return logoUrl;
+	public String getId() {
+		return id;
 	}
 
 	public String getName() {
 		return name;
 	}
 
-	public String getId() {
-		return id;
+	public String getLogoUrl() {
+		return logoUrl;
 	}
 }

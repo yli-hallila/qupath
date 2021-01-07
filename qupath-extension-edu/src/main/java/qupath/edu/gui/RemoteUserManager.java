@@ -1,7 +1,7 @@
 package qupath.edu.gui;
 
-import fi.ylihallila.remote.commons.Roles;
 import javafx.application.Platform;
+import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -16,8 +16,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.gui.buttons.IconButtons;
 import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.lib.Roles;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.edu.models.ExternalUser;
+import qupath.lib.gui.tools.PaneTools;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,18 +30,18 @@ public class RemoteUserManager {
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     private BorderPane pane;
-    private Dialog<ButtonType> dialog;
+    private static Dialog<ButtonType> dialog;
 
     public static void showManagementDialog() {
         RemoteUserManager manager = new RemoteUserManager();
 
-        manager.dialog = Dialogs.builder()
+        dialog = Dialogs.builder()
                 .title("User Management")
                 .content(manager.getPane())
-                .buttons(ButtonType.CLOSE)
                 .build();
 
-        manager.dialog.show();
+        dialog.setResult(ButtonType.CLOSE);
+        dialog.show();
     }
 
     public synchronized BorderPane getPane() {
@@ -72,7 +74,8 @@ public class RemoteUserManager {
         table.getColumns().addAll(nameColumn, emailColumn, organizationColumn);
         table.getItems().addAll(RemoteOpenslide.getAllUsers());
 
-        /* onClick */
+        /* Table onClick */
+
         table.setOnMouseClicked(event -> {
             ExternalUser selectedItem = table.getSelectionModel().getSelectedItem();
 
@@ -81,10 +84,29 @@ public class RemoteUserManager {
             }
         });
 
+        /* Buttons */
+
+        Button btnCreate = new Button("Create");
+        btnCreate.setDisable(true);
+
+        Button btnEdit = new Button("Edit");
+        btnEdit.setOnAction(a -> editUser(table.getSelectionModel().getSelectedItem()));
+        btnEdit.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+
+        Button btnDelete = new Button("Delete");
+        btnDelete.setDisable(true);
+
+        GridPane buttons = PaneTools.createColumnGridControls(btnDelete, btnEdit, btnCreate);
+        buttons.setHgap(5);
+
+        /* Pane */
+
         pane = new BorderPane();
         pane.setPrefWidth(600);
         pane.setPrefHeight(400);
         pane.setCenter(table);
+        pane.setBottom(buttons);
+        pane.setPadding(new Insets(10));
     }
 
     private void editUser(ExternalUser user) {
@@ -115,12 +137,6 @@ public class RemoteUserManager {
         Button btnEditEmail = IconButtons.createIconButton(FontAwesome.Glyph.PENCIL);
         btnEditEmail.setOnAction(e -> tfEmail.setDisable(false));
 
-        /* Organization */
-
-        TextField tfOrganization = new TextField();
-        tfOrganization.setText(user.getOrganization().getName());
-        tfOrganization.setDisable(true);
-
         /* Password */
 
         PasswordField tfPassword = new PasswordField();
@@ -130,6 +146,12 @@ public class RemoteUserManager {
         Button btnEditPassword = IconButtons.createIconButton(FontAwesome.Glyph.PENCIL);
         btnEditPassword.setOnAction(e -> tfPassword.setDisable(false));
         btnEditPassword.setDisable(!RemoteOpenslide.hasRole(Roles.ADMIN));
+
+        /* Organization */
+
+        TextField tfOrganization = new TextField();
+        tfOrganization.setText(user.getOrganization().getName());
+        tfOrganization.setDisable(true);
 
         /* Pane */
 
@@ -141,10 +163,10 @@ public class RemoteUserManager {
         pane.add(tfEmail, 0, ++row);
         pane.add(btnEditEmail, 1, row);
 
-        pane.add(tfOrganization, 0, ++row);
-
         pane.add(tfPassword, 0, ++row);
         pane.add(btnEditPassword, 1, row);
+
+        pane.add(tfOrganization, 0, ++row);
 
         /* Separator */
 
@@ -178,7 +200,7 @@ public class RemoteUserManager {
 
         GridPane.setHgrow(tfName, Priority.ALWAYS);
 
-        /* Save Button */
+        /* Edit Dialog */
 
         Optional<ButtonType> result = Dialogs.builder()
                 .title("Edit user")
@@ -209,8 +231,8 @@ public class RemoteUserManager {
             }
 
             if (RemoteOpenslide.editUser(user.getId(), formData)) {
-                Dialogs.showInfoNotification("Success", "Successfully edited user.");
                 refresh();
+                Dialogs.showInfoNotification("Success", "Successfully edited user.");
             } else {
                 Dialogs.showErrorNotification("Error", "Error while editing user. See log for possibly more details.");
             }

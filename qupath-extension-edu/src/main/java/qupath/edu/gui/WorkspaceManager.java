@@ -24,6 +24,7 @@ import qupath.edu.EduExtension;
 import qupath.edu.EduOptions;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.RemoteProject;
+import qupath.edu.lib.Roles;
 import qupath.edu.models.ExternalProject;
 import qupath.edu.models.ExternalSlide;
 import qupath.edu.models.ExternalSubject;
@@ -128,18 +129,21 @@ public class WorkspaceManager {
 
         /* Buttons */
 
+        // TODO: Fix disabled buttons when no workspaces available
+
         MenuItem miCreateWorkspace = new MenuItem("Workspace");
         miCreateWorkspace.setOnAction(action -> createNewWorkspace());
 
         MenuItem miCreateSubject = new MenuItem("Subject");
         miCreateSubject.setOnAction(action -> createNewSubject());
+        miCreateSubject.disableProperty().bind(hasAccessProperty.not());
 
         MenuItem miCreateProject = new MenuItem("Project");
         miCreateProject.setOnAction(action -> createNewProject());
+        miCreateProject.disableProperty().bind(hasAccessProperty.not());
 
         MenuButton menuCreate = new MenuButton("Create ...");
         menuCreate.getItems().addAll(miCreateWorkspace, miCreateSubject, miCreateProject);
-        menuCreate.disableProperty().bind(hasAccessProperty.not());
 
         Button btnLogout = new Button("Logout");
         btnLogout.setOnAction(action -> logout());
@@ -290,12 +294,22 @@ public class WorkspaceManager {
             Platform.runLater(this::refreshDialog);
         }
 
-        String expandedWorkspaceId = (String) accordion.getExpandedPane().getUserData();
+        String expandedWorkspaceId;
+
+        if (accordion.getExpandedPane() == null) {
+            expandedWorkspaceId = null;
+        } else {
+            expandedWorkspaceId = (String) accordion.getExpandedPane().getUserData();
+        }
 
         List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
         createTabs(accordion, workspaces);
 
         // Restore the previously open TitlePane
+
+        if (expandedWorkspaceId == null) {
+            return;
+        }
 
         for (TitledPane titledPane : accordion.getPanes()) {
             if (expandedWorkspaceId.equalsIgnoreCase((String) titledPane.getUserData())) {

@@ -1,7 +1,6 @@
 package qupath.edu.gui;
 
 import com.microsoft.aad.msal4j.*;
-import fi.ylihallila.remote.commons.Roles;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.SimpleStringProperty;
@@ -26,10 +25,10 @@ import org.slf4j.LoggerFactory;
 import qupath.edu.EduExtension;
 import qupath.edu.EduOptions;
 import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.lib.Roles;
 import qupath.edu.models.ExternalOrganization;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
-import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.tools.PaneTools;
 
 import java.awt.*;
@@ -83,7 +82,7 @@ public class RemoteServerLoginManager {
         cbLogos.prefWidthProperty().bind(pane.widthProperty());
         cbLogos.setButtonCell(new ImageViewListCell(false));
         cbLogos.setCellFactory(f -> new ImageViewListCell(true));
-        cbLogos.getItems().addAll(RemoteOpenslide.getOrganizations().orElse(Collections.emptyList()));
+        cbLogos.getItems().addAll(RemoteOpenslide.getAllOrganizations().orElse(Collections.emptyList()));
 
         selectPreviousOrganization(cbLogos);
 
@@ -317,7 +316,7 @@ public class RemoteServerLoginManager {
             if (item == null || empty) {
                 setGraphic(null);
             } else {
-                Image image = new Image(RemoteOpenslide.getHost() + item.getLogoUrl());
+                Image image = new Image(item.getLogoUrl());
                 ImageView imageView = new ImageView(image);
 
                 if (buttonCell) {

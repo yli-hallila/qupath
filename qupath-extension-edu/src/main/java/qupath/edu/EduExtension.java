@@ -129,6 +129,7 @@ public class EduExtension implements QuPathExtension {
             createMenuItem(createAction(ExternalSlideManager::showExternalSlideManager, "Manage slides")),
             createMenuItem(createAction(BackupManager::showBackupManagerPane, "Manage backups")),
             createMenuItem(createAction(RemoteUserManager::showManagementDialog, "Manage users")),
+            createMenuItem(createAction(OrganizationManager::showOrganizationManager, "Manage organizations")),
             createMenuItem(createAction(EduExtension::showWorkspaceOrLoginDialog, "Show workspaces")),
             createMenuItem(createAction(this::checkSaveChanges, "Sync changes"))
         );

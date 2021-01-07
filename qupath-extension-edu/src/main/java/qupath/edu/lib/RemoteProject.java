@@ -250,7 +250,7 @@ public class RemoteProject implements Project<BufferedImage> {
 			);
 		}
 
-		if (RemoteOpenslide.hasRole("MANAGE_PERSONAL_PROJECTS") && !hasWriteAccess) {
+		if (RemoteOpenslide.hasRole(Roles.MANAGE_PERSONAL_PROJECTS) && !hasWriteAccess) {
 			var response = Dialogs.showYesNoDialog("Save changes",
 				"You've made changes to this project but you don't have the required permissions to save these changes." +
 				"\n\n" +

@@ -22,6 +22,7 @@ import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.lib.Roles;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
@@ -167,7 +168,7 @@ public class SlideTour implements QuPathViewerListener {
 
 		if (tourActiveProperty.get()) {
 			getTourPane(borderPane);
-		} else if (tourEntries.size() > 0 || RemoteOpenslide.hasRole(fi.ylihallila.remote.commons.Roles.MANAGE_PROJECTS)) {
+		} else if (tourEntries.size() > 0 || RemoteOpenslide.hasRole(Roles.MANAGE_PROJECTS)) {
 			getTourStartPane(borderPane);
 		} else {
 			pane.setVisible(false);
@@ -253,7 +254,7 @@ public class SlideTour implements QuPathViewerListener {
 		borderPane.setTop(buttons);
 		borderPane.setCenter(text);
 
-		if (RemoteOpenslide.hasRole(fi.ylihallila.remote.commons.Roles.MANAGE_PROJECTS)) {
+		if (RemoteOpenslide.hasRole(Roles.MANAGE_PROJECTS)) {
 			GridPane adminButtons = PaneTools.createColumnGridControls(btnEdit, btnDelete, btnAdd);
 			adminButtons.setHgap(5);
 

@@ -1,11 +1,13 @@
 package qupath.edu.lib;
 
 import com.google.gson.*;
-import fi.ylihallila.remote.commons.Roles;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.exceptions.HttpException;
 import qupath.edu.models.*;
+import qupath.lib.io.GsonTools;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -44,8 +46,6 @@ public class RemoteOpenslide {
 	 * The GUID of the Azure AD Tenant this user belongs to.
 	 */
 	private static String organizationId;
-
-	private static List<String> roles = new ArrayList<>();
 
 	public static String getUserId() {
 		return userId;
@@ -120,18 +120,14 @@ public class RemoteOpenslide {
 
 	/* Roles and Permissions*/
 
+	private static ObservableList<Roles> roles = FXCollections.observableArrayList();
+
+	public static ObservableList<Roles> getRoles() {
+		return roles;
+	}
+
 	public static boolean hasRole(Roles role) {
-		return roles.contains(role.name());
-	}
-
-	public static boolean hasRole(String role) {
 		return roles.contains(role);
-	}
-
-	public static boolean hasRole(String... temp) {
-		List<String> permitted = List.of(temp);
-
-		return roles.stream().anyMatch(permitted::contains);
 	}
 
 	/**
@@ -201,10 +197,10 @@ public class RemoteOpenslide {
 		setUserId(result.get("userId").getAsString());
 		setOrganizationId(result.get("organizationId").getAsString());
 
-		JsonArray permissions = result.get("roles").getAsJsonArray();
-		for (JsonElement element : permissions) {
-			String permission = element.getAsString();
-			roles.add(permission);
+		JsonArray roles = result.get("roles").getAsJsonArray();
+		for (JsonElement element : roles) {
+			String role = element.getAsString().toUpperCase();
+			RemoteOpenslide.roles.add(Roles.valueOf(role));
 		}
 
 		return true;
@@ -221,9 +217,9 @@ public class RemoteOpenslide {
 		}
 
 		JsonArray roles = JsonParser.parseString(response.get().body()).getAsJsonArray();
-		for (JsonElement role : roles) {
-			String permission = role.getAsString().toUpperCase();
-			RemoteOpenslide.roles.add(permission);
+		for (JsonElement element : roles) {
+			String role = element.getAsString().toUpperCase();
+			RemoteOpenslide.roles.add(Roles.valueOf(role));
 		}
 
 		return true;
@@ -511,7 +507,7 @@ public class RemoteOpenslide {
 
 	/* Organizations */
 
-	public static Optional<List<ExternalOrganization>> getOrganizations() {
+	public static Optional<List<ExternalOrganization>> getAllOrganizations() {
 		var response = get("/api/v0/organizations");
 
 		if (isInvalidResponse(response)) {
@@ -519,6 +515,34 @@ public class RemoteOpenslide {
 		}
 
 		return Optional.of(List.of(new Gson().fromJson(response.get().body(), ExternalOrganization[].class)));
+	}
+
+	public static Optional<ExternalOrganization> createOrganization(String name) {
+		var response = post(
+			"/api/v0/organizations",
+			Map.of("name", name)
+		);
+
+		if (isInvalidResponse(response)) {
+			return Optional.empty();
+		} else {
+			return Optional.of(GsonTools.getInstance().fromJson(response.get().body(), ExternalOrganization.class));
+		}
+	}
+
+	public static Result deleteOrganization(String id) {
+		var response = delete("/api/v0/organizations/" + e(id));
+
+		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
+	}
+
+	public static Result editOrganization(String id, String name) {
+		var response = patch(
+			"/api/v0/organizations/" + e(id),
+			Map.of("name", name)
+		);
+
+		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
 	}
 
 	/* Backups */
@@ -597,12 +621,20 @@ public class RemoteOpenslide {
 	}
 
 	private static Optional<HttpResponse<String>> put(String path, Map<?, ?> data) {
+		return putOrPatch(path, data, "PUT");
+	}
+
+	private static Optional<HttpResponse<String>> patch(String path, Map<?, ?> data) {
+		return putOrPatch(path, data, "PATCH");
+	}
+
+	private static Optional<HttpResponse<String>> putOrPatch(String path, Map<?, ?> data, String method) {
 		try {
 			HttpClient client = getHttpClient();
 			HttpRequest.Builder builder = HttpRequest.newBuilder()
-				.PUT(ofFormData((Map<Object, Object>) data))
-				.uri(host.resolve(path))
-				.header("Content-Type", "application/x-www-form-urlencoded");
+					.method(method, ofFormData((Map<Object, Object>) data))
+					.uri(host.resolve(path))
+					.header("Content-Type", "application/x-www-form-urlencoded");
 
 			addAuthorization(builder);
 
@@ -610,7 +642,7 @@ public class RemoteOpenslide {
 
 			return Optional.of(client.send(request, BodyHandlers.ofString()));
 		} catch (IOException | InterruptedException e) {
-			logger.error("Error when making HTTP PUT request", e);
+			logger.error("Error when making HTTP " + method + " request", e);
 			throw new HttpException(e);
 		}
 	}

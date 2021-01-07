@@ -11,6 +11,7 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.lib.Roles;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.objects.PathObject;
@@ -21,7 +22,7 @@ import java.util.List;
 public class EditAnnotationAnswerDialog {
 
     public static boolean openDialog(SimpleAnnotationPane annotationPane) {
-        if (!RemoteOpenslide.hasRole(fi.ylihallila.remote.commons.Roles.MANAGE_PROJECTS)) {
+        if (!RemoteOpenslide.hasRole(Roles.MANAGE_PROJECTS)) {
             Dialogs.showErrorMessage("No permission", "You don't have permissions to edit answers.");
             return true;
         }

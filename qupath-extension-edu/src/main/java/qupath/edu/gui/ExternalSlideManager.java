@@ -26,6 +26,7 @@ import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.lib.Roles;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.commands.ProjectImportImagesCommand;
 import qupath.lib.gui.dialogs.Dialogs;
@@ -143,7 +144,7 @@ public class ExternalSlideManager {
         }, table.getSelectionModel().selectedItemProperty());
 
         BooleanBinding slideSelected = table.getSelectionModel().selectedItemProperty().isNull();
-        BooleanBinding canManageSlides = new SimpleBooleanProperty(RemoteOpenslide.hasRole("MANAGE_SLIDES")).not();
+        BooleanBinding canManageSlides = new SimpleBooleanProperty(RemoteOpenslide.hasRole(Roles.MANAGE_SLIDES)).not();
 
         Button btnAdd = new Button("Add selected");
         btnAdd.setTooltip(new Tooltip("Add selected slides to current project"));
