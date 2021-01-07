@@ -42,6 +42,7 @@ public class OrganizationManager {
                 .size(1000, 600)
                 .build();
 
+        dialog.getDialogPane().getStylesheets().add(OrganizationManager.class.getClassLoader().getResource("css/remove_buttonbar.css").toExternalForm());
         dialog.setResult(ButtonType.CLOSE);
         dialog.show();
     }
@@ -74,19 +75,19 @@ public class OrganizationManager {
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPlaceholder(new Text("No organizations or no permissions."));
 
-        TableColumn<ExternalOrganization, String> uuidColumn = new TableColumn<>("UUID");
-        uuidColumn.setCellValueFactory(new PropertyValueFactory<>("id"));
-        uuidColumn.setReorderable(false);
-
         TableColumn<ExternalOrganization, String> nameColumn = new TableColumn<>("Name");
         nameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
         nameColumn.setReorderable(false);
+
+        TableColumn<ExternalOrganization, String> uuidColumn = new TableColumn<>("UUID");
+        uuidColumn.setCellValueFactory(new PropertyValueFactory<>("id"));
+        uuidColumn.setReorderable(false);
 
         TableColumn<ExternalOrganization, String> logoUrlColumn = new TableColumn<>("Logo URL");
         logoUrlColumn.setCellValueFactory(new PropertyValueFactory<>("logoUrl"));
         logoUrlColumn.setReorderable(false);
 
-        table.getColumns().addAll(uuidColumn, nameColumn, logoUrlColumn);
+        table.getColumns().addAll(nameColumn, uuidColumn, logoUrlColumn);
 
         table.setItems(FXCollections.observableArrayList(RemoteOpenslide.getAllOrganizations().orElse(Collections.emptyList())));
 
@@ -116,6 +117,7 @@ public class OrganizationManager {
         pane = new BorderPane();
         pane.setPrefWidth(800);
         pane.setPrefHeight(400);
+        pane.setTop(new Text("Only administrators may change these settings."));
         pane.setCenter(table);
         pane.setBottom(buttons);
         pane.setPadding(new Insets(10));

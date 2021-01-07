@@ -1,5 +1,7 @@
 package qupath.edu.models;
 
+import qupath.edu.lib.Roles;
+
 import java.util.List;
 
 public class ExternalUser {
@@ -8,7 +10,7 @@ public class ExternalUser {
     private String name;
     private String email;
     private ExternalOrganization organization;
-    private List<String> roles;
+    private List<Roles> roles;
 
     public String getId() {
         return id;
@@ -34,7 +36,18 @@ public class ExternalUser {
         return organization.getId();
     }
 
-    public List<String> getRoles() {
+    public List<Roles> getRoles() {
         return roles;
+    }
+
+    @Override
+    public String toString() {
+        return "ExternalUser{" +
+                "id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                ", email='" + email + '\'' +
+                ", organization=" + organization +
+                ", roles=" + roles +
+                '}';
     }
 }

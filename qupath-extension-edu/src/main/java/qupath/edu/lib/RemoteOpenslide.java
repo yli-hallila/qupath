@@ -36,6 +36,8 @@ public class RemoteOpenslide {
 	private static String username;
 	private static String password;
 
+	private static ExternalUser user;
+
 	/**
 	 * A GUID provided by the Azure Active Directory, which is unique and consistent for every user.
 	 * @see <a href="https://docs.microsoft.com/fi-fi/onedrive/find-your-office-365-tenant-id">Microsoft documentation</a>
@@ -55,6 +57,10 @@ public class RemoteOpenslide {
 		RemoteOpenslide.userId = userId;
 	}
 
+	/**
+	 * Returns the users organization id. Null if not logged in.
+	 * @return String Organization UUID
+	 */
 	public static String getOrganizationId() {
 		return organizationId;
 	}
@@ -118,6 +124,17 @@ public class RemoteOpenslide {
 		RemoteOpenslide.token = token;
 	}
 
+	private static void setUser(ExternalUser user) {
+		setUserId(user.getId());
+		setOrganizationId(user.getOrganizationId());
+		RemoteOpenslide.roles.setAll(user.getRoles());
+		RemoteOpenslide.user = user;
+	}
+
+	private static ExternalUser getUser() {
+		return RemoteOpenslide.user;
+	}
+
 	/* Roles and Permissions*/
 
 	private static ObservableList<Roles> roles = FXCollections.observableArrayList();
@@ -168,7 +185,7 @@ public class RemoteOpenslide {
 			return permissions.get(id);
 		}
 
-		var response = get("/api/v0/users/write/" + e(id));
+		var response = get("/api/v0/auth/write/" + e(id));
 
 		if (response.isEmpty()) {
 			return false;
@@ -185,23 +202,14 @@ public class RemoteOpenslide {
 	public static boolean login(String username, String password) {
 		setCredentials(username, password);
 
-		var response = get("/api/v0/users/login");
+		var response = get("/api/v0/auth/login");
 
-		if (response.isEmpty() || response.get().statusCode() != 200) {
+		if (isInvalidResponse(response)) {
 			setCredentials(null, null);
 			return false;
 		}
 
-		JsonObject result = JsonParser.parseString(response.get().body()).getAsJsonObject();
-
-		setUserId(result.get("userId").getAsString());
-		setOrganizationId(result.get("organizationId").getAsString());
-
-		JsonArray roles = result.get("roles").getAsJsonArray();
-		for (JsonElement element : roles) {
-			String role = element.getAsString().toUpperCase();
-			RemoteOpenslide.roles.add(Roles.valueOf(role));
-		}
+		setUser(GsonTools.getInstance().fromJson(response.get().body(), ExternalUser.class));
 
 		return true;
 	}
@@ -209,18 +217,14 @@ public class RemoteOpenslide {
 	public static boolean validate(String token) {
 		setToken(token);
 
-		var response = get("/api/v0/users/verify");
+		var response = get("/api/v0/auth/verify");
 
-		if (response.isEmpty() || response.get().statusCode() != 200) {
+		if (isInvalidResponse(response)) {
 			setToken(null);
 			return false;
 		}
 
-		JsonArray roles = JsonParser.parseString(response.get().body()).getAsJsonArray();
-		for (JsonElement element : roles) {
-			String role = element.getAsString().toUpperCase();
-			RemoteOpenslide.roles.add(Roles.valueOf(role));
-		}
+		setUser(GsonTools.getInstance().fromJson(response.get().body(), ExternalUser.class));
 
 		return true;
 	}
@@ -241,13 +245,36 @@ public class RemoteOpenslide {
 			return Collections.emptyList();
 		}
 
-		return List.of(new Gson().fromJson(response.get().body(), ExternalUser[].class));
+		return List.of(GsonTools.getInstance().fromJson(response.get().body(), ExternalUser[].class));
 	}
 
-	public static boolean editUser(String userId, Map<String, Object> data) {
-		var response = put("/api/v0/users/" + e(userId), data);
+	public static boolean editUser(String id, Map<String, Object> data) {
+		var response = patch("/api/v0/users/" + e(id), data);
 
 		return !isInvalidResponse(response);
+	}
+
+	public static boolean deleteUser(String id) {
+		var response = delete("/api/v0/users/" + e(id));
+
+		return !isInvalidResponse(response);
+	}
+
+	public static Optional<ExternalUser> createUser(String password, String email, String name) {
+		var response = post(
+			"/api/v0/users/",
+			Map.of(
+				"password", password,
+				"email", email,
+				"name", name
+			)
+		);
+
+		if (isInvalidResponse(response)) {
+			return Optional.empty();
+		} else {
+			return Optional.of(GsonTools.getInstance().fromJson(response.get().body(), ExternalUser.class));
+		}
 	}
 
 	/* Subjects */
@@ -382,7 +409,7 @@ public class RemoteOpenslide {
 			return Collections.emptyList();
 		}
 
-		return List.of(new Gson().fromJson(response.get().body(), ExternalSlide[].class));
+		return List.of(GsonTools.getInstance().fromJson(response.get().body(), ExternalSlide[].class));
 	}
 
 	public static Optional<JsonObject> getSlideProperties(String slideId) {
@@ -474,7 +501,7 @@ public class RemoteOpenslide {
 			return Collections.emptyList();
 		}
 
-		return List.of(new Gson().fromJson(response.get().body(), ExternalWorkspace[].class));
+		return List.of(GsonTools.getInstance().fromJson(response.get().body(), ExternalWorkspace[].class));
 	}
 
 	public static Result createWorkspace(String workspaceName) {
@@ -514,7 +541,7 @@ public class RemoteOpenslide {
 			return Optional.empty();
 		}
 
-		return Optional.of(List.of(new Gson().fromJson(response.get().body(), ExternalOrganization[].class)));
+		return Optional.of(List.of(GsonTools.getInstance().fromJson(response.get().body(), ExternalOrganization[].class)));
 	}
 
 	public static Optional<ExternalOrganization> createOrganization(String name) {
@@ -554,7 +581,7 @@ public class RemoteOpenslide {
 			return Optional.empty();
 		}
 
-		return Optional.of(List.of(new Gson().fromJson(response.get().body(), ExternalBackup[].class)));
+		return Optional.of(List.of(GsonTools.getInstance().fromJson(response.get().body(), ExternalBackup[].class)));
 	}
 
 	public static boolean restoreBackup(String backup, String timestamp) {
@@ -566,7 +593,7 @@ public class RemoteOpenslide {
 	/* Private API */
 
 	private static boolean isInvalidResponse(Optional<HttpResponse<String>> response) {
-		return !(response.isPresent() && response.get().statusCode() == 200);
+		return !(response.isPresent() && response.get().statusCode() >= 200 && response.get().statusCode() < 300);
 	}
 
 	private static Optional<HttpResponse<String>> get(String path) {

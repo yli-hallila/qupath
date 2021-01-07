@@ -28,7 +28,10 @@ public class IconButtons {
         Glyph glyph = awesome.create(icon).size(iconSize).color(Color.BLACK);
 
         Button button = new Button(null, glyph);
-        button.setTooltip(new Tooltip(text));
+
+        if (!text.isBlank()) {
+            button.setTooltip(new Tooltip(text));
+        }
 
         return button;
     }
