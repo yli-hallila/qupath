@@ -52,4 +52,10 @@ public class ExternalSubject {
     public void setProjects(List<ExternalProject> projects) {
         this.projects = projects;
     }
+
+    public Optional<ExternalProject> findProject(String id) {
+        return getProjects().stream()
+                .filter(project -> project.getId().equalsIgnoreCase(id))
+                .findFirst();
+    }
 }

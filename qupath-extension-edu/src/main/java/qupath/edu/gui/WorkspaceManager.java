@@ -24,7 +24,6 @@ import qupath.edu.EduExtension;
 import qupath.edu.EduOptions;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.RemoteProject;
-import qupath.edu.lib.Roles;
 import qupath.edu.models.ExternalProject;
 import qupath.edu.models.ExternalSlide;
 import qupath.edu.models.ExternalSubject;
@@ -52,10 +51,9 @@ public class WorkspaceManager {
 
     private BorderPane pane;
     private SplitPane splitPane;
-    private boolean filterWorkspaces = true;
 
     private final Accordion accordion = new Accordion();
-    private final GridView<ExternalProject> projectsGridView = new GridView<>();
+    private final GridView<ExternalProject> gvProjects = new GridView<>();
 
     public static void showWorkspace(QuPathGUI qupath) {
         WorkspaceManager manager = new WorkspaceManager(qupath);
@@ -71,6 +69,12 @@ public class WorkspaceManager {
         dialog.show();
 
         manager.getSplitPane().setDividerPositions(0.2);
+
+        // GridView adds a fixed 18px for the scrollbar and each cell has padding of 10px left and right.
+        manager.getGridViewProjects().cellWidthProperty().bind(manager.getGridViewProjects().widthProperty().subtract(18).divide(2).subtract(20));
+
+        // Disable SplitPane divider
+        manager.getSplitPane().lookupAll(".split-pane-divider").stream().forEach(div -> div.setMouseTransparent(true));
     }
 
     private WorkspaceManager(QuPathGUI qupath) {
@@ -93,21 +97,22 @@ public class WorkspaceManager {
         return splitPane;
     }
 
+    public GridView<ExternalProject> getGridViewProjects() {
+        return gvProjects;
+    }
+
     private synchronized void initializePane() {
         pane = new BorderPane();
+
+        // TODO: Make this async or make a loading dialog
 
         List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
 
         /* Filter Checkbox */
 
-        CheckBox cbFilter = new CheckBox("Filter workspaces");
-        cbFilter.setSelected(filterWorkspaces);
-        cbFilter.setFont(new Font(10));
-        cbFilter.setTooltip(new Tooltip("Filters out all workspaces which doesn't belong to your organization."));
-        cbFilter.setOnAction(e -> {
-            this.filterWorkspaces = !filterWorkspaces;
-            refreshDialog();
-        });
+        Button btnChangeOrganization = new Button("Change organization");
+        btnChangeOrganization.setFont(new Font(10));
+        btnChangeOrganization.setOnAction(a -> changeOrganization());
 
         /* Open by ID Button */
 
@@ -122,10 +127,10 @@ public class WorkspaceManager {
         constraint.setPercentWidth(50);
 
         header.getColumnConstraints().addAll(constraint, constraint);
-        header.addRow(0, btnOpenById, cbFilter);
+        header.addRow(0, btnOpenById, btnChangeOrganization);
 
         GridPane.setHalignment(btnOpenById, HPos.LEFT);
-        GridPane.setHalignment(cbFilter,    HPos.RIGHT);
+        GridPane.setHalignment(btnChangeOrganization, HPos.RIGHT);
 
         /* Buttons */
 
@@ -164,18 +169,20 @@ public class WorkspaceManager {
 
         /* Content */
 
-        projectsGridView.setCellFactory(f -> new WorkspaceProjectListCell(this));
-        projectsGridView.setCellWidth(350);
-        projectsGridView.setItems(FXCollections.emptyObservableList());
+        gvProjects.setCellFactory(f -> new WorkspaceProjectListCell(this));
+        gvProjects.setPadding(new Insets(0));
+        gvProjects.setHorizontalCellSpacing(10);
+        gvProjects.setCellWidth(360); // TODO: Bind to parent width
+        gvProjects.setItems(FXCollections.emptyObservableList());
 
         splitPane = new SplitPane();
         splitPane.setPrefWidth(1000);
         splitPane.setOrientation(Orientation.HORIZONTAL);
-        splitPane.getItems().addAll(accordion, projectsGridView);
+        splitPane.getItems().addAll(accordion, gvProjects);
 
-        createTabs(accordion, workspaces);
+        createAccordion(accordion, workspaces);
 
-        accordion.expandedPaneProperty().addListener(onWorkspaceChange(workspaces));
+        accordion.expandedPaneProperty().addListener(onWorkspaceChange());
 
         selectPreviousWorkspace(accordion);
 
@@ -189,18 +196,19 @@ public class WorkspaceManager {
         BorderPane.setMargin(header, new Insets(10));
     }
 
-    private void createTabs(Accordion accordion, List<ExternalWorkspace> workspaces) {
+    private void createAccordion(Accordion accordion, List<ExternalWorkspace> workspaces) {
         accordion.getPanes().clear();
-        projectsGridView.getItems().clear();
+        gvProjects.getItems().clear();
 
         for (ExternalWorkspace workspace : workspaces) {
-            if (filterWorkspaces && !workspace.getOwner().equals(RemoteOpenslide.getOrganizationId())
-                    && !workspace.getName().equals("My Projects")) {
+            if (!workspace.getOwnerId().equals(RemoteOpenslide.getOrganizationId())) {
                 return;
             }
 
+            var hasWriteAccess = RemoteOpenslide.isOwner(workspace.getOwnerId());
+
             ListView<ExternalSubject> lvSubjects = new ListView<>();
-            lvSubjects.setCellFactory(f -> new SubjectListCell());
+            lvSubjects.setCellFactory(f -> new SubjectListCell(this, hasWriteAccess));
             lvSubjects.getItems().addAll(workspace.getSubjects());
 
             lvSubjects.setOnMouseClicked(e -> {
@@ -212,14 +220,12 @@ public class WorkspaceManager {
 
                 if (e.getButton() == MouseButton.PRIMARY) {
                     currentSubject.set(selectedSubject.getId());
-                    projectsGridView.setItems(FXCollections.observableArrayList(selectedSubject.getProjects()));
+                    gvProjects.setItems(FXCollections.observableArrayList(selectedSubject.getProjects()));
                 }
             });
 
             TitledPane tpWorkspace = new TitledPane(workspace.getName(), lvSubjects);
             tpWorkspace.setUserData(workspace.getId());
-
-            var hasWriteAccess = RemoteOpenslide.isOwner(workspace.getOwner());
 
             if (hasWriteAccess) {
                 MenuItem miRename = new MenuItem("Rename workspace");
@@ -228,7 +234,6 @@ public class WorkspaceManager {
                 MenuItem miDelete = new MenuItem("Delete workspace");
                 miDelete.setOnAction(e -> deleteWorkspace(workspace));
 
-                // TODO: ContextMenu only on TitledPane header
                 tpWorkspace.setContextMenu(new ContextMenu(miRename, miDelete));
             }
 
@@ -262,6 +267,21 @@ public class WorkspaceManager {
         closeDialog();
     }
 
+    private void changeOrganization() {
+        if (RemoteOpenslide.getAuthType().shouldPrompt()) {
+            var confirm = Dialogs.showConfirmDialog(
+                "Are you sure?",
+                "Changing organizations will log you out."
+            );
+
+            if (confirm) {
+                logout();
+            }
+        } else {
+            logout();
+        }
+    }
+
     private void selectPreviousWorkspace(Accordion accordion) {
         if (EduOptions.previousWorkspace().get() != null) {
             accordion.getPanes().forEach(workspace -> {
@@ -274,7 +294,7 @@ public class WorkspaceManager {
         }
     }
 
-    private ChangeListener<TitledPane> onWorkspaceChange(List<ExternalWorkspace> workspaces) {
+    private ChangeListener<TitledPane> onWorkspaceChange() {
         return (obs, oldWorkspace, newWorkspace) -> {
             if (newWorkspace == null) {
                 return;
@@ -294,129 +314,110 @@ public class WorkspaceManager {
             Platform.runLater(this::refreshDialog);
         }
 
-        String expandedWorkspaceId;
+        String previousWorkspaceId;
 
         if (accordion.getExpandedPane() == null) {
-            expandedWorkspaceId = null;
+            previousWorkspaceId = null;
         } else {
-            expandedWorkspaceId = (String) accordion.getExpandedPane().getUserData();
+            previousWorkspaceId = (String) accordion.getExpandedPane().getUserData();
         }
 
         List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
-        createTabs(accordion, workspaces);
+        createAccordion(accordion, workspaces);
 
         // Restore the previously open TitlePane
 
-        if (expandedWorkspaceId == null) {
+        if (previousWorkspaceId == null) {
             return;
         }
 
-        for (TitledPane titledPane : accordion.getPanes()) {
-            if (expandedWorkspaceId.equalsIgnoreCase((String) titledPane.getUserData())) {
-                accordion.setExpandedPane(titledPane);
+        accordion.getPanes().stream()
+                .filter(pane -> previousWorkspaceId.equals(pane.getUserData()))
+                .findFirst()
+                .ifPresent(accordion::setExpandedPane);
 
-                for (ExternalWorkspace workspace : workspaces) {
-                    if (workspace.getId().equalsIgnoreCase((String) titledPane.getUserData())) {
-                        for (ExternalSubject subject : workspace.getSubjects()) {
-                            if (subject.getId().equals(currentSubject.get())) {
-                                projectsGridView.getItems().setAll(subject.getProjects());
-
-                                break;
-                            }
-                        }
-
-                        break;
-                    }
-                }
-                // TODO: Refresh projects
-
-                return;
-            }
-        }
+        workspaces.stream()
+                .filter(workspace -> workspace.getId().equals(previousWorkspaceId))
+                .findFirst()
+                .flatMap(workspace -> workspace.findSubject(currentSubject.get()))
+                .ifPresent(subject -> gvProjects.getItems().setAll(subject.getProjects()));
     }
 
     private void createNewProject() {
-        String projectName = Dialogs.showInputDialog("Project name", "", "");
+        String name = Dialogs.showInputDialog("Project name", "", "");
 
-        if (projectName == null) {
+        if (name == null) {
             return;
         }
 
-        Result result = RemoteOpenslide.createProject(currentSubject.get(), projectName);
+        Result result = RemoteOpenslide.createProject(currentSubject.get(), name);
 
         if (result == Result.OK) {
             refreshDialog();
+            Dialogs.showInfoNotification("Success", "Successfully created project.");
         } else {
-            Dialogs.showErrorNotification(
-                "Error when creating project",
-                "See log for possibly more details."
-            );
+            Dialogs.showErrorNotification("Error", "Error when creating project. See log for possibly more details.");
         }
     }
 
     public void createNewSubject() {
-        String subjectName = Dialogs.showInputDialog("Subject name", "", "");
+        String name = Dialogs.showInputDialog("Subject name", "", "");
 
-        if (subjectName == null) {
+        if (name == null) {
             return;
         }
 
-        Result result = RemoteOpenslide.createSubject(currentWorkspace.get(), subjectName);
+        Result result = RemoteOpenslide.createSubject(currentWorkspace.get(), name);
 
         if (result == Result.OK) {
             refreshDialog();
+            Dialogs.showInfoNotification("Success", "Successfully created subject.");
         } else {
-            Dialogs.showErrorNotification(
-                "Error when creating subject",
-                "See log for possibly more details."
-            );
+            Dialogs.showErrorNotification("Error", "Error when creating subject. See log for possibly more details.");
         }
     }
 
     private void createNewWorkspace() {
-        String workspaceName = Dialogs.showInputDialog("Workspace name", "", "");
+        String name = Dialogs.showInputDialog("Workspace name", "", "");
 
-        if (workspaceName == null) {
+        if (name == null) {
             return;
         }
 
-        Result result = RemoteOpenslide.createWorkspace(workspaceName);
+        Result result = RemoteOpenslide.createWorkspace(name);
 
         if (result == Result.OK) {
             refreshDialog();
-            accordion.setExpandedPane(accordion.getPanes().get(accordion.getPanes().size() - 1));
+            Dialogs.showInfoNotification("Success", "Successfully created workspace");
         } else {
-            Dialogs.showErrorNotification(
-                "Error when creating workspace",
-                "See log for possibly more details."
-            );
+            Dialogs.showErrorNotification("Error", "Error when creating workspace. See log for possibly more details.");
         }
     }
 
     private void renameWorkspace(ExternalWorkspace workspace) {
-        String newName = Dialogs.showInputDialog("Workspace name", "", workspace.getName());
+        String name = Dialogs.showInputDialog("Workspace name", "", workspace.getName());
 
-        if (newName == null) {
+        if (name == null) {
             return;
         }
 
-        Result result = RemoteOpenslide.renameWorkspace(workspace.getId(), newName);
+        Result result = RemoteOpenslide.renameWorkspace(workspace.getId(), name);
 
         if (result == Result.OK) {
             refreshDialog();
+            Dialogs.showInfoNotification("Success", "Successfully renamed workspace.");
         } else {
-            Dialogs.showErrorNotification(
-                "Error when renaming workspace",
-                "See log for possibly more details."
-            );
+            Dialogs.showErrorNotification("Error", "Error when renaming workspace. See log for possibly more details.");
         }
 
     }
 
     private void deleteWorkspace(ExternalWorkspace workspace) {
         boolean confirm = Dialogs.showConfirmDialog(
-            "Delete workspace",
-            "Are you sure you wish to delete this workspace? This is irreversible."
+            "Are you sure?",
+            "Do you wish to delete this workspace?" +
+            "\n\n" +
+            "This will also delete all the subjects and their projects that belong to this workspace. This action is irreversible."
         );
 
         if (!confirm) {
@@ -427,39 +428,35 @@ public class WorkspaceManager {
 
         if (result == Result.OK) {
             refreshDialog();
+            Dialogs.showInfoNotification("Success", "Successfully deleted workspace.");
         } else {
-            Dialogs.showErrorNotification(
-                    "Error when deleting workspace",
-                    "See log for possibly more details.."
-            );
+            Dialogs.showErrorNotification("Error", "Error when deleting workspace. See log for possibly more details.");
         }
     }
 
-    private void renameSubject(ExternalSubject subject) {
-        String newName = Dialogs.showInputDialog("Subject name", "", subject.getName());
+    public void renameSubject(ExternalSubject subject) {
+        String name = Dialogs.showInputDialog("Subject name", "", subject.getName());
 
-        if (newName == null) {
+        if (name == null) {
             return;
         }
 
-        Result result = RemoteOpenslide.renameSubject(subject.getId(), newName);
+        Result result = RemoteOpenslide.renameSubject(subject.getId(), name);
 
         if (result == Result.OK) {
             refreshDialog();
+            Dialogs.showInfoNotification("Success", "Successfully renamed subject.");
         } else {
-            Dialogs.showErrorNotification(
-                "Error when renaming subject",
-                "See log for possibly more details."
-            );
+            Dialogs.showErrorNotification("Error", "Error when renaming subject. See log for possibly more details.");
         }
     }
 
-    private void deleteSubject(ExternalSubject subject) {
+    public void deleteSubject(ExternalSubject subject) {
         boolean confirm = Dialogs.showConfirmDialog(
-            "Delete subject",
-            "Are you sure you wish to delete this subject?" +
+            "Are you sure?",
+            "Do you wish to delete this subject?" +
             "\n\n" +
-            "This will also delete all the projects belonging to this subject.This is irreversible."
+            "This will also delete all the projects belonging to this subject. This action is irreversible."
         );
 
         if (!confirm) {
@@ -470,11 +467,9 @@ public class WorkspaceManager {
 
         if (result == Result.OK) {
             refreshDialog();
+            Dialogs.showInfoNotification("Success", "Successfully deleted subject.");
         } else {
-            Dialogs.showErrorNotification(
-                    "Error when deleting subject",
-                    "See log for possibly more details.."
-            );
+            Dialogs.showErrorNotification("Error", "Error when deleting subject. See log for possibly more details.");
         }
     }
 

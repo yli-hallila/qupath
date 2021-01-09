@@ -12,6 +12,14 @@ import qupath.edu.models.ExternalSubject;
 
 public class SubjectListCell extends ListCell<ExternalSubject> {
 
+    private final boolean hasWriteAccess;
+    private final WorkspaceManager workspaceManager;
+
+    public SubjectListCell(WorkspaceManager workspaceManager, boolean hasWriteAccess) {
+        this.workspaceManager = workspaceManager;
+        this.hasWriteAccess = hasWriteAccess;
+    }
+
     @Override
     protected void updateItem(ExternalSubject item, boolean empty) {
         super.updateItem(item, empty);
@@ -22,14 +30,19 @@ public class SubjectListCell extends ListCell<ExternalSubject> {
 
         /* Subject name */
 
+        // TODO: Fix subject name may be wider than the SplitPane, thus hiding all buttons
+
         HBox name = new HBox(new Text(item.getName()));
         name.setFillHeight(true);
         name.setAlignment(Pos.CENTER_LEFT);
 
         /* Buttons */
 
-        Button btnModify = IconButtons.createIconButton(FontAwesome.Glyph.EDIT,  "Edit");
+        Button btnModify = IconButtons.createIconButton(FontAwesome.Glyph.EDIT, "Edit");
+        btnModify.setOnAction(a -> workspaceManager.renameSubject(item));
+
         Button btnDelete = IconButtons.createIconButton(FontAwesome.Glyph.TRASH, "Delete");
+        btnDelete.setOnAction(a -> workspaceManager.deleteSubject(item));
 
         HBox buttons = new HBox(btnModify, btnDelete);
         buttons.setSpacing(5D);
@@ -43,8 +56,10 @@ public class SubjectListCell extends ListCell<ExternalSubject> {
 
         /* Hover */
 
-        hbox.setOnMouseEntered(e -> buttons.setVisible(true));
-        hbox.setOnMouseExited(e  -> buttons.setVisible(false));
+        if (hasWriteAccess) {
+            hbox.setOnMouseEntered(e -> buttons.setVisible(true));
+            hbox.setOnMouseExited(e  -> buttons.setVisible(false));
+        }
 
         setGraphic(hbox);
     }

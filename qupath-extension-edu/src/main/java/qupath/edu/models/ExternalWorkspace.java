@@ -1,6 +1,7 @@
 package qupath.edu.models;
 
 import java.util.List;
+import java.util.Optional;
 
 public class ExternalWorkspace {
 
@@ -17,7 +18,7 @@ public class ExternalWorkspace {
         return id;
     }
 
-    public String getOwner() {
+    public String getOwnerId() {
         return owner.getId();
     }
 
@@ -25,4 +26,9 @@ public class ExternalWorkspace {
         return subjects;
     }
 
+    public Optional<ExternalSubject> findSubject(String id) {
+        return subjects.stream()
+                .filter(subject -> subject.getId().equalsIgnoreCase(id))
+                .findFirst();
+    }
 }
