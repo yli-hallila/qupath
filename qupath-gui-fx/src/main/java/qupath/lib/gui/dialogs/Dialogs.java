@@ -97,7 +97,7 @@ public class Dialogs {
 	 * @return
 	 */
 	public static boolean showConfirmDialog(String title, String text) {
-		return showConfirmDialog(text, createContentLabel(text));
+		return showConfirmDialog(title, createContentLabel(text));
 	}
 	
 	/**
@@ -253,8 +253,8 @@ public class Dialogs {
 			dialog.setTitle(title);
 			if (QuPathGUI.getInstance() != null)
 				dialog.initOwner(getDefaultOwner());
-			dialog.setHeaderText(null);
-			dialog.setContentText(message);
+			dialog.setHeaderText(message);
+			dialog.setContentText(null);
 			dialog.setResizable(true);
 			// Traditional way to get the response value.
 			Optional<String> result = dialog.showAndWait();
