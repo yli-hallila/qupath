@@ -108,7 +108,7 @@ public class WorkspaceManager {
 
         List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
 
-        /* Filter Checkbox */
+        /* Change organization Button */
 
         Button btnChangeOrganization = new Button("Change organization");
         btnChangeOrganization.setFont(new Font(10));
@@ -135,6 +135,7 @@ public class WorkspaceManager {
         /* Buttons */
 
         // TODO: Fix disabled buttons when no workspaces available
+        //       Fix not taking MANAGE_PROJECTS into account
 
         MenuItem miCreateWorkspace = new MenuItem("Workspace");
         miCreateWorkspace.setOnAction(action -> createNewWorkspace());

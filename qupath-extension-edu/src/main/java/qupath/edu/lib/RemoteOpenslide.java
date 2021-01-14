@@ -197,6 +197,18 @@ public class RemoteOpenslide {
 		return result;
 	}
 
+	/* Server configuration */
+
+	public static ServerConfiguration getServerConfiguration() {
+		var response = get("/api/v0/server");
+
+		if (isInvalidResponse(response)) {
+			throw new HttpException("Error while fetching server configuration.");
+		} else {
+			return GsonTools.getInstance().fromJson(response.get().body(), ServerConfiguration.class);
+		}
+	}
+
 	/* Authentication */
 
 	public static boolean login(String username, String password) {

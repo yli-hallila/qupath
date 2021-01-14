@@ -27,6 +27,7 @@ import qupath.edu.EduOptions;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.Roles;
 import qupath.edu.models.ExternalOrganization;
+import qupath.edu.models.ServerConfiguration;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
@@ -44,8 +45,6 @@ import java.util.concurrent.ExecutionException;
 public class RemoteServerLoginManager {
 
     private static Logger logger = LoggerFactory.getLogger(RemoteServerLoginManager.class);
-
-    private static QuPathGUI qupath = QuPathGUI.getInstance();
 
     private final StringProperty selectedOrganizationProperty = new SimpleStringProperty();
 
@@ -74,6 +73,7 @@ public class RemoteServerLoginManager {
     }
 
     private synchronized void initializePane() {
+        ServerConfiguration serverConfiguration = RemoteOpenslide.getServerConfiguration();
         pane = new BorderPane();
 
         /* Logos */
@@ -97,12 +97,15 @@ public class RemoteServerLoginManager {
         
         Button btnLoginGuest = new Button("Continue as guest");
         btnLoginGuest.setOnAction(e -> loginAsGuest());
+        btnLoginGuest.setDisable(!(serverConfiguration.isGuestLoginEnabled()));
         
         Button btnLoginUsername = new Button("Login with username");
         btnLoginUsername.setOnAction(e -> showAuthDialog());
+        btnLoginUsername.setDisable(!(serverConfiguration.isSimpleLoginEnabled()));
         
         Button btnLoginMicrosoft = new Button("Login using Microsoft");
         btnLoginMicrosoft.setOnAction(e -> showMicrosoftAuthDialog());
+        btnLoginMicrosoft.setDisable(!(serverConfiguration.isMicrosoftLoginEnabled()));
 
         GridPane buttons = PaneTools.createRowGridControls(btnLoginGuest, new Separator(), btnLoginUsername, btnLoginMicrosoft);
         buttons.setPadding(new Insets(10));

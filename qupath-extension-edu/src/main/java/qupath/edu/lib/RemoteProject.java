@@ -73,9 +73,7 @@ public class RemoteProject implements Project<BufferedImage> {
 
 		if (element.has("version")) {
 			version = element.get("version").getAsString();
-		}
-
-		if (version == null) {
+		} else {
 			throw new IOException("Older projects are not supported in this version of QuPath, sorry!");
 		}
 

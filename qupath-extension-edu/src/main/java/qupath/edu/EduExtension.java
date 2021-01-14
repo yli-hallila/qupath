@@ -268,8 +268,8 @@ public class EduExtension implements QuPathExtension {
             }
         } catch (Exception e) {
             Dialogs.showErrorMessage(
-            "Error when connecting to server",
-            "Check your internet connection and that you're connecting to the right server. See log for more details."
+                "Error when connecting to server",
+                "Check your internet connection and that you're connecting to the right server. See log for more details."
             );
 
             logger.error("Error when connecting to server", e);
