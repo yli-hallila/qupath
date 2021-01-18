@@ -15,9 +15,11 @@ import org.slf4j.LoggerFactory;
 import qupath.edu.gui.*;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.RemoteProject;
+import qupath.edu.models.VersionHistory;
 import qupath.edu.tours.SlideTour;
 import qupath.lib.gui.ActionTools;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.Version;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.extensions.QuPathExtension;
 import qupath.lib.gui.panes.PreferencePane;
@@ -48,6 +50,8 @@ public class EduExtension implements QuPathExtension {
     private static final Browser projectInformation = new Browser();
     private final TabPane tabbedPanel = new TabPane();
 
+    private Version version = Version.parse("1.0.0");
+
     @Override
     public void installExtension(QuPathGUI qupath) {
         this.qupath = qupath;
@@ -61,6 +65,13 @@ public class EduExtension implements QuPathExtension {
 
         if (!EduOptions.extensionEnabled().get()) {
             return;
+        }
+
+        checkForUpdates();
+
+        // Perform first time setup if host is undefined.
+        if (EduOptions.remoteOpenslideHost().isNull().get()) {
+            FirstTimeSetup.showDialog();
         }
 
         initializeMenus();
@@ -81,6 +92,14 @@ public class EduExtension implements QuPathExtension {
         onSlideChange();
 
         disableButtons();
+    }
+
+    private void checkForUpdates() {
+        VersionHistory versionHistory = RemoteOpenslide.getVersionHistory();
+
+        if (versionHistory.getLatest().getVersion().compareTo(version) > 0) {
+            // TODO: Implement GUI
+        }
     }
 
     private void onSlideChange() {

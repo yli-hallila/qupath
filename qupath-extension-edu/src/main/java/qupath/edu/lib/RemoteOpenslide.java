@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.exceptions.HttpException;
 import qupath.edu.models.*;
+import qupath.lib.gui.Version;
 import qupath.lib.io.GsonTools;
 
 import java.io.IOException;
@@ -30,6 +31,11 @@ public class RemoteOpenslide {
 	private final static Logger logger = LoggerFactory.getLogger(RemoteOpenslide.class);
 
 	private static URI host;
+
+	/**
+	 * Master server provides new versions, list of public servers and so on.
+	 */
+	private static final URI MASTER_SERVER = URI.create("https://edu.qupath.yli-hallila.fi/");
 
 	private static AuthType authType = AuthType.UNAUTHENTICATED;
 	private static String token;
@@ -195,6 +201,30 @@ public class RemoteOpenslide {
 		permissions.put(id, result);
 
 		return result;
+	}
+
+	/* Master server API */
+
+	// todo: rename this? "getUpdates?"
+	public static VersionHistory getVersionHistory() {
+		var response = get("/api/versions.json", MASTER_SERVER);
+
+		if (isInvalidResponse(response)) {
+			throw new HttpException("Error while fetching updates.");
+		} else {
+			Gson gson = GsonTools.getDefaultBuilder().registerTypeAdapter(Version.class, new VersionAdapter()).create();
+			return gson.fromJson(response.get().body(), VersionHistory.class);
+		}
+	}
+
+	public static List<Server> fetchPublicServers() {
+		var response = get("/api/servers.json", MASTER_SERVER);
+
+		if (isInvalidResponse(response)) {
+			return Collections.emptyList();
+		} else {
+			return List.of(GsonTools.getInstance().fromJson(response.get().body(), Server[].class));
+		}
 	}
 
 	/* Server configuration */
@@ -609,6 +639,10 @@ public class RemoteOpenslide {
 	}
 
 	private static Optional<HttpResponse<String>> get(String path) {
+		return get(path, host);
+	}
+
+	private static Optional<HttpResponse<String>> get(String path, URI host) {
 		try {
 			HttpClient client = getHttpClient();
 			HttpRequest.Builder builder = HttpRequest.newBuilder()
