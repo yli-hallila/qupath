@@ -348,6 +348,11 @@ public class RemoteProject implements Project<BufferedImage> {
 		return metadata == null ? null : metadata.get(key);
 	}
 
+	@Override
+	public String toString() {
+		return "RemoteProject: " + name;
+	}
+
 	class RemoteProjectImageEntry implements ProjectImageEntry<BufferedImage> {
 
 		/**
