@@ -225,21 +225,6 @@ public class EduExtension implements QuPathExtension {
     }
 
     public static void setEditModeEnabled(boolean enabled) {
-        /*
-         * 1. Save state when starting edit
-         * 2. Either restore or save (sync) state when exiting
-         */
-
-        if (!enabled) {
-            var confirm = Dialogs.showConfirmDialog("Confirm", "Do you wish to save changes?");
-
-            if (confirm) {
-                logger.debug("Synced changes");
-            } else {
-                logger.debug("Discarded changes");
-            }
-        }
-
         EduExtension.editModeEnabledProperty().set(enabled);
     }
 
@@ -356,7 +341,7 @@ public class EduExtension implements QuPathExtension {
         setEditModeEnabled(false);
 
         Button btnToggleEditMode = new Button();
-        btnToggleEditMode.textProperty().bind(Bindings.when(editModeEnabled).then("Disable editing").otherwise("Save changes / discard"));
+        btnToggleEditMode.textProperty().bind(Bindings.when(editModeEnabled).then("Save changes / discard").otherwise("Enable editing"));
         btnToggleEditMode.setOnAction(a -> setEditModeEnabled(!(isEditModeEnabled())));
         btnToggleEditMode.setFont(Font.font(10));
 
