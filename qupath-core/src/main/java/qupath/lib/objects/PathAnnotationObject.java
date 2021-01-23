@@ -27,6 +27,8 @@ import qupath.lib.measurements.MeasurementList;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.roi.interfaces.ROI;
 
+import java.util.Objects;
+
 /**
  * An annotation PathObject.
  * <p>
@@ -72,7 +74,7 @@ public class PathAnnotationObject extends PathROIObject {
 	public void setDescription(final String text) {
 		// Don't store unless we need to (which can also help avoid creating unnecessary metadata stores)
 		Object existing = retrieveMetadataValue(KEY_ANNOTATION_TEXT);
-		if (text == null && existing == null || text.equals(existing))
+		if (Objects.equals(text, existing))
 			return;
 		this.storeMetadataValue(KEY_ANNOTATION_TEXT, text);
 	}

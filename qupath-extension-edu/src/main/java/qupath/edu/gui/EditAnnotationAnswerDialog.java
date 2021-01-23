@@ -1,23 +1,21 @@
 package qupath.edu.gui;
 
-import com.google.gson.Gson;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.collections.ObservableList;
+import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.text.Text;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.Roles;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
+import qupath.lib.io.GsonTools;
 import qupath.lib.objects.PathObject;
 
 import java.util.Collections;
-import java.util.List;
 
 public class EditAnnotationAnswerDialog {
 
@@ -29,13 +27,39 @@ public class EditAnnotationAnswerDialog {
 
         PathObject annotation = annotationPane.getListAnnotations().getSelectionModel().getSelectedItem();
 
+        var isQuiz = SimpleAnnotationPane.isQuiz(getAnswer(annotation));
+
+        /* Question type */
+
+        RadioButton rbTextAnswer = new RadioButton("Text answer");
+        RadioButton rbMultiChoice = new RadioButton("Multi choice question");
+
+        ToggleGroup buttonGroup = new ToggleGroup();
+        buttonGroup.getToggles().addAll(rbTextAnswer, rbMultiChoice);
+        buttonGroup.selectToggle(isQuiz ? rbMultiChoice : rbTextAnswer);
+
         /* Text answer */
 
-        TextArea textAreaAnswer = new TextArea(getAnswer(annotation));
+        VBox textAnswerContainer = new VBox();
+        textAnswerContainer.setPrefWidth(600);
+
+        TextArea textAreaAnswer = new TextArea();
         textAreaAnswer.setPrefRowCount(2);
         textAreaAnswer.setPrefColumnCount(25);
 
+        if (!(isQuiz)) {
+            textAreaAnswer.setText(getAnswer(annotation));
+        }
+
+        textAnswerContainer.getChildren().add(textAreaAnswer);
+        textAnswerContainer.visibleProperty().bind(rbTextAnswer.selectedProperty());
+        textAnswerContainer.managedProperty().bind(rbTextAnswer.selectedProperty());
+
         /* Multi-choice answer */
+
+        VBox multiChoiceContainer = new VBox();
+        multiChoiceContainer.setPrefWidth(600);
+        multiChoiceContainer.setPrefHeight(350);
 
         TableView<SimpleAnnotationPane.MultichoiceOption> table = createMultiChoiceTable(annotation);
 
@@ -46,28 +70,63 @@ public class EditAnnotationAnswerDialog {
         deleteEntryButton.setOnMouseClicked(e -> removeRowFromTable(table));
 
         GridPane controlButtons = PaneTools.createColumnGridControls(newEntryButton, deleteEntryButton);
+        controlButtons.setHgap(5);
+        controlButtons.setPadding(new Insets(5));
 
-        /* Tabs */
+        multiChoiceContainer.getChildren().addAll(table, controlButtons);
+        multiChoiceContainer.visibleProperty().bind(rbMultiChoice.selectedProperty());
+        multiChoiceContainer.managedProperty().bind(rbMultiChoice.selectedProperty());
 
-        TabPane tabPane = new TabPane();
-        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-        tabPane.getStyleClass().add("floating");
+        /* Pane */
 
-        tabPane.getTabs().addAll(
-            new Tab("Multiple choice", new VBox(table, controlButtons)),
-            new Tab("Text answer", textAreaAnswer)
-        );
+        int row = 0;
 
-        if (!Dialogs.showConfirmDialog("Set answer properties", tabPane))
+        Separator separator = new Separator();
+
+        GridPane pane = new GridPane();
+        pane.setPadding(new Insets(10));
+        pane.setVgap(10);
+        pane.setHgap(10);
+
+        pane.add(rbTextAnswer, 0, ++row);
+        pane.add(rbMultiChoice, 1, row);
+
+        pane.add(separator, 0, ++row);
+
+        pane.add(textAnswerContainer, 0, ++row);
+        pane.add(multiChoiceContainer, 0, ++row);
+
+        GridPane.setColumnSpan(separator, 2);
+        GridPane.setColumnSpan(textAnswerContainer, 2);
+        GridPane.setColumnSpan(multiChoiceContainer, 2);
+
+        GridPane.setFillWidth(separator, true);
+        GridPane.setFillWidth(textAnswerContainer, true);
+        GridPane.setFillWidth(multiChoiceContainer, true);
+
+        /* Dialog */
+
+        Dialog<ButtonType> dialog = Dialogs.builder()
+                .title("Set answer properties")
+                .headerText("Select question type")
+                .content(pane)
+                .buttons(ButtonType.OK, ButtonType.CANCEL)
+                .width(600)
+                .height(400)
+                .build();
+
+        var result = dialog.showAndWait();
+
+        if (result.isEmpty() || !(result.get().equals(ButtonType.OK))) {
             return false;
+        }
 
         /* Save changes */
 
-        ObservableList<SimpleAnnotationPane.MultichoiceOption> quizItems = table.getItems();
-        if (quizItems == null || quizItems.isEmpty()) {
+        if (rbTextAnswer.isSelected()) {
             setAnswer(annotation, textAreaAnswer.getText());
         } else {
-            String json = new Gson().toJson(table.getItems().toArray(new SimpleAnnotationPane.MultichoiceOption[] {} ));
+            String json = GsonTools.getInstance().toJson(table.getItems());
             setAnswer(annotation, json);
         }
 
@@ -86,7 +145,7 @@ public class EditAnnotationAnswerDialog {
 
         TableColumn<SimpleAnnotationPane.MultichoiceOption, String> choicesColumn = new TableColumn<>("Choice");
         choicesColumn.setEditable(true);
-        choicesColumn.prefWidthProperty().bind(table.widthProperty().multiply(0.70));
+        choicesColumn.prefWidthProperty().bind(table.widthProperty().multiply(0.75));
         choicesColumn.setCellValueFactory(new PropertyValueFactory<>("choice"));
         choicesColumn.setCellFactory(tc -> new FocusingTextFieldTableCell<>());
 
@@ -117,10 +176,12 @@ public class EditAnnotationAnswerDialog {
 
         /* Populate Table */
 
-        if (getAnswer(annotation) != null && SimpleAnnotationPane.isJSON(getAnswer(annotation))) {
-            List<SimpleAnnotationPane.MultichoiceOption> options = List.of(new Gson().fromJson(getAnswer(annotation), SimpleAnnotationPane.MultichoiceOption[].class));
+        String answer = getAnswer(annotation);
 
-            table.getItems().addAll(options);
+        if (SimpleAnnotationPane.isQuiz(answer)) {
+            SimpleAnnotationPane.MultichoiceOption[] choices = GsonTools.getInstance().fromJson(answer, SimpleAnnotationPane.MultichoiceOption[].class);
+
+            table.getItems().addAll(choices);
         }
 
         return table;

@@ -164,7 +164,7 @@ public class SimpleAnnotationPane implements PathObjectSelectionListener, Change
             PathObject pathObject = objectHierarchy.getSelectionModel().getSelectedObject();
 
             if (pathObject != null && pathObject.retrieveMetadataValue(ANSWER_KEY) != null) {
-                if (isJSON((String) pathObject.retrieveMetadataValue(ANSWER_KEY))) {
+                if (isQuiz((String) pathObject.retrieveMetadataValue(ANSWER_KEY))) {
                     showQuizDialog(pathObject);
                 } else{
                     showAnswerDialog(pathObject);
@@ -260,7 +260,7 @@ public class SimpleAnnotationPane implements PathObjectSelectionListener, Change
             if (newValue == null) {
                 showAnswerTextProperty.set("No answer defined");
             } else {
-                if (isJSON(newValue)) {
+                if (isQuiz(newValue)) {
                     showAnswerTextProperty.set("Show quiz");
                 } else {
                     showAnswerTextProperty.set("Show answer");
@@ -349,10 +349,10 @@ public class SimpleAnnotationPane implements PathObjectSelectionListener, Change
 
 
     /**
-     *   Our quiz JSON strings starts always with [{
+     * Quizzes are stored as JSON, which begin with <code>[{</code>
      */
-    public static boolean isJSON(String string) {
-        return string.startsWith("[{");
+    public static boolean isQuiz(String string) {
+        return string != null && string.startsWith("[{");
     }
 
     private void showQuizDialog(PathObject pathObject) {
