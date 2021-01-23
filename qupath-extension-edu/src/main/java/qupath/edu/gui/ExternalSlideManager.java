@@ -303,7 +303,7 @@ public class ExternalSlideManager {
 
         try {
             ImageServerBuilder<?> openSlideBuilder = ImageServerProvider.getInstalledImageServerBuilders().stream().filter(
-                imageServerBuilder -> imageServerBuilder.getName().equals("OpenSlide Builder")
+                imageServerBuilder -> imageServerBuilder.getName().equalsIgnoreCase("OpenSlide builder")
             ).collect(MoreCollectors.onlyElement());
 
             ImageServerBuilder.UriImageSupport<?> support = openSlideBuilder.checkImageSupport(file.toURI());
