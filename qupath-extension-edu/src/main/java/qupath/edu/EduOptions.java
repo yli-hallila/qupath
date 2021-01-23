@@ -25,6 +25,15 @@ public class EduOptions {
     private static BooleanProperty showLoginDialog = PathPrefs.createPersistentPreference("eduShowLoginDialog", true);
 
     /**
+     * Flag to indicate whether to check for updates on startup
+     */
+    public static BooleanProperty checkForUpdatesOnStartup() {
+        return checkForUpdates;
+    }
+
+    private static BooleanProperty checkForUpdates = PathPrefs.createPersistentPreference("eduCheckForUpdates", true);
+
+    /**
      * ID of the workspace which the user previously had open.
      */
     public static StringProperty previousWorkspace() {

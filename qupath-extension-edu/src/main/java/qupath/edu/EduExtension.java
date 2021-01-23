@@ -59,14 +59,14 @@ public class EduExtension implements QuPathExtension {
     private static final Browser projectInformation = new Browser();
     private final TabPane tabbedPanel = new TabPane();
 
-    private Version version = Version.parse("1.0.0");
+    private static Version version = Version.parse("1.0.0");
 
     @Override
     public void installExtension(QuPathGUI qupath) {
         this.qupath = qupath;
 
         if (QuPathGUI.getVersion().getMinor() < 2 || QuPathGUI.getVersion().getPatch() < 3) {
-            Dialogs.showErrorMessage("QuPath outdated" , "Education Extension compatible only with QuPath 0.2.? or newer");
+            Dialogs.showErrorMessage("QuPath outdated", "Education Extension compatible only with QuPath 0.2.? or newer");
             return;
         }
 
@@ -76,40 +76,38 @@ public class EduExtension implements QuPathExtension {
             return;
         }
 
-        checkForUpdates();
-
-        // Perform first time setup if host is undefined.
-        if (EduOptions.remoteOpenslideHost().isNull().get()) {
-            FirstTimeSetup.showDialog();
-        }
-
         initializeMenus();
-
-        RemoteOpenslide.setHost(EduOptions.remoteOpenslideHost().get());
-        EduOptions.remoteOpenslideHost().addListener(((obs, oldHost, newHost) -> RemoteOpenslide.setHost(newHost)));
 
         replaceAnnotationsPane();
         replaceViewer();
         replaceProjectBrowserButtons();
         registerSlideTours();
 
-        if (EduOptions.showLoginDialogOnStartup().get()) {
-            showWorkspaceOrLoginDialog();
-        }
-
         onProjectChange();
         onSlideChange();
         onImageDataChange();
 
         disableButtons();
-    }
 
-    private void checkForUpdates() {
-        VersionHistory versionHistory = RemoteOpenslide.getVersionHistory();
+        // Run on a separate thread, because extension initialization happens in QuPath's
+        // main thread and our dialogs can interfere with its' initialization.
+        Platform.runLater(() -> {
+            if (EduOptions.checkForUpdatesOnStartup().get()) {
+                UpdateManager.checkForUpdates();
+            }
 
-        if (versionHistory.getLatest().getVersion().compareTo(version) > 0) {
-            // TODO: Implement GUI
-        }
+            // Perform first time setup if host is undefined.
+            if (EduOptions.remoteOpenslideHost().isNull().get()) {
+                FirstTimeSetup.showDialog();
+            }
+
+            RemoteOpenslide.setHost(EduOptions.remoteOpenslideHost().get());
+            EduOptions.remoteOpenslideHost().addListener(((obs, oldHost, newHost) -> RemoteOpenslide.setHost(newHost)));
+
+            if (EduOptions.showLoginDialogOnStartup().get()) {
+                showWorkspaceOrLoginDialog();
+            }
+        });
     }
 
     private void toggleTools() {
@@ -179,6 +177,10 @@ public class EduExtension implements QuPathExtension {
         return "Use QuPath for studying!";
     }
 
+    public static Version getVersion() {
+        return version;
+    }
+
     private void initializeMenus() {
         Action action = createAction(ProjectDescriptionEditorCommand::openDescriptionEditor, "Edit project information");
         action.disabledProperty().bind(editModeEnabledProperty().not());
@@ -214,6 +216,11 @@ public class EduExtension implements QuPathExtension {
             "Show login dialog on startup",
             "Edu",
             "If enabled, opens the login dialog on startup.");
+
+        prefs.addPropertyPreference(EduOptions.checkForUpdatesOnStartup(), Boolean.class,
+            "Check for updates on startup",
+            "Edu",
+            "If enabled, checks for updates on startup.");
     }
 
     public static SimpleBooleanProperty editModeEnabledProperty() {
