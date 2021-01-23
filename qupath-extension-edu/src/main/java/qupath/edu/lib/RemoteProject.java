@@ -211,6 +211,10 @@ public class RemoteProject implements Project<BufferedImage> {
 
 	@Override
 	public void syncChanges() throws IOException {
+		if (!EduExtension.isEditModeEnabled()) {
+			return;
+		}
+
 		Gson gson = GsonTools.getInstance(true);
 
 		JsonObject builder = new JsonObject();
@@ -534,6 +538,10 @@ public class RemoteProject implements Project<BufferedImage> {
 
 		@Override
 		public void saveImageData(ImageData<BufferedImage> imageData) throws IOException {
+			if (!EduExtension.isEditModeEnabled()) {
+				return;
+			}
+
 			imageData.getHistoryWorkflow().clear();
 
 			ByteArrayOutputStream os = new ByteArrayOutputStream();
