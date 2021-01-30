@@ -442,6 +442,10 @@ public class RemoteOpenslide {
 		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
 	}
 
+	public static String getCKEditorUploadUrl() {
+		return host.resolve("/api/v0/upload/ckeditor").toString();
+	}
+
 	/* Slides */
 
 	public static List<ExternalSlide> getAllSlides() {

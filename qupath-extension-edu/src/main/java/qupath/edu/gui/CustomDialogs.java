@@ -44,7 +44,8 @@ public class CustomDialogs {
 		try {
 			String HTML = GeneralTools.readInputStreamAsString(QuPathGUI.class.getResourceAsStream("/html/editor.html"));
 			HTML = HTML.replace("{{qupath-input}}", input)
-					   .replace("{{qupath-resource-root}}", resourceRoot);
+					   .replace("{{qupath-resource-root}}", resourceRoot)
+			           .replace("{{qupath-upload-url}}", RemoteOpenslide.getCKEditorUploadUrl());
 
 			if (RemoteOpenslide.getAuthType() == RemoteOpenslide.AuthType.TOKEN) {
 				HTML = HTML.replace("{{qupath-auth}}", "'Token': '" + RemoteOpenslide.getToken() + "'");
