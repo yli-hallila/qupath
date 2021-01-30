@@ -42,7 +42,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.List;
 
-import static qupath.edu.lib.RemoteOpenslide.*;
+import static qupath.edu.lib.RemoteOpenslide.Result;
 
 public class ExternalSlideManager {
 
@@ -173,7 +173,7 @@ public class ExternalSlideManager {
         miViewProperties.setOnAction(e -> viewProperties());
         miViewProperties.disableProperty().bind(slideSelected);
 
-        MenuButton menuMore = new MenuButton("...");
+        MenuButton menuMore = new MenuButton("More ...");
         menuMore.getItems().addAll(miCopyID, miCopyURL, miViewProperties);
         menuMore.disableProperty().bind(slideSelected);
 
@@ -204,6 +204,13 @@ public class ExternalSlideManager {
             urls.add(RemoteOpenslide.getHost() + "/" + RemoteOpenslide.e(slide.getId()) + "#" + RemoteOpenslide.e(slide.getName()));
         });
 
+        // Only add slides which have its' checkbox selected.
+        // If no slides have a checked checkbox, we'll add the slide which is just selected, it should never be null.
+        if (urls.isEmpty()) {
+            ExternalSlide selected = table.getSelectionModel().getSelectedItem();
+            urls.add(RemoteOpenslide.getHost() + "/" + RemoteOpenslide.e(selected.getId()) + "#" + RemoteOpenslide.e(selected.getName()));
+        }
+
         dialog.close();
 
         Platform.runLater(() -> ProjectImportImagesCommand.promptToImportImages(qupath, urls.toArray(new String[0])));
@@ -226,7 +233,7 @@ public class ExternalSlideManager {
         dialog.getDialogPane().setContent(pane);
     }
 
-    public static void openSlide(final ExternalSlide slide) {
+    public static void openSlide(ExternalSlide slide) {
         if (qupath.getProject() != null) {
             ButtonType closeProject = new ButtonType("Close project and continue", ButtonBar.ButtonData.FINISH);
             ButtonType addToProject = new ButtonType("Add slide to project",       ButtonBar.ButtonData.OK_DONE);
@@ -234,10 +241,11 @@ public class ExternalSlideManager {
 
             Optional<ButtonType> confirm = Dialogs.builder()
                 .title("Proceed with adding slide to project")
-                .contentText("Opening an slide with a project open will try to add that slide to the current project."
-                    + "\n\n" +
-                    "Do you wish to close your project and continue or add this slide to your current project?")
-                .buttons(closeProject, ButtonType.CANCEL, addToProject)
+                .contentText(
+                    "Opening an slide with a project open will try to add that slide to the current project." +
+                    "\n\n" +
+                    "Do you wish to close your project and continue or add this slide to your current project?"
+                ).buttons(closeProject, ButtonType.CANCEL, addToProject)
                 .build()
                 .showAndWait();
 
@@ -331,9 +339,10 @@ public class ExternalSlideManager {
             progress.showAndWait();
 
             Dialogs.showMessageDialog(
-            "Successfully uploaded slide",
-            "The slide was successfully uploaded but is pending processing. Processing can take up to 30 minutes." + "\n\n" +
-                    "You can view your slide in a few minutes but it is missing higher magnifications until the processing is complete. "
+                "Successfully uploaded slide",
+                "The slide was successfully uploaded but is pending processing. Processing can take up to 30 minutes." +
+                "\n\n" +
+                "You can view your slide in a few minutes but it is missing higher magnifications until the processing is complete. "
             );
 
             refreshDialog();
@@ -344,8 +353,8 @@ public class ExternalSlideManager {
 
     private void deleteSlide() {
         boolean confirm = Dialogs.showConfirmDialog(
-        "Delete slide",
-        "Are you sure you wish to delete this slide? This is irreversible."
+            "Delete slide",
+            "Are you sure you wish to delete this slide? This is irreversible."
         );
 
         if (!confirm) {
