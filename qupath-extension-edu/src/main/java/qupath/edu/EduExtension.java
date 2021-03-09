@@ -19,9 +19,7 @@ import org.slf4j.LoggerFactory;
 import qupath.edu.gui.*;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.RemoteProject;
-import qupath.edu.models.VersionHistory;
 import qupath.edu.tours.SlideTour;
-import qupath.lib.display.ImageDisplay;
 import qupath.lib.gui.ActionTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.Version;
@@ -54,7 +52,7 @@ public class EduExtension implements QuPathExtension {
 
     private QuPathGUI qupath;
 
-    private static final SimpleBooleanProperty editModeEnabled = new SimpleBooleanProperty(false);
+    private static final SimpleBooleanProperty editModeEnabled = new SimpleBooleanProperty(true);
     private static final SimpleBooleanProperty noWriteAccess = new SimpleBooleanProperty(true);
     private static final Browser projectInformation = new Browser();
     private final TabPane tabbedPanel = new TabPane();

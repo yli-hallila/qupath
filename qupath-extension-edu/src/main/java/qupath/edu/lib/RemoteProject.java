@@ -400,6 +400,11 @@ public class RemoteProject implements Project<BufferedImage> {
 		 */
 		private String thumbnail;
 
+		/**
+		 * JSON Representation of annotations. <b>Temporary until ImageData is fully JSON serializable!</b>
+		 */
+		public String annotations;
+
 		RemoteProjectImageEntry(ImageServerBuilder.ServerBuilder<BufferedImage> builder, Long entryID, String imageName, String description, Map<String, String> metadataMap) {
 			this.serverBuilder = builder;
 
@@ -552,6 +557,9 @@ public class RemoteProject implements Project<BufferedImage> {
 			ByteArrayOutputStream os = new ByteArrayOutputStream();
 			PathIO.writeImageData(os, imageData);
 
+			logger.info(GsonTools.getInstance().toJson(imageData.getHierarchy().getAnnotationObjects()));
+
+			this.annotations = GsonTools.getInstance().toJson(imageData.getHierarchy().getAnnotationObjects());
 			this.imageData = Base64.getEncoder().encodeToString(os.toByteArray());
 		}
 
@@ -646,6 +654,13 @@ public class RemoteProject implements Project<BufferedImage> {
 		@Override
 		public ResourceManager.Manager<ImageServer<BufferedImage>> getImages() {
 			throw new UnsupportedOperationException();
+		}
+
+		/**
+		 * <b>Temporary until ImageData is fully JSON serializable</b>
+		 */
+		public String getAnnotations() {
+			return annotations;
 		}
 	}
 }

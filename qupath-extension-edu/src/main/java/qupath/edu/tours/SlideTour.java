@@ -42,6 +42,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * TODO: Urgent need of a rewrite
+ */
 public class SlideTour implements QuPathViewerListener {
 
 	private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -458,6 +461,7 @@ public class SlideTour implements QuPathViewerListener {
 			return annotations;
 		}
 
+		// TODO: Switch to JSON
 		private void writeObject(ObjectOutputStream out) throws IOException {
 			out.writeUTF(text);
 			out.writeDouble(x);
