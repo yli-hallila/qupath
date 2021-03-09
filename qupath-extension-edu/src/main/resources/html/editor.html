@@ -4,7 +4,7 @@
     <base href="{{qupath-resource-root}}" />
     <link rel="stylesheet" type="text/css" href="css/ckeditor.css">
 </head>
-<body data-editor="DecoupledDocumentEditor" data-collaboration="false">
+<body data-editor="ClassicEditor" data-collaboration="false">
 
 <main>
     <div class="row">
@@ -20,45 +20,44 @@
 
 <script src="ckeditor/ckeditor.js"></script>
 <script>
-    DecoupledDocumentEditor.create( document.querySelector( '.editor' ), {
+    ClassicEditor.create(document.querySelector('.editor'), {
         toolbar: {
-            viewportTopOffset: 50,
             items: [
                 'heading',
-                '|',
-                'fontSize',
-                'fontFamily',
                 '|',
                 'bold',
                 'italic',
                 'underline',
                 'strikethrough',
-                'highlight',
-                'fontColor',
-                'fontBackgroundColor',
-                'specialCharacters',
-                'horizontalLine',
-                '|',
-                'alignment',
-                '|',
-                'numberedList',
+                'link',
                 'bulletedList',
-                '|',
-                'subscript',
-                'superscript',
+                'numberedList',
                 '|',
                 'indent',
                 'outdent',
                 '|',
-                'todoList',
-                'link',
+                'subscript',
+                'superscript',
+                '|',
+                'imageUpload',
                 'blockQuote',
-                'imageInsert',
                 'insertTable',
                 'mediaEmbed',
-                '|',
                 'undo',
-                'redo'
+                'redo',
+                '|',
+                'alignment',
+                'fontColor',
+                'fontBackgroundColor',
+                'fontSize',
+                'fontFamily',
+                'highlight',
+                'horizontalLine',
+                '|',
+                'codeBlock',
+                'MathType',
+                'ChemType',
+                'specialCharacters'
             ]
         },
         language: 'en',
@@ -76,8 +75,10 @@
             contentToolbar: [
                 'tableColumn',
                 'tableRow',
-                'mergeTableCells'
-            ]
+                'mergeTableCells',
+                'tableCellProperties',
+                'tableProperties'
+           ]
         },
         licenseKey: '',
         simpleUpload: {

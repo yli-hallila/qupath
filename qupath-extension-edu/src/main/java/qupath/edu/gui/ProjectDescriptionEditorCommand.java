@@ -19,7 +19,7 @@ public class ProjectDescriptionEditorCommand {
             RemoteProject project = (RemoteProject) qupath.getProject();
 
             String initialInput = (String) project.retrieveMetadataValue(RemoteProject.PROJECT_INFORMATION);
-            Optional<String> result = CustomDialogs.showWysiwygEditor(initialInput);
+            Optional<String> result = CustomDialogs.showWYSIWYGEditor(initialInput);
 
             if (result.isPresent()) {
                 project.storeMetadataValue(RemoteProject.PROJECT_INFORMATION, result.get());
