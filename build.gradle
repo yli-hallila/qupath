@@ -206,7 +206,7 @@ allprojects {
 
   ext {
     // Java compatibility version
-    javaVersion = 11
+    javaVersion = 15
   
     // Dependency versions
     bioformatsVersion  = '6.6.0'

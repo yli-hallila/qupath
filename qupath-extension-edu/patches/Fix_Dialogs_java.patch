@@ -1,0 +1,26 @@
+Index: qupath-gui-fx/src/main/java/qupath/lib/gui/dialogs/Dialogs.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/qupath-gui-fx/src/main/java/qupath/lib/gui/dialogs/Dialogs.java b/qupath-gui-fx/src/main/java/qupath/lib/gui/dialogs/Dialogs.java
+--- a/qupath-gui-fx/src/main/java/qupath/lib/gui/dialogs/Dialogs.java	(revision 223197bbcbf8df522bac2d40443d0302ebeacd92)
++++ b/qupath-gui-fx/src/main/java/qupath/lib/gui/dialogs/Dialogs.java	(date 1615370232296)
+@@ -97,7 +97,7 @@
+ 	 * @return
+ 	 */
+ 	public static boolean showConfirmDialog(String title, String text) {
+-		return showConfirmDialog(text, createContentLabel(text));
++		return showConfirmDialog(title, createContentLabel(text));
+ 	}
+ 	
+ 	/**
+@@ -892,7 +892,7 @@
+ 		public Dialog<ButtonType> build() {
+ 			Dialog<ButtonType> dialog;
+ 			if (alertType == null)
+-				dialog = new Alert(AlertType.NONE);
++				dialog = new Dialog<>();
+ 			else
+ 				dialog = new Alert(alertType);
+ 			

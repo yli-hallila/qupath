@@ -1,0 +1,16 @@
+Index: build.gradle
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/build.gradle b/build.gradle
+--- a/build.gradle	(revision 223197bbcbf8df522bac2d40443d0302ebeacd92)
++++ b/build.gradle	(date 1615795358396)
+@@ -710,6 +710,7 @@
+     	'java.naming',
+     	'jdk.unsupported',
+     	'jdk.zipfs',           // Needed for zip filesystem support
++        'jdk.jsobject'
+     ]
+     
+     def usefulModules = [

@@ -1,0 +1,12 @@
+ext.moduleName = 'qupath.extension.edu'
+
+description = 'qupath-extension-edu'
+
+configurations {
+    implementation.extendsFrom guava
+}
+
+dependencies {
+    implementation project(':qupath-core')
+    implementation "com.microsoft.azure:msal4j:1.6.1"
+}
