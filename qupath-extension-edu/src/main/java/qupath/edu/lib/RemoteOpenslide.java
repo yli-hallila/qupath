@@ -235,7 +235,8 @@ public class RemoteOpenslide {
 		if (isInvalidResponse(response)) {
 			throw new HttpException("Error while fetching server configuration.");
 		} else {
-			return GsonTools.getInstance().fromJson(response.get().body(), ServerConfiguration.class);
+			Gson gson = GsonTools.getDefaultBuilder().registerTypeAdapter(Version.class, new VersionAdapter()).create();
+			return gson.fromJson(response.get().body(), ServerConfiguration.class);
 		}
 	}
 

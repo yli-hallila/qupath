@@ -10,6 +10,7 @@ import javafx.scene.text.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.EduExtension;
+import qupath.edu.exceptions.HttpException;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.models.VersionHistory;
 import qupath.lib.gui.QuPathGUI;
@@ -30,11 +31,15 @@ public class UpdateManager {
     private static VersionHistory.Release latestRelease;
 
     public static void checkForUpdates() {
-        VersionHistory versionHistory = RemoteOpenslide.getVersionHistory();
-        latestRelease = versionHistory.getLatest();
+        try {
+            VersionHistory versionHistory = RemoteOpenslide.getVersionHistory();
+            latestRelease = versionHistory.getLatest();
 
-        if (latestRelease.getVersion().compareTo(EduExtension.getVersion()) > 0) {
-            showDialog();
+            if (latestRelease.getVersion().compareTo(EduExtension.getVersion()) > 0) {
+                showDialog();
+            }
+        } catch (HttpException e) {
+            Dialogs.showErrorNotification("Error when checking for Edu updates", e);
         }
     }
 
