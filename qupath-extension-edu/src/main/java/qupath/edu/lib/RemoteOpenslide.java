@@ -10,6 +10,7 @@ import qupath.edu.models.*;
 import qupath.lib.gui.Version;
 import qupath.lib.io.GsonTools;
 
+import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.net.URI;
@@ -610,13 +611,30 @@ public class RemoteOpenslide {
 		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
 	}
 
-	public static Result editOrganization(String id, String name) {
-		var response = patch(
-			"/api/v0/organizations/" + e(id),
-			Map.of("name", name)
-		);
+	public static boolean editOrganization(String id, String name, File logo) {
+		try {
+			String boundary = new BigInteger(256, new Random()).toString();
+			Map<Object, Object> data = new LinkedHashMap<>();
+			data.put("logo", Files.readAllBytes(logo.toPath()));
+			data.put("name", name);
 
-		return isInvalidResponse(response) ? Result.FAIL : Result.OK;
+			HttpClient client = getHttpClient();
+			HttpRequest.Builder builder = HttpRequest.newBuilder()
+					.uri(host.resolve("/api/v0/organizations/" + e(id)))
+					.method("PATCH", ofMimeMultipartData(data, boundary))
+					.header("Content-Type", "multipart/form-data;boundary=" + boundary);
+
+			addAuthorization(builder);
+			HttpRequest request = builder.build();
+
+			HttpResponse<String> response = client.send(request, BodyHandlers.ofString());
+
+			return response.statusCode() == 200;
+		} catch (IOException | InterruptedException e) {
+			logger.error("Error while uploading organization logo", e);
+		}
+
+		return false;
 	}
 
 	/* Backups */

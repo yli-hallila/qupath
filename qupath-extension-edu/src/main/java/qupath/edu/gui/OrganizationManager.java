@@ -8,19 +8,24 @@ import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.text.Text;
+import org.controlsfx.glyphfont.FontAwesome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.edu.gui.buttons.IconButtons;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.Roles;
 import qupath.edu.models.ExternalOrganization;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
 
+import java.io.File;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class OrganizationManager {
 
@@ -146,22 +151,72 @@ public class OrganizationManager {
     private void editOrganization() {
         ExternalOrganization organization = selected.get();
 
-        var name = Dialogs.showInputDialog("Organization name", "", organization.getName());
+        /* Name */
 
-        if (name == null) {
-            return;
-        }
+        TextField tfName = new TextField(organization.getName());
+        tfName.setDisable(true);
 
-        RemoteOpenslide.Result result = RemoteOpenslide.editOrganization(organization.getId(), name);
+        Button btnEditName = IconButtons.createIconButton(FontAwesome.Glyph.PENCIL);
+        btnEditName.setTooltip(new Tooltip("Change name"));
+        btnEditName.setOnAction(a -> tfName.setDisable(false));
 
-        if (result == RemoteOpenslide.Result.OK) {
-            refresh();
-            Dialogs.showInfoNotification("Success", "Organization successfully edited.");
-        } else {
-            Dialogs.showErrorNotification(
-                "Error when editing organization",
-                "See log for possibly more details."
+
+        /* Logo */
+
+        AtomicReference<File> logo = new AtomicReference<>();
+
+        TextField tfLogo = new TextField(organization.getLogoUrl());
+        tfLogo.setDisable(true);
+
+        Button btnEditLogo = IconButtons.createIconButton(FontAwesome.Glyph.UPLOAD);
+        btnEditLogo.setTooltip(new Tooltip("Upload new logo"));
+        btnEditLogo.setOnAction(a -> {
+            logo.set(Dialogs.promptForFile("Choose logo", null, "Images", "png"));
+
+            if (logo.get() != null) {
+                tfLogo.setText(logo.get().getName());
+            }
+        });
+
+        /* Pane */
+
+        GridPane pane = new GridPane();
+        pane.setHgap(10);
+        pane.setVgap(10);
+        pane.getColumnConstraints().add(new ColumnConstraints(300));
+
+        int row = 0;
+
+        pane.add(tfName, 0, ++row);
+        pane.add(btnEditName, 1, row);
+
+        pane.add(tfLogo, 0, ++row);
+        pane.add(btnEditLogo, 1, row);
+
+        /* Dialog */
+
+        Optional<ButtonType> result = Dialogs.builder()
+                .title("Edit organization")
+                .buttons(ButtonType.OK, ButtonType.CANCEL)
+                .content(pane)
+                .showAndWait();
+
+        if (result.isPresent() && result.get().equals(ButtonType.OK)) {
+            var confirm = Dialogs.showYesNoDialog(
+                "Save changes",
+                "Save any changes made to organization?"
             );
+
+            if (!confirm) {
+                return;
+            }
+
+            if (RemoteOpenslide.editOrganization(organization.getId(), tfName.getText(), logo.get())) {
+                refresh();
+                Dialogs.showInfoNotification("Success", "Successfully edited organization.");
+            } else {
+                Dialogs.showErrorNotification("Error", "Error while editing organization. See log for possibly more details.");
+            }
         }
     }
 
