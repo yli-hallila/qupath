@@ -61,6 +61,7 @@ public class RemoteUserManager {
     private synchronized void refresh() {
         if (!Platform.isFxApplicationThread()) {
             Platform.runLater(this::refresh);
+            return;
         }
 
         initializePane();

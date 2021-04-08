@@ -227,6 +227,7 @@ public class ExternalSlideManager {
     public synchronized void refreshDialog() {
         if (!Platform.isFxApplicationThread()) {
             Platform.runLater(this::refreshDialog);
+            return;
         }
 
         initializePane();

@@ -556,8 +556,6 @@ public class RemoteProject implements Project<BufferedImage> {
 			ByteArrayOutputStream os = new ByteArrayOutputStream();
 			PathIO.writeImageData(os, imageData);
 
-			logger.info(GsonTools.getInstance().toJson(imageData.getHierarchy().getAnnotationObjects()));
-
 			this.annotations = GsonTools.getInstance().toJson(imageData.getHierarchy().getAnnotationObjects());
 			this.imageData = Base64.getEncoder().encodeToString(os.toByteArray());
 		}
