@@ -76,6 +76,23 @@ public class RemoteOpenslide {
 		RemoteOpenslide.organizationId = organizationId;
 	}
 
+	/**
+	 * Returns the users current organization.
+	 *
+	 * @return Users organization or empty
+	 */
+	public static Optional<ExternalOrganization> getOrganization() {
+		Optional<List<ExternalOrganization>> organizations = getAllOrganizations();
+
+		if (organizations.isEmpty()) {
+			return Optional.empty();
+		}
+
+		return organizations.get().stream()
+				.filter(organization -> organization.getId().equals(getOrganizationId()))
+				.findFirst();
+	}
+
 	public static void setHost(String host) {
 		if (host == null) {
 			RemoteOpenslide.host = null;
@@ -304,13 +321,14 @@ public class RemoteOpenslide {
 		return !isInvalidResponse(response);
 	}
 
-	public static Optional<ExternalUser> createUser(String password, String email, String name) {
+	public static Optional<ExternalUser> createUser(String password, String email, String name, String organizationId) {
 		var response = post(
 			"/api/v0/users/",
 			Map.of(
 				"password", password,
 				"email", email,
-				"name", name
+				"name", name,
+				"organization", organizationId
 			)
 		);
 

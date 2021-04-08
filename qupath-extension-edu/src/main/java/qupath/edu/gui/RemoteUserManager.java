@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import qupath.edu.gui.buttons.IconButtons;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.Roles;
+import qupath.edu.models.ExternalOrganization;
 import qupath.edu.models.ExternalUser;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
@@ -311,35 +312,46 @@ public class RemoteUserManager {
     }
 
     private void createUser() {
-        /* GridPane */
-
-        GridPane pane = new GridPane();
-        pane.setHgap(10);
-        pane.setVgap(10);
-        pane.getColumnConstraints().add(new ColumnConstraints(300));
-
-        /* Name */
+        /* Fields */
 
         TextField tfName = new TextField();
         tfName.setPromptText("Name");
 
-        /* Email */
-
         TextField tfEmail = new TextField();
         tfEmail.setPromptText("Email");
-
-        /* Password */
 
         TextField tfPassword = new TextField();
         tfPassword.setPromptText("Password");
 
+        ComboBox<ExternalOrganization> cbOrganization = new ComboBox<>();
+        ExternalOrganization currentOrganization = RemoteOpenslide.getOrganization().get();
+
+        if (RemoteOpenslide.hasRole(Roles.ADMIN)) {
+            cbOrganization.setItems(FXCollections.observableArrayList(RemoteOpenslide.getAllOrganizations().get()));
+            cbOrganization.getSelectionModel().select(currentOrganization);
+        } else {
+            cbOrganization.setItems(FXCollections.observableArrayList(currentOrganization));
+            cbOrganization.setDisable(true);
+        }
+
         /* Pane */
+
+        GridPane pane = new GridPane();
+        pane.setHgap(10);
+        pane.setVgap(10);
+        pane.setPrefWidth(300);
 
         int row = 0;
 
         pane.add(tfName, 0, ++row);
         pane.add(tfEmail, 0, ++row);
         pane.add(tfPassword, 0, ++row);
+        pane.add(cbOrganization, 0, ++row);
+
+        GridPane.setHgrow(tfName, Priority.ALWAYS);
+        GridPane.setHgrow(tfEmail, Priority.ALWAYS);
+        GridPane.setHgrow(tfPassword, Priority.ALWAYS);
+        GridPane.setHgrow(cbOrganization, Priority.ALWAYS);
 
         /* Dialog */
 
@@ -351,14 +363,12 @@ public class RemoteUserManager {
 
         if (result.isPresent() && result.get().equals(ButtonType.FINISH)) {
             Optional<ExternalUser> user = RemoteOpenslide.createUser(
-                tfPassword.getText(), tfEmail.getText(), tfName.getText()
+                tfPassword.getText(), tfEmail.getText(), tfName.getText(), cbOrganization.getValue().getId()
             );
 
             if (user.isPresent()) {
                 refresh();
                 Dialogs.showInfoNotification("Success", "Successfully created user.");
-
-                editUser(user.get());
             } else {
                 Dialogs.showErrorNotification("Error", "Error while creating user. See log for possibly more details.");
             }
