@@ -478,8 +478,8 @@ public class RemoteOpenslide {
 		return List.of(GsonTools.getInstance().fromJson(response.get().body(), ExternalSlide[].class));
 	}
 
-	public static Optional<JsonObject> getSlideProperties(String slideId) {
-		var response = get("/api/v0/slides/" + e(slideId));
+	public static Optional<JsonObject> getSlideProperties(URI uri) {
+		var response = get("/api/v0/slides/" + uri.getPath().substring(1), uri);
 
 		if (isInvalidResponse(response)) {
 			return Optional.empty();

@@ -72,7 +72,7 @@ public class EduImageServer extends AbstractTileableImageServer {
     }
 
     private void initialize(String... args) throws IOException {
-        Optional<JsonObject> properties = RemoteOpenslide.getSlideProperties(uri.getPath().substring(1));
+        Optional<JsonObject> properties = RemoteOpenslide.getSlideProperties(uri);
 
         if (properties.isEmpty()) {
             throw new IOException("Error when loading remote slide, properties were empty. See log for more information");
