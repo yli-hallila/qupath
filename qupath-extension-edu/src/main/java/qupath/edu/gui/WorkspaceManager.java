@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.EduExtension;
 import qupath.edu.EduOptions;
+import qupath.edu.lib.ReflectionUtil;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.RemoteProject;
 import qupath.edu.models.ExternalProject;
@@ -108,17 +109,21 @@ public class WorkspaceManager {
 
         List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
 
-        /* Change organization Button */
+        /* Header Buttons */
 
-        Button btnChangeOrganization = new Button("Change organization");
-        btnChangeOrganization.setFont(new Font(10));
-        btnChangeOrganization.setOnAction(a -> changeOrganization());
+        Button btnLogout = new Button("Logout / change organization");
+        btnLogout.setFont(new Font(10));
+        btnLogout.setOnAction(a -> logout());
 
-        /* Open by ID Button */
+        MenuItem miOpenById = new MenuItem("Remote project");
+        miOpenById.setOnAction(this::openById);
 
-        Button btnOpenById = new Button("Open ID ...");
-        btnOpenById.setFont(new Font(10));
-        btnOpenById.setOnAction(this::openById);
+        MenuItem miOpenLocalProject = new MenuItem("Local project");
+        miOpenLocalProject.setOnAction(qupath.lookupActionByText("Open project"));
+
+        MenuButton btnOpen = new MenuButton("Open ...");
+        btnOpen.getItems().addAll(miOpenById, miOpenLocalProject);
+        btnOpen.setFont(Font.font(10));
 
         /* Header */
 
@@ -127,12 +132,12 @@ public class WorkspaceManager {
         constraint.setPercentWidth(50);
 
         header.getColumnConstraints().addAll(constraint, constraint);
-        header.addRow(0, btnOpenById, btnChangeOrganization);
+        header.addRow(0, btnOpen, btnLogout);
 
-        GridPane.setHalignment(btnOpenById, HPos.LEFT);
-        GridPane.setHalignment(btnChangeOrganization, HPos.RIGHT);
+        GridPane.setHalignment(btnOpen, HPos.LEFT);
+        GridPane.setHalignment(btnLogout, HPos.RIGHT);
 
-        /* Buttons */
+        /* Footer Buttons */
 
         // TODO: Fix disabled buttons when no workspaces available
         //       Fix not taking MANAGE_PROJECTS into account
@@ -148,11 +153,11 @@ public class WorkspaceManager {
         miCreateProject.setOnAction(action -> createNewProject());
         miCreateProject.disableProperty().bind(hasAccessProperty.not());
 
-        MenuButton menuCreate = new MenuButton("Create ...");
-        menuCreate.getItems().addAll(miCreateWorkspace, miCreateSubject, miCreateProject);
+        MenuItem miCreateLocalProject = new MenuItem("Local project");
+        miCreateLocalProject.setOnAction(qupath.lookupActionByText("Create project"));
 
-        Button btnLogout = new Button("Logout");
-        btnLogout.setOnAction(action -> logout());
+        MenuButton menuCreate = new MenuButton("Create ...");
+        menuCreate.getItems().addAll(miCreateWorkspace, miCreateSubject, miCreateProject, new SeparatorMenuItem(), miCreateLocalProject);
 
         Button btnClose = new Button("Close");
         btnClose.setOnAction(action -> closeDialog());
@@ -160,13 +165,11 @@ public class WorkspaceManager {
         /* Footer */
 
         ButtonBar.setButtonData(menuCreate, ButtonBar.ButtonData.LEFT);
-        ButtonBar.setButtonData(btnLogout, ButtonBar.ButtonData.LEFT);
         ButtonBar.setButtonData(btnClose, ButtonBar.ButtonData.RIGHT);
-        ButtonBar.setButtonUniformSize(btnLogout, false);
         ButtonBar.setButtonUniformSize(btnClose, false);
 
         ButtonBar footer = new ButtonBar();
-        footer.getButtons().addAll(menuCreate, btnLogout, btnClose);
+        footer.getButtons().addAll(menuCreate, btnClose);
 
         /* Content */
 
@@ -226,7 +229,7 @@ public class WorkspaceManager {
             });
 
             TitledPane tpWorkspace = new TitledPane(workspace.getName(), lvSubjects);
-            tpWorkspace.setUserData(workspace.getId());
+            tpWorkspace.setUserData(workspace);
 
             if (hasWriteAccess) {
                 MenuItem miRename = new MenuItem("Rename workspace");
@@ -268,25 +271,10 @@ public class WorkspaceManager {
         closeDialog();
     }
 
-    private void changeOrganization() {
-        if (RemoteOpenslide.getAuthType().shouldPrompt()) {
-            var confirm = Dialogs.showConfirmDialog(
-                "Are you sure?",
-                "Changing organizations will log you out."
-            );
-
-            if (confirm) {
-                logout();
-            }
-        } else {
-            logout();
-        }
-    }
-
     private void selectPreviousWorkspace(Accordion accordion) {
         if (EduOptions.previousWorkspace().get() != null) {
             accordion.getPanes().forEach(workspace -> {
-                String id = (String) workspace.getUserData();
+                String id = ((ExternalWorkspace) workspace.getUserData()).getId();
 
                 if (id != null && id.equals(EduOptions.previousWorkspace().get())) {
                     accordion.setExpandedPane(workspace);
@@ -301,11 +289,12 @@ public class WorkspaceManager {
                 return;
             }
 
-            String workspaceId = (String) newWorkspace.getUserData();
+            ExternalWorkspace workspace = (ExternalWorkspace) newWorkspace.getUserData();
 
-            if (workspaceId != null) {
-                currentWorkspace.set(workspaceId);
-                hasAccessProperty.set(RemoteOpenslide.hasPermission(workspaceId));
+            if (workspace.getId() != null) {
+                currentWorkspace.set(workspace.getId());
+                hasAccessProperty.set(RemoteOpenslide.hasPermission(workspace.getId()));
+                gvProjects.setItems(FXCollections.observableArrayList(workspace.getAllProjects()));
             }
         };
     }
@@ -313,14 +302,15 @@ public class WorkspaceManager {
     public void refreshDialog() {
         if (!Platform.isFxApplicationThread()) {
             Platform.runLater(this::refreshDialog);
+            return;
         }
 
-        String previousWorkspaceId;
+        ExternalWorkspace previousWorkspace;
 
         if (accordion.getExpandedPane() == null) {
-            previousWorkspaceId = null;
+            previousWorkspace = null;
         } else {
-            previousWorkspaceId = (String) accordion.getExpandedPane().getUserData();
+            previousWorkspace = ((ExternalWorkspace) accordion.getExpandedPane().getUserData());
         }
 
         List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
@@ -328,17 +318,17 @@ public class WorkspaceManager {
 
         // Restore the previously open TitlePane
 
-        if (previousWorkspaceId == null) {
+        if (previousWorkspace == null) {
             return;
         }
 
         accordion.getPanes().stream()
-                .filter(pane -> previousWorkspaceId.equals(pane.getUserData()))
+                .filter(pane -> previousWorkspace.equals(pane.getUserData()))
                 .findFirst()
                 .ifPresent(accordion::setExpandedPane);
 
         workspaces.stream()
-                .filter(workspace -> workspace.getId().equals(previousWorkspaceId))
+                .filter(workspace -> workspace.equals(previousWorkspace))
                 .findFirst()
                 .flatMap(workspace -> workspace.findSubject(currentSubject.get()))
                 .ifPresent(subject -> gvProjects.getItems().setAll(subject.getProjects()));
@@ -474,13 +464,18 @@ public class WorkspaceManager {
         }
     }
 
-    public void logout() {
-        qupath.getViewer().setImageData(null);
-        qupath.setProject(null);
-        RemoteOpenslide.logout();
-        closeDialog();
+    private void logout() {
+        // Confirm logging out if logged in
 
-        EduExtension.showWorkspaceOrLoginDialog();
+        if (!(RemoteOpenslide.getAuthType().shouldPrompt()) || Dialogs.showConfirmDialog("Are you sure?", "Are you sure you wish to log out?")) {
+            // TODO: Multiple viewers
+            qupath.getViewer().setImageData(null);
+            qupath.setProject(null);
+            RemoteOpenslide.logout();
+            closeDialog();
+
+            EduExtension.showWorkspaceOrLoginDialog();
+        }
     }
 
     public void closeDialog() {
@@ -539,7 +534,7 @@ public class WorkspaceManager {
                 }
 
                 Platform.runLater(() -> {
-// TODO:            qupath.getTabbedPanel().getSelectionModel().select(0);
+                    ReflectionUtil.getAnalysisPanel().getSelectionModel().select(0);
                     qupath.setProject(project);
                 });
             }

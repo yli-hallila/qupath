@@ -400,7 +400,7 @@ public class SimpleAnnotationPane implements PathObjectSelectionListener, Change
             if (result != null) {
                 String message = result.getIsAnswer() ? "Right answer!" : "Wrong answer!";
 
-                if (answers.size() > 1) {
+                if (answers.size() > 1 || !(result.getIsAnswer())) {
                     message += "\n\n";
                     message += "All the right answers are: " + answers.toString().replaceAll("\\[|\\]", "");
                 }
