@@ -1,6 +1,5 @@
 package qupath.edu.tours;
 
-import com.google.common.collect.Lists;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -12,96 +11,91 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
+import javafx.scene.control.*;
 import javafx.scene.control.Button;
-import javafx.scene.control.Tooltip;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.input.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.paint.Paint;
 import javafx.scene.text.Text;
+import javafx.stage.Modality;
 import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.edu.EduExtension;
+import qupath.edu.gui.CustomDialogs;
 import qupath.edu.lib.ReflectionUtil;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.Roles;
-import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.gui.viewer.QuPathViewerListener;
 import qupath.lib.images.ImageData;
-import qupath.lib.objects.PathAnnotationObject;
+import qupath.lib.io.GsonTools;
 import qupath.lib.objects.PathObject;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * TODO: Urgent need of a rewrite
- */
 public class SlideTour implements QuPathViewerListener {
 
 	private final Logger logger = LoggerFactory.getLogger(getClass());
 
-	private final QuPathGUI qupath = QuPathGUI.getInstance();
+	private final String TOUR_ENTRIES_KEY = "TOUR_ENTRIES";
+
 	private QuPathViewer viewer;
 
-	private final SimpleBooleanProperty menuMinimizedProperty = new SimpleBooleanProperty(false);
-	private final SimpleBooleanProperty tourActiveProperty = new SimpleBooleanProperty(false);
+	private final SimpleBooleanProperty isMenuMinimizedProperty = new SimpleBooleanProperty(false);
 
-	private final SimpleIntegerProperty entryCountProperty = new SimpleIntegerProperty();
-	private final SimpleIntegerProperty indexProperty = new SimpleIntegerProperty();
-	private final SimpleStringProperty textProperty = new SimpleStringProperty();
+	/**
+	 * The index of currently opened entry.
+	 */
+	private final SimpleIntegerProperty currentIndexProperty = new SimpleIntegerProperty();
+	private final SimpleStringProperty  entryTextProperty    = new SimpleStringProperty();
 
-	private final ObservableList<TourEntry> tourEntries = FXCollections.observableArrayList();
-	private final Pane pane = new Pane();
+	private final ObservableList<SlideTourEntry> tourEntries = FXCollections.observableArrayList();
+	private final BorderPane pane = new BorderPane();
 
 	private ImageData<BufferedImage> imageData;
 	private Collection<PathObject> annotations;
 
+	/**
+	 * Has the ImageData been modified. Slide Tours add new annotations & remove, which makes
+	 * QuPath think that some modifications were made. This value is restored once the tour is over.
+	 *
+	 * Editing a tour entry will set this to true to ensure that changes to tours are saved.
+	 */
+	private boolean imageDataChanged;
+
+	private boolean isTourActive = false;
+
 	public SlideTour(QuPathViewer viewer) {
 		this.viewer = viewer;
 
-		indexProperty.addListener((obs, oldValue, newValue) -> {
+		currentIndexProperty.addListener((obs, oldValue, newValue) -> {
 			int index = newValue.intValue();
 
 			if (index == -1 || index >= tourEntries.size()) {
-				textProperty.set("No tour of this slide available.");
+				entryTextProperty.set("No tour of this slide available.");
 			} else if (isVisible()) {
-				TourEntry entry = tourEntries.get(index);
+				SlideTourEntry entry = tourEntries.get(index);
 
 				if (entry.getText() == null) {
-					textProperty.set("Description not set");
+					entryTextProperty.set("Description not set");
 				} else {
-					textProperty.set(entry.getText());
+					entryTextProperty.set(entry.getText());
 				}
 
 				smoothZoomAndPan(entry.getMagnification(), entry.getX(), entry.getY());
 
 				viewer.getImageData().getHierarchy().getSelectionModel().clearSelection();
 				viewer.getImageData().getHierarchy().clearAll();
-
-				for (PathAnnotationObject annotations : entry.getAnnotations()) {
-					viewer.getImageData().getHierarchy().addPathObject(annotations);
-				}
-			}
-		});
-
-		entryCountProperty.bind(Bindings.size(tourEntries));
-		tourActiveProperty.addListener((observable, oldValue, active) -> {
-			initPane();
-
-			if (active) {
-				startTour();
-			} else {
-				endTour();
+				viewer.getImageData().getHierarchy().addPathObjects(entry.getAnnotations());
 			}
 		});
 
@@ -117,21 +111,25 @@ public class SlideTour implements QuPathViewerListener {
 	}
 
 	public Node getNode() {
-		initPane();
+		pane.setPadding(new Insets(10));
+		pane.setBackground(new Background(new BackgroundFill(Color.WHITE, CornerRadii.EMPTY, Insets.EMPTY)));
+		pane.setBorder(new Border(new BorderStroke(
+			Color.LIGHTGRAY, Color.LIGHTGRAY, Color.LIGHTGRAY, Color.LIGHTGRAY,
+			BorderStrokeStyle.SOLID, BorderStrokeStyle.SOLID, BorderStrokeStyle.SOLID, BorderStrokeStyle.SOLID,
+			CornerRadii.EMPTY, new BorderWidths(1), Insets.EMPTY))
+		);
+
+		drawPane();
 
 		return pane;
 	}
 
-	/**
-	 * Has the ImageData been modified. Slide Tours add new annotations & remove, which makes
-	 * QuPath think that some modifications were made. This value is restored once the tour is over.
-	 *
-	 * Editing a tour entry will set this to true to ensure that changes to tours are saved.
-	 */
-	private boolean changed;
-
 	private void startTour() {
-		changed = imageData.isChanged();
+		isTourActive = true;
+
+		drawPane();
+
+		imageDataChanged = imageData.isChanged();
 
 		annotations = imageData.getHierarchy().getAnnotationObjects();
 		viewer.getImageData().getHierarchy().getSelectionModel().clearSelection();
@@ -139,69 +137,60 @@ public class SlideTour implements QuPathViewerListener {
 
 		// Done this way to trigger indexProperty change.
 		if (tourEntries.size() == 0) {
-			this.indexProperty.set(0); this.indexProperty.set(-1);
+			this.currentIndexProperty.set(0); this.currentIndexProperty.set(-1);
 		} else {
-			this.indexProperty.set(-1); this.indexProperty.set(0);
+			this.currentIndexProperty.set(-1); this.currentIndexProperty.set(0);
 		}
 
 		ReflectionUtil.setAnalysisPaneVisible(false);
 	}
 
 	private void endTour() {
+		isTourActive = false;
+
+		drawPane();
+
 		stopAnimation();
 
 		viewer.getImageData().getHierarchy().getSelectionModel().clearSelection();
 		viewer.getImageData().getHierarchy().clearAll();
 		viewer.getImageData().getHierarchy().addPathObjects(annotations);
 
-		imageData.setChanged(changed);
+		imageData.setChanged(imageDataChanged);
 		ReflectionUtil.setAnalysisPaneVisible(true);
 	}
 
-	private synchronized void initPane() {
-		BorderPane borderPane = new BorderPane();
-		borderPane.setPadding(new Insets(10));
-		borderPane.setBackground(new Background(new BackgroundFill(Paint.valueOf("WHITE"), CornerRadii.EMPTY, Insets.EMPTY)));
-		borderPane.setBorder(new Border(new BorderStroke(
-				Color.LIGHTGRAY, Color.LIGHTGRAY, Color.LIGHTGRAY, Color.LIGHTGRAY,
-				BorderStrokeStyle.SOLID, BorderStrokeStyle.SOLID, BorderStrokeStyle.SOLID, BorderStrokeStyle.SOLID,
-				CornerRadii.EMPTY, new BorderWidths(1), Insets.EMPTY))
-		);
-
+	private synchronized void drawPane() {
 		pane.setVisible(viewer.getImageData() != null);
 
-		if (tourActiveProperty.get()) {
-			getTourPane(borderPane);
+		if (isTourActive) {
+			drawTourPane();
 		} else if (tourEntries.size() > 0 || RemoteOpenslide.hasRole(Roles.MANAGE_PROJECTS)) {
-			getTourStartPane(borderPane);
+			drawTourStartPane();
 		} else {
 			pane.setVisible(false);
 		}
-
-		pane.prefWidthProperty().bind(borderPane.widthProperty());
-		pane.getChildren().clear();
-		pane.getChildren().add(borderPane);
 	}
 
-	private void getTourStartPane(BorderPane borderPane) {
+	private void drawTourStartPane() {
 		/* Buttons */
 
-		Button btnStartTour = new Button("Start slide tour");
-		btnStartTour.setOnAction(e -> tourActiveProperty.set(true));
-		btnStartTour.visibleProperty().bind(menuMinimizedProperty.not());
-		btnStartTour.managedProperty().bind(menuMinimizedProperty.not());
+		Button btnStartTour = new Button("Start tour");
+		btnStartTour.setOnAction(e -> startTour());
+		btnStartTour.visibleProperty().bind(isMenuMinimizedProperty.not());
+		btnStartTour.managedProperty().bind(isMenuMinimizedProperty.not());
 
 		Button btnMaximize = new Button("\u2bc6");
 		btnMaximize.setTooltip(new Tooltip("Maximize"));
-		btnMaximize.visibleProperty().bind(menuMinimizedProperty);
-		btnMaximize.managedProperty().bind(menuMinimizedProperty);
-		btnMaximize.setOnAction(e -> menuMinimizedProperty.set(false));
+		btnMaximize.visibleProperty().bind(isMenuMinimizedProperty);
+		btnMaximize.managedProperty().bind(isMenuMinimizedProperty);
+		btnMaximize.setOnAction(e -> isMenuMinimizedProperty.set(false));
 
 		Button btnMinimize = new Button("\u2bc5");
 		btnMinimize.setTooltip(new Tooltip("Minimize"));
-		btnMinimize.visibleProperty().bind(menuMinimizedProperty.not());
-		btnMinimize.managedProperty().bind(menuMinimizedProperty.not());
-		btnMinimize.setOnAction(e -> menuMinimizedProperty.set(true));
+		btnMinimize.visibleProperty().bind(isMenuMinimizedProperty.not());
+		btnMinimize.managedProperty().bind(isMenuMinimizedProperty.not());
+		btnMinimize.setOnAction(e -> isMenuMinimizedProperty.set(true));
 
 		GridPane buttons = new GridPane();
 		buttons.add(btnMinimize, 0, 0);
@@ -211,101 +200,250 @@ public class SlideTour implements QuPathViewerListener {
 
 		/* Pane */
 
-		borderPane.setTop(null);
-		borderPane.setCenter(null);
-		borderPane.setBottom(buttons);
+		pane.setPrefWidth(Region.USE_COMPUTED_SIZE);
+		pane.setTop(buttons);
+		pane.setCenter(null);
 	}
 
-	private void getTourPane(BorderPane borderPane) {
+	private void drawTourPane() {
 		/* Text */
 
 		Text text = new Text();
-		text.textProperty().bind(textProperty);
+		text.textProperty().bind(entryTextProperty);
 		text.setWrappingWidth(300);
 
 		/* Buttons */
 
 		Button btnExit = new Button("Exit");
-		btnExit.setOnAction(e -> tourActiveProperty.set(false));
-
-		Button btnAdd = new Button("Add New");
-		btnAdd.setOnAction(e -> addNewEntry());
-
-		Button btnEdit = new Button("Edit Current");
-		btnEdit.setOnAction(e -> editCurrentEntry());
-		btnEdit.disableProperty().bind(indexProperty.isEqualTo(-1));
-
-		Button btnDelete = new Button("Delete Current");
-		btnDelete.setOnAction(e -> deleteCurrentEntry());
-		btnDelete.disableProperty().bind(indexProperty.isEqualTo(-1));
+		btnExit.setOnAction(e -> endTour());
 
 		Button btnNext = new Button("Next");
-		btnNext.setOnAction(e -> indexProperty.set(indexProperty.get() + 1));
-		btnNext.disableProperty().bind(indexProperty.isEqualTo(entryCountProperty.subtract(1)));
+		btnNext.setOnAction(a -> currentIndexProperty.set(currentIndexProperty.get() + 1));
+		btnNext.disableProperty().bind(currentIndexProperty.isEqualTo(Bindings.size(tourEntries).subtract(1)));
 
 		Button btnPrevious = new Button("Previous");
-		btnPrevious.setOnAction(e -> indexProperty.set(indexProperty.get() - 1));
-		btnPrevious.disableProperty().bind(indexProperty.lessThanOrEqualTo(0));
+		btnPrevious.setOnAction(a -> currentIndexProperty.set(currentIndexProperty.get() - 1));
+		btnPrevious.disableProperty().bind(currentIndexProperty.lessThanOrEqualTo(0));
 
-		GridPane buttons = PaneTools.createColumnGridControls(btnExit, btnPrevious, btnNext);
+		MenuItem btnNew = new MenuItem("Create New");
+		btnNew.setOnAction(a -> createNewEntry());
+
+		MenuItem btnEdit = new MenuItem("Edit Current");
+		btnEdit.setOnAction(a -> editCurrentEntry());
+		btnEdit.disableProperty().bind(currentIndexProperty.isEqualTo(-1));
+
+		MenuItem btnDelete = new MenuItem("Delete Current");
+		btnDelete.setOnAction(a -> deleteCurrentEntry());
+		btnDelete.disableProperty().bind(currentIndexProperty.isEqualTo(-1));
+
+		MenuItem btnViewAll = new MenuItem("View all frames");
+		btnViewAll.setOnAction(a -> viewAllEntries());
+
+		MenuButton btnMore = new MenuButton("More \u22ee");
+		btnMore.disableProperty().bind(EduExtension.editModeEnabledProperty().not());
+		btnMore.getItems().addAll(btnNew, btnEdit, btnDelete, btnViewAll);
+
+		GridPane buttons = PaneTools.createColumnGridControls(btnExit, btnPrevious, btnNext, btnMore);
 		buttons.setHgap(5);
 
 		/* Pane */
 
 		BorderPane.setMargin(text, new Insets(10, 0, 10, 0));
-		borderPane.setPrefWidth(300);
-
-		borderPane.setTop(buttons);
-		borderPane.setCenter(text);
-
-		if (RemoteOpenslide.hasRole(Roles.MANAGE_PROJECTS)) {
-			GridPane adminButtons = PaneTools.createColumnGridControls(btnEdit, btnDelete, btnAdd);
-			adminButtons.setHgap(5);
-
-			borderPane.setBottom(adminButtons);
-		}
+		pane.setPrefWidth(300);
+		pane.setTop(buttons);
+		pane.setCenter(text);
 	}
 
 	private void deleteCurrentEntry() {
-		tourEntries.remove(indexProperty.get());
-		indexProperty.set(tourEntries.size() - 1);
-
-		syncSlideTours();
-	}
-
-	private void editCurrentEntry() {
-		TourEntry entry = tourEntries.get(indexProperty.get());
-
-		var confirm = entry.getText() == null || Dialogs.showConfirmDialog("Edit entry", "Editing the entry will save your current viewer position to this entry. After that, you'll be prompted to edit the text.");
+		var confirm = Dialogs.showConfirmDialog("Delete entry", "Are you sure you want to delete this entry?");
 
 		if (!confirm) {
 			return;
 		}
 
-		String text = Dialogs.showInputDialog("Text", "", entry.getText());
-
-		// todo: experiment with textProperty.bind(Bindings.stringValueAt(tourEntries, indexProperty));
-
-		entry.setLocation(viewer.getCenterPixelX(), viewer.getCenterPixelY(), viewer.getMagnification());
-		entry.setText(text);
-		entry.setAnnotations((Collection<PathAnnotationObject>)(Collection<?>) viewer.getImageData().getHierarchy().getAnnotationObjects());
+		tourEntries.remove(currentIndexProperty.get());
+		currentIndexProperty.set(tourEntries.size() - 1);
 
 		syncSlideTours();
 	}
 
-	private void addNewEntry() {
-		double x = imageData.getServer().getHeight() / 2.0;
-		double y = imageData.getServer().getWidth()  / 2.0;
-		double magnification = 1;
+	private void editCurrentEntry() {
+		SlideTourEntry entry = tourEntries.get(currentIndexProperty.get());
 
-		tourEntries.add(new TourEntry("Description not set", x, y, magnification, null));
+		String[] choices = { "Everything", "Viewer position", "Annotations", "Text" };
+		String edit = Dialogs.showChoiceDialog("Edit ...", "Choose what to edit", choices, "Everything");
+
+		if (edit == null) {
+			return;
+		}
+
+		switch (edit) {
+			case "Everything" -> {
+				editLocation(entry);
+				editAnnotations(entry);
+				editText(entry);
+			}
+			case "Viewer position" -> editLocation(entry);
+			case "Annotations" -> editAnnotations(entry);
+			case "Text" -> editText(entry);
+		}
+
+		syncSlideTours();
+	}
+
+	private void editLocation(SlideTourEntry entry) {
+		entry.setLocation(viewer.getCenterPixelX(), viewer.getCenterPixelY(), viewer.getMagnification());
+	}
+
+	private void editText(SlideTourEntry entry) {
+		String text = CustomDialogs.showTextAreaDialog("Text", "", entry.getText());
+
+		if (text != null) {
+			entry.setText(text);
+			entryTextProperty.set(text);
+		}
+	}
+
+	private void editAnnotations(SlideTourEntry entry) {
+		entry.setAnnotations(viewer.getImageData().getHierarchy().getAnnotationObjects());
+	}
+
+	private void createNewEntry() {
+		double x = viewer.getCenterPixelX();
+		double y = viewer.getCenterPixelY();
+		double magnification = viewer.getMagnification();
+
+		tourEntries.add(new SlideTourEntry(null, x, y, magnification, Collections.emptyList()));
 
 		viewer.setMagnification(1);
 		viewer.setCenterPixelLocation(x, y);
 
-		indexProperty.set(tourEntries.size() - 1);
+		currentIndexProperty.set(tourEntries.size() - 1);
 
 		syncSlideTours();
+	}
+
+	private static final DataFormat SERIALIZED_MIME_TYPE = new DataFormat("application/x-java-serialized-object");
+
+	private void viewAllEntries() {
+		/* Table */
+
+		TableView<SlideTourEntry> table = new TableView<>();
+		table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+		table.setPlaceholder(new Text("No entries for this slide tour."));
+
+		/* Re-order entries */
+
+		table.setRowFactory(tableView -> {
+			TableRow<SlideTourEntry> row = new TableRow<>();
+
+			row.setOnMouseClicked(event -> {
+				if (!row.isEmpty() && event.getClickCount() == 1 && event.getButton() == MouseButton.PRIMARY) {
+					currentIndexProperty.set(tourEntries.indexOf(row.getItem()));
+				}
+			});
+
+			row.setOnDragDetected(event -> {
+				if (!row.isEmpty()) {
+					Integer index = row.getIndex();
+					Dragboard db = row.startDragAndDrop(TransferMode.MOVE);
+					db.setDragView(row.snapshot(null, null));
+					ClipboardContent cc = new ClipboardContent();
+					cc.put(SERIALIZED_MIME_TYPE, index);
+					db.setContent(cc);
+					event.consume();
+				}
+			});
+
+			row.setOnDragOver(event -> {
+				Dragboard db = event.getDragboard();
+
+				if (db.hasContent(SERIALIZED_MIME_TYPE)) {
+					if (row.getIndex() != (Integer) db.getContent(SERIALIZED_MIME_TYPE)) {
+						event.acceptTransferModes(TransferMode.COPY_OR_MOVE);
+						event.consume();
+					}
+				}
+			});
+
+			row.setOnDragDropped(event -> {
+				Dragboard db = event.getDragboard();
+
+				if (db.hasContent(SERIALIZED_MIME_TYPE)) {
+					int draggedIndex = (Integer) db.getContent(SERIALIZED_MIME_TYPE);
+					SlideTourEntry draggedPerson = tableView.getItems().remove(draggedIndex);
+
+					int dropIndex;
+
+					if (row.isEmpty()) {
+						dropIndex = tableView.getItems().size();
+					} else {
+						dropIndex = row.getIndex();
+					}
+
+					tableView.getItems().add(dropIndex, draggedPerson);
+
+					event.setDropCompleted(true);
+					tableView.getSelectionModel().select(dropIndex);
+					event.consume();
+					syncSlideTours();
+				}
+			});
+
+			return row;
+		});
+
+		TableColumn<SlideTourEntry, String> indexColumn = new TableColumn<>("#");
+		indexColumn.setCellValueFactory(data -> new SimpleStringProperty(String.valueOf(tourEntries.indexOf(data.getValue()) + 1)));
+		indexColumn.setReorderable(false);
+		indexColumn.setMinWidth(28);
+		indexColumn.setMaxWidth(28);
+		indexColumn.setStyle("-fx-alignment: center");
+
+		TableColumn<SlideTourEntry, String> textColumn = new TableColumn<>("Text");
+		textColumn.setCellValueFactory(new PropertyValueFactory<>("text"));
+		textColumn.setReorderable(false);
+
+		table.getColumns().addAll(indexColumn, textColumn);
+		table.setItems(tourEntries);
+
+		table.setPrefWidth(600);
+		table.setPrefHeight(300);
+
+		/* Buttons */
+
+		Button btnEdit = new Button("Edit selected");
+		btnEdit.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+		btnEdit.setOnAction(a -> { editCurrentEntry(); table.refresh(); });
+
+		Button btnDelete = new Button("Delete selected");
+		btnDelete.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+		btnDelete.setOnAction(a -> deleteCurrentEntry());
+
+		Button btnNew = new Button("Create new entry");
+		btnNew.setOnAction(a -> createNewEntry());
+
+		GridPane buttons = PaneTools.createColumnGridControls(btnEdit, btnDelete, btnNew);
+		buttons.setHgap(5);
+
+		/* Pane */
+
+		BorderPane pane = new BorderPane();
+		pane.setCenter(table);
+		pane.setBottom(buttons);
+
+		BorderPane.setMargin(table, new Insets(10, 0, 10, 0));
+
+		Dialogs.builder()
+				.title("Slide Tour entries")
+				.width(600)
+				.height(300)
+				.resizable()
+				.content(pane)
+				.buttons(ButtonType.CLOSE)
+				.modality(Modality.NONE)
+				.build()
+				.show();
 	}
 
 	/**
@@ -313,10 +451,10 @@ public class SlideTour implements QuPathViewerListener {
 	 */
 	private void syncSlideTours() {
 		try {
-			changed = true;
-			this.imageData.setProperty("Tour", Lists.newArrayList(this.tourEntries));
+			imageDataChanged = true;
+			this.imageData.setProperty(TOUR_ENTRIES_KEY, GsonTools.getInstance().toJson(tourEntries));
 		} catch (Exception e) {
-			logger.error("Error when serializing slide tour data", e);
+			logger.error("Error when saving slide tour data", e);
 		}
 	}
 
@@ -334,22 +472,23 @@ public class SlideTour implements QuPathViewerListener {
 
 		// 2500 pixels is travelled in 1000 ms, up to maximum of 5000 ms
 		int maxSteps = Math.min(5, Math.max(1, (diff / 2500))) * 20;
+		// Utils.clamp();
 		AtomicInteger steps = new AtomicInteger(1);
 
 		stopAnimation();
 
 		// TODO: High CPU usage occasionally
 		timeline = new Timeline(
-				new KeyFrame(
-						Duration.millis(50),
-						event -> {
-							double multiplier = Math.min(1, 1.0 * steps.get() / maxSteps);
-							viewer.setMagnification(currentMagnification + diffMagnification * multiplier);
-							viewer.setCenterPixelLocation(currentX + diffX * multiplier, currentY + diffY * multiplier);
+			new KeyFrame(
+				Duration.millis(50),
+				event -> {
+					double multiplier = Math.min(1, 1.0 * steps.get() / maxSteps);
+					viewer.setMagnification(currentMagnification + diffMagnification * multiplier);
+					viewer.setCenterPixelLocation(currentX + diffX * multiplier, currentY + diffY * multiplier);
 
-							steps.getAndIncrement();
-						}
-				)
+					steps.getAndIncrement();
+				}
+			)
 		);
 
 		timeline.setCycleCount(maxSteps);
@@ -369,19 +508,19 @@ public class SlideTour implements QuPathViewerListener {
 	public void imageDataChanged(QuPathViewer viewer, ImageData<BufferedImage> imageDataOld, ImageData<BufferedImage> imageDataNew) {
 		this.viewer = viewer;
 		this.imageData = imageDataNew;
+		this.isTourActive = false;
+		this.tourEntries.clear();
 
-		tourActiveProperty.set(false);
-		tourEntries.clear();
-
-		if (imageData != null && imageData.getProperty("Tour") != null) {
+		if (imageData != null && imageData.getProperties().containsKey(TOUR_ENTRIES_KEY)) {
 			try {
-				tourEntries.addAll((ArrayList<TourEntry>) imageData.getProperty("Tour"));
+				SlideTourEntry[] entries = GsonTools.getInstance().fromJson((String) imageData.getProperty(TOUR_ENTRIES_KEY), SlideTourEntry[].class);
+				this.tourEntries.addAll(FXCollections.observableArrayList(entries));
 			} catch (Exception e) {
-				logger.error("Error when deserializing slide tour", e);
+				logger.error("Error when loading slide tour", e);
 			}
 		}
 
-		initPane();
+		drawPane();
 	}
 
 	@Override
@@ -398,85 +537,5 @@ public class SlideTour implements QuPathViewerListener {
 	@Override
 	public void selectedObjectChanged(QuPathViewer viewer, PathObject pathObjectSelected) {
 
-	}
-
-	private static class TourEntry implements Serializable {
-
-		private static final long serialVersionUID = 1L;
-
-		private String text;
-		private double x;
-		private double y;
-		private double magnification;
-
-		private Collection<PathAnnotationObject> annotations = new ArrayList<>();
-
-		public TourEntry(String text, double x, double y, double magnification, Collection<PathAnnotationObject> annotations) {
-			this.text = text;
-			this.x = x;
-			this.y = y;
-			this.magnification = magnification;
-
-			if (annotations != null) {
-				this.annotations.addAll(annotations);
-			}
-		}
-
-		public void setText(String text) {
-			this.text = text;
-		}
-
-		public void setLocation(double x, double y, double magnification) {
-			this.x = x;
-			this.y = y;
-			this.magnification = magnification;
-		}
-
-		public void addAnnotation(PathAnnotationObject annotation) {
-			this.annotations.add(annotation);
-		}
-
-		public void setAnnotations(Collection<PathAnnotationObject> annotations) {
-			assert annotations != null;
-
-			this.annotations = annotations;
-		}
-
-		public String getText() {
-			return text;
-		}
-
-		public double getX() {
-			return x;
-		}
-
-		public double getY() {
-			return y;
-		}
-
-		public double getMagnification() {
-			return magnification;
-		}
-
-		public Collection<PathAnnotationObject> getAnnotations() {
-			return annotations;
-		}
-
-		// TODO: Switch to JSON
-		private void writeObject(ObjectOutputStream out) throws IOException {
-			out.writeUTF(text);
-			out.writeDouble(x);
-			out.writeDouble(y);
-			out.writeDouble(magnification);
-			out.writeObject(annotations);
-		}
-
-		private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
-			this.text = in.readUTF();
-			this.x = in.readDouble();
-			this.y = in.readDouble();
-			this.magnification = in.readDouble();
-			this.annotations = (ArrayList<PathAnnotationObject>) in.readObject();
-		}
 	}
 }

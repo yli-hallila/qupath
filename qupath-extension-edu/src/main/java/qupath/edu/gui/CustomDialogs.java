@@ -1,10 +1,8 @@
 package qupath.edu.gui;
 
+import javafx.application.Platform;
 import javafx.event.EventHandler;
-import javafx.scene.control.ButtonBar;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.Dialog;
-import javafx.scene.control.DialogEvent;
+import javafx.scene.control.*;
 import javafx.stage.Modality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +10,7 @@ import qupath.edu.lib.RemoteOpenslide;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
+import qupath.lib.gui.tools.GuiTools;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -82,4 +81,44 @@ public class CustomDialogs {
 			event.consume();
 		}
 	};
+
+	public static String showTextAreaDialog(final String title, final String message, final String initialInput) {
+		if (Platform.isFxApplicationThread()) {
+			Dialog<String> dialog = new Dialog<>();
+			dialog.setTitle(title);
+			if (QuPathGUI.getInstance() != null) {
+				dialog.initOwner(Dialogs.getDefaultOwner());
+			}
+			dialog.setHeaderText(message);
+			dialog.setResizable(false);
+			dialog.setContentText(null);
+
+			TextArea textArea = new TextArea();
+			textArea.setPrefColumnCount(30);
+			textArea.setPrefRowCount(10);
+			textArea.setWrapText(true);
+			textArea.positionCaret(0);
+			textArea.setText(initialInput);
+
+			dialog.setResultConverter((dialogButton) -> {
+				ButtonBar.ButtonData data = dialogButton == null ? null : dialogButton.getButtonData();
+				return data == ButtonBar.ButtonData.OK_DONE ? textArea.getText() : null;
+			});
+
+			dialog.getDialogPane().getStyleClass().add("text-input-dialog");
+			dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+			dialog.getDialogPane().setContent(textArea);
+
+			Platform.runLater(textArea::requestFocus);
+
+			Optional<String> result = dialog.showAndWait();
+			if (result.isPresent()) {
+				return result.get();
+			}
+		} else {
+			return GuiTools.callOnApplicationThread(() -> showTextAreaDialog(title, message, initialInput));
+		}
+
+		return null;
+	}
 }
