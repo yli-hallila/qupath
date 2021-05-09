@@ -265,6 +265,8 @@ public class QuPathGUI {
 			);
 	
 	private BooleanProperty selectedToolLocked = new SimpleBooleanProperty(false);
+
+	private BooleanProperty readOnly = new SimpleBooleanProperty(false);
 	
 	// ExecutorServices for single & multiple threads
 	private Map<Object, ExecutorService> mapSingleThreadPools = new HashMap<>();
@@ -2738,7 +2740,7 @@ public class QuPathGUI {
 	 * @return
 	 */
 	boolean checkSaveChanges(ImageData<BufferedImage> imageData) {
-		if (!imageData.isChanged())
+		if (!imageData.isChanged() || isReadOnly())
 			return true;
 		ProjectImageEntry<BufferedImage> entry = getProjectImageEntry(imageData);
 		String name = entry == null ? ServerTools.getDisplayableImageName(imageData.getServer()) : entry.getImageName();
@@ -3025,7 +3027,7 @@ public class QuPathGUI {
 		return installCommand(menuPath, () -> {
 			try {
 				runScript(file, getImageData());
-			} catch (IOException e) {
+			} catch (IOException | ScriptException e) {
 				Dialogs.showErrorMessage("Script error", e);
 			}
 		});
@@ -3041,7 +3043,13 @@ public class QuPathGUI {
 	 * @see #installGroovyCommand(String, File)
 	 */
 	public MenuItem installGroovyCommand(String menuPath, final String script) {
-		return installCommand(menuPath, () -> runScript(script, getImageData()));
+		return installCommand(menuPath, () -> {
+			try {
+				runScript(script, getImageData());
+			} catch (ScriptException e) {
+				Dialogs.showErrorMessage("Script error", e);
+			}
+		});
 	}
 	
 	/**
@@ -3130,8 +3138,9 @@ public class QuPathGUI {
 	 * @param script the script to run
 	 * @param imageData an {@link ImageData} object for the current image (may be null)
 	 * @return result of the script execution
+	 * @throws ScriptException 
 	 */
-	private Object runScript(final String script, final ImageData<BufferedImage> imageData) {
+	private Object runScript(final String script, final ImageData<BufferedImage> imageData) throws ScriptException {
 		return DefaultScriptEditor.executeScript(Language.GROOVY, script, getProject(), imageData, true, null);
 	}
 	
@@ -3142,8 +3151,9 @@ public class QuPathGUI {
 	 * @param imageData an {@link ImageData} object for the current image (may be null)
 	 * @return result of the script execution
 	 * @throws IOException 
+	 * @throws ScriptException 
 	 */
-	private Object runScript(final File file, final ImageData<BufferedImage> imageData) throws IOException {
+	private Object runScript(final File file, final ImageData<BufferedImage> imageData) throws IOException, ScriptException {
 		var script = GeneralTools.readFileAsString(file.getAbsolutePath());
 		return runScript(script, imageData);
 	}
@@ -3232,7 +3242,7 @@ public class QuPathGUI {
 		
 		
 		if (promptToSaveChanges && imageData != null && imageData.isChanged()) {
-			if (!promptToSaveChangesOrCancel("Save changes", imageData))
+			if (!isReadOnly() && !promptToSaveChangesOrCancel("Save changes", imageData))
 				return false;
 		}
 		
@@ -3586,6 +3596,36 @@ public class QuPathGUI {
 		return !selectedToolLocked.get();
 	}
 	
+	/**
+	 * Query whether QuPath is in 'read-only' mode. This suppresses dialogs that ask about saving changes.
+	 * @return
+	 * @apiNote Read only mode is an experimental feature; its behavior is subject to change in future versions.
+	 * @see #setReadOnly(boolean)
+	 */
+	public boolean isReadOnly() {
+		return readOnly.get();
+	}
+	
+	/**
+	 * Property indicating whether QuPath is in 'read-only' mode.
+	 * @return
+	 * @apiNote Read only mode is an experimental feature; its behavior is subject to change in future versions.
+	 * @see #isReadOnly()
+	 * @see #setReadOnly(boolean)
+	 */
+	public ReadOnlyBooleanProperty readOnlyProperty() {
+		return readOnly;
+	}
+	
+	/**
+	 * Specify whether QuPath should be in 'read-only' mode.
+	 * @param readOnly
+	 * @apiNote Read only mode is an experimental feature; its behavior is subject to change in future versions.
+	 * @see #isReadOnly()
+	 */
+	public void setReadOnly(boolean readOnly) {
+		this.readOnly.set(readOnly);
+	}
 	
 	/**
 	 * Get a list of the current available tools.
@@ -4398,7 +4438,7 @@ public class QuPathGUI {
 				return true;
 			// Deal with saving, if necessary
 			if (imageData.isChanged()) {
-				if (!promptToSaveChangesOrCancel(dialogTitle, imageData))
+				if (!isReadOnly() && !promptToSaveChangesOrCancel(dialogTitle, imageData))
 					return false;
 			}
 			viewer.setImageData(null);
