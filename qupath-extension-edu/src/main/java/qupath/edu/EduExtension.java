@@ -5,10 +5,7 @@ import javafx.beans.binding.Bindings;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
-import javafx.scene.control.Button;
-import javafx.scene.control.Separator;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
+import javafx.scene.control.*;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
@@ -32,10 +29,11 @@ import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.gui.viewer.QuPathViewerPlus;
 import qupath.lib.gui.viewer.tools.PathTools;
+import qupath.lib.io.PathIO;
 import qupath.lib.projects.Project;
 
 import java.awt.image.BufferedImage;
-import java.io.IOException;
+import java.io.*;
 
 import static qupath.lib.gui.ActionTools.createAction;
 import static qupath.lib.gui.ActionTools.createMenuItem;
@@ -53,7 +51,7 @@ public class EduExtension implements QuPathExtension {
 
     private QuPathGUI qupath;
 
-    private static final SimpleBooleanProperty editModeEnabled = new SimpleBooleanProperty(true);
+    private static final SimpleBooleanProperty editModeEnabled = new SimpleBooleanProperty(false);
     private static final SimpleBooleanProperty noWriteAccess = new SimpleBooleanProperty(true);
     private static final Browser projectInformation = new Browser();
     private final TabPane tabbedPanel = new TabPane();
@@ -157,19 +155,20 @@ public class EduExtension implements QuPathExtension {
     }
 
     private void onImageDataChange() {
-//        qupath.imageDataProperty().addListener((observable, oldValue, imageData) -> {
-//            if (imageData == null) {
-//                return;
-//            }
-//
-//            imageData.addPropertyChangeListener(e -> {
-//                if (e.getPropertyName().equals(ImageDisplay.class.getName())) {
-//                    if (!isEditModeEnabled()) {
-//                        imageData.setChanged(false);
-//                    }
-//                }
-//            });
-//        });
+        qupath.imageDataProperty().addListener((observable, oldValue, imageData) -> {
+            if (imageData == null || !editModeEnabled.get()) {
+                return;
+            }
+
+            logger.debug("Switching slides with edit mode enabled -- creating a backup");
+
+            try {
+                osImageData.reset();
+                PathIO.writeImageData(osImageData, imageData);
+            } catch (IOException e) {
+                logger.error("Error when backing up image data", e);
+            }
+        });
     }
 
     @Override
@@ -236,8 +235,48 @@ public class EduExtension implements QuPathExtension {
         return editModeEnabled.get();
     }
 
+    private static final ByteArrayOutputStream osImageData = new ByteArrayOutputStream(0);
+
     public static void setEditModeEnabled(boolean enabled) {
-        EduExtension.editModeEnabledProperty().set(enabled);
+        QuPathGUI qupath = QuPathGUI.getInstance();
+
+        if (enabled) {
+            EduExtension.editModeEnabledProperty().set(true);
+            qupath.setReadOnly(false);
+
+            if (qupath.getImageData() != null) {
+                try {
+                    osImageData.reset();
+                    PathIO.writeImageData(osImageData, qupath.getImageData());
+                } catch (IOException e) {
+                    logger.error("Error when backing up image data", e);
+                }
+            }
+        } else {
+            var choice = Dialogs.builder()
+                    .title("Confirm")
+                    .contentText("Do you wish to save changes or restore changes?")
+                    .buttons("Save", "Restore", "Cancel")
+                    .build()
+                    .showAndWait()
+                    .orElseGet(() -> new ButtonType("Cancel"))
+                    .getText();
+
+            if (choice.equals("Save")) {
+                qupath.checkSaveChanges(qupath.getImageData());
+                qupath.setReadOnly(true);
+                EduExtension.editModeEnabledProperty().set(false);
+            } else if (choice.equals("Restore")) {
+                try {
+                    qupath.getViewer().setImageData(PathIO.readImageData(new ByteArrayInputStream(osImageData.toByteArray()), null, null, BufferedImage.class));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+                qupath.setReadOnly(true);
+                EduExtension.editModeEnabledProperty().set(false);
+            }
+        }
     }
 
     public static void setWriteAccess(boolean hasWriteAccess) {
@@ -349,12 +388,13 @@ public class EduExtension implements QuPathExtension {
 
         toggleTools();
 
-        setEditModeEnabled(true);
-        setEditModeEnabled(false);
+        // Toggle edit mode so that tools get disabled / enabled
+
+        editModeEnabled.set(!editModeEnabled.get());
+        editModeEnabled.set(!editModeEnabled.get());
 
         Button btnToggleEditMode = new Button();
         btnToggleEditMode.textProperty().bind(Bindings.when(editModeEnabled).then("Save changes / discard").otherwise("Enable editing"));
-        btnToggleEditMode.disableProperty().bind(noWriteAccess);
         btnToggleEditMode.setOnAction(a -> setEditModeEnabled(!(isEditModeEnabled())));
         btnToggleEditMode.setFont(Font.font(10));
 
