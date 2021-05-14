@@ -8,6 +8,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.text.Text;
 import org.controlsfx.glyphfont.FontAwesome;
 import qupath.edu.gui.buttons.IconButtons;
+import qupath.edu.gui.dialogs.WorkspaceManager;
 import qupath.edu.models.ExternalSubject;
 
 public class SubjectListCell extends ListCell<ExternalSubject> {

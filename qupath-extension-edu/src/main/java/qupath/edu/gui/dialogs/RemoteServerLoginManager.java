@@ -1,4 +1,4 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import com.microsoft.aad.msal4j.*;
 import javafx.application.Platform;
@@ -24,8 +24,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.EduExtension;
 import qupath.edu.EduOptions;
-import qupath.edu.lib.RemoteOpenslide;
-import qupath.edu.lib.Roles;
+import qupath.edu.api.EduAPI;
+import qupath.edu.api.Roles;
 import qupath.edu.models.ExternalOrganization;
 import qupath.edu.models.ServerConfiguration;
 import qupath.lib.gui.QuPathGUI;
@@ -73,7 +73,7 @@ public class RemoteServerLoginManager {
     }
 
     private synchronized void initializePane() {
-        ServerConfiguration serverConfiguration = RemoteOpenslide.getServerConfiguration();
+        ServerConfiguration serverConfiguration = EduAPI.getServerConfiguration();
         pane = new BorderPane();
 
         /* Logos */
@@ -82,7 +82,7 @@ public class RemoteServerLoginManager {
         cbLogos.prefWidthProperty().bind(pane.widthProperty());
         cbLogos.setButtonCell(new ImageViewListCell(false));
         cbLogos.setCellFactory(f -> new ImageViewListCell(true));
-        cbLogos.getItems().addAll(RemoteOpenslide.getAllOrganizations().orElse(Collections.emptyList()));
+        cbLogos.getItems().addAll(EduAPI.getAllOrganizations().orElse(Collections.emptyList()));
 
         selectPreviousOrganization(cbLogos);
 
@@ -146,8 +146,8 @@ public class RemoteServerLoginManager {
     }
 
     private void loginAsGuest() {
-        RemoteOpenslide.setAuthType(RemoteOpenslide.AuthType.GUEST);
-        RemoteOpenslide.setOrganizationId(selectedOrganizationProperty.get());
+        EduAPI.setAuthType(EduAPI.AuthType.GUEST);
+        EduAPI.setOrganizationId(selectedOrganizationProperty.get());
 
         dialog.close();
         EduExtension.setWriteAccess(false);
@@ -199,9 +199,9 @@ public class RemoteServerLoginManager {
             .showAndWait();
 
         if (choice.isPresent() && choice.get().getButtonData() == ButtonBar.ButtonData.OK_DONE) {
-            if (RemoteOpenslide.login(tfUsername.getText(), tfPassword.getText())) {
+            if (EduAPI.login(tfUsername.getText(), tfPassword.getText())) {
                 dialog.close();
-                EduExtension.setWriteAccess(RemoteOpenslide.hasRole(Roles.MANAGE_PROJECTS));
+                EduExtension.setWriteAccess(EduAPI.hasRole(Roles.MANAGE_PROJECTS));
                 EduExtension.showWorkspaceOrLoginDialog();
             } else {
                 Dialogs.showErrorNotification("Error", "Wrong username, password or host");
@@ -237,15 +237,15 @@ public class RemoteServerLoginManager {
                     try {
                         IAuthenticationResult result = future.get();
 
-                        if (RemoteOpenslide.validate(result.idToken())) {
+                        if (EduAPI.validate(result.idToken())) {
                             // TODO: Implement Refresh Tokens [MSAL4J has acquireToken(RefreshTokenParameters parameters)]
                             String[] split = result.account().homeAccountId().split("\\.");
-                            RemoteOpenslide.setUserId(split[0]);
-                            RemoteOpenslide.setOrganizationId(split[1]);
+                            EduAPI.setUserId(split[0]);
+                            EduAPI.setOrganizationId(split[1]);
 
                             Platform.runLater(() -> {
                                 dialog.close();
-                                EduExtension.setWriteAccess(RemoteOpenslide.hasRole(Roles.MANAGE_PROJECTS));
+                                EduExtension.setWriteAccess(EduAPI.hasRole(Roles.MANAGE_PROJECTS));
                                 EduExtension.showWorkspaceOrLoginDialog();
                             });
                         }

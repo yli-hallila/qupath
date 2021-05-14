@@ -1,4 +1,4 @@
-package qupath.edu.lib;
+package qupath.edu.api;
 
 import com.google.common.collect.Sets;
 
@@ -29,7 +29,7 @@ public enum Roles {
      * @return Set<Roles>
      */
     public static Set<Roles> getModifiableRoles() {
-        if (RemoteOpenslide.hasRole(Roles.ADMIN)) {
+        if (EduAPI.hasRole(Roles.ADMIN)) {
             return Sets.union(MODIFIABLE_ROLES, Set.of(Roles.ADMIN));
         }
 

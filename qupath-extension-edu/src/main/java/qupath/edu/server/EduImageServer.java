@@ -1,9 +1,9 @@
-package qupath.edu;
+package qupath.edu.server;
 
 import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.api.EduAPI;
 import qupath.lib.images.servers.*;
 
 import javax.imageio.ImageIO;
@@ -72,7 +72,7 @@ public class EduImageServer extends AbstractTileableImageServer {
     }
 
     private void initialize(String... args) throws IOException {
-        Optional<JsonObject> properties = RemoteOpenslide.getSlideProperties(uri);
+        Optional<JsonObject> properties = EduAPI.getSlideProperties(uri);
 
         if (properties.isEmpty()) {
             throw new IOException("Error when loading remote slide, properties were empty. See log for more information");
@@ -131,7 +131,7 @@ public class EduImageServer extends AbstractTileableImageServer {
         String name;
 
         if (uri.getFragment() != null) {
-            name = RemoteOpenslide.d(uri.getFragment());
+            name = EduAPI.d(uri.getFragment());
         } else {
             name = uri.getPath().substring(1);
         }
@@ -193,7 +193,7 @@ public class EduImageServer extends AbstractTileableImageServer {
         int tileHeight = tileRequest.getTileHeight();
         int depth = tileRequest.getZ();
 
-        URI uriRegion = RemoteOpenslide.getRenderRegionURL(
+        URI uriRegion = EduAPI.getRenderRegionURL(
                 this.serverURI,
                 uri.getPath().substring(1),
                 tileX, tileY,

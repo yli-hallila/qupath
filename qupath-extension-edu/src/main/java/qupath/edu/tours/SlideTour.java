@@ -25,9 +25,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.EduExtension;
 import qupath.edu.gui.CustomDialogs;
-import qupath.edu.lib.ReflectionUtil;
-import qupath.edu.lib.RemoteOpenslide;
-import qupath.edu.lib.Roles;
+import qupath.edu.util.ReflectionUtil;
+import qupath.edu.api.EduAPI;
+import qupath.edu.api.Roles;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.gui.viewer.QuPathViewer;
@@ -165,7 +165,7 @@ public class SlideTour implements QuPathViewerListener {
 
 		if (isTourActive) {
 			drawTourPane();
-		} else if (tourEntries.size() > 0 || RemoteOpenslide.hasRole(Roles.MANAGE_PROJECTS)) {
+		} else if (tourEntries.size() > 0 || EduAPI.hasRole(Roles.MANAGE_PROJECTS)) {
 			drawTourStartPane();
 		} else {
 			pane.setVisible(false);

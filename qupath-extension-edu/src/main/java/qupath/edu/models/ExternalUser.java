@@ -1,6 +1,6 @@
 package qupath.edu.models;
 
-import qupath.edu.lib.Roles;
+import qupath.edu.api.Roles;
 
 import java.util.List;
 

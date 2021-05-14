@@ -6,7 +6,7 @@ import javafx.scene.control.*;
 import javafx.stage.Modality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.api.EduAPI;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
@@ -15,7 +15,7 @@ import qupath.lib.gui.tools.GuiTools;
 import java.io.IOException;
 import java.util.Optional;
 
-public class CustomDialogs {
+public final class CustomDialogs {
 
 	private static final Logger logger = LoggerFactory.getLogger(CustomDialogs.class);
 
@@ -33,12 +33,12 @@ public class CustomDialogs {
 			HTML = GeneralTools.readInputStreamAsString(QuPathGUI.class.getResourceAsStream("/html/editor.html"));
 			HTML = HTML.replace("{{qupath-input}}", input)
 					   .replace("{{qupath-resource-root}}", resourceRoot)
-			           .replace("{{qupath-upload-url}}", RemoteOpenslide.getCKEditorUploadUrl());
+			           .replace("{{qupath-upload-url}}", EduAPI.getCKEditorUploadUrl());
 
-			if (RemoteOpenslide.getAuthType() == RemoteOpenslide.AuthType.TOKEN) {
-				HTML = HTML.replace("{{qupath-auth}}", "'Token': '" + RemoteOpenslide.getToken() + "'");
-			} else if (RemoteOpenslide.getAuthType() == RemoteOpenslide.AuthType.USERNAME) {
-				HTML = HTML.replace("{{qupath-auth}}", "Authorization: '" + RemoteOpenslide.getBasicAuthHeader() + "'");
+			if (EduAPI.getAuthType() == EduAPI.AuthType.TOKEN) {
+				HTML = HTML.replace("{{qupath-auth}}", "'Token': '" + EduAPI.getToken() + "'");
+			} else if (EduAPI.getAuthType() == EduAPI.AuthType.USERNAME) {
+				HTML = HTML.replace("{{qupath-auth}}", "Authorization: '" + EduAPI.getBasicAuthHeader() + "'");
 			} else {
 				HTML = HTML.replace("{{qupath-auth}}", "");
 			}

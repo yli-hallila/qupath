@@ -1,4 +1,4 @@
-package qupath.edu.lib;
+package qupath.edu.api;
 
 import com.google.gson.*;
 import javafx.collections.FXCollections;
@@ -6,6 +6,7 @@ import javafx.collections.ObservableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.exceptions.HttpException;
+import qupath.edu.util.VersionAdapter;
 import qupath.edu.models.*;
 import qupath.lib.gui.Version;
 import qupath.lib.io.GsonTools;
@@ -27,9 +28,9 @@ import java.time.Duration;
 import java.util.*;
 
 // TODO: Error management
-public class RemoteOpenslide {
+public class EduAPI {
 
-	private final static Logger logger = LoggerFactory.getLogger(RemoteOpenslide.class);
+	private final static Logger logger = LoggerFactory.getLogger(EduAPI.class);
 
 	private static URI host;
 
@@ -61,7 +62,7 @@ public class RemoteOpenslide {
 	}
 
 	public static void setUserId(String userId) {
-		RemoteOpenslide.userId = userId;
+		EduAPI.userId = userId;
 	}
 
 	/**
@@ -73,7 +74,7 @@ public class RemoteOpenslide {
 	}
 
 	public static void setOrganizationId(String organizationId) {
-		RemoteOpenslide.organizationId = organizationId;
+		EduAPI.organizationId = organizationId;
 	}
 
 	/**
@@ -95,10 +96,10 @@ public class RemoteOpenslide {
 
 	public static void setHost(String host) {
 		if (host == null) {
-			RemoteOpenslide.host = null;
+			EduAPI.host = null;
 		} else {
 			try {
-				RemoteOpenslide.host = URI.create(host);
+				EduAPI.host = URI.create(host);
 			} catch (IllegalArgumentException ignored) {}
 		}
 	}
@@ -112,7 +113,7 @@ public class RemoteOpenslide {
 	}
 
 	public static void setAuthType(AuthType authType) {
-		RemoteOpenslide.authType = authType;
+		EduAPI.authType = authType;
 	}
 
 	public static boolean isAuthenticated() {
@@ -126,8 +127,8 @@ public class RemoteOpenslide {
 			setAuthType(AuthType.USERNAME);
 		}
 
-		RemoteOpenslide.username = username;
-		RemoteOpenslide.password = password;
+		EduAPI.username = username;
+		EduAPI.password = password;
 	}
 
 	public static String getToken() {
@@ -145,18 +146,18 @@ public class RemoteOpenslide {
 			setAuthType(AuthType.TOKEN);
 		}
 
-		RemoteOpenslide.token = token;
+		EduAPI.token = token;
 	}
 
 	private static void setUser(ExternalUser user) {
 		setUserId(user.getId());
 		setOrganizationId(user.getOrganizationId());
-		RemoteOpenslide.roles.setAll(user.getRoles());
-		RemoteOpenslide.user = user;
+		EduAPI.roles.setAll(user.getRoles());
+		EduAPI.user = user;
 	}
 
 	private static ExternalUser getUser() {
-		return RemoteOpenslide.user;
+		return EduAPI.user;
 	}
 
 	/* Roles and Permissions*/

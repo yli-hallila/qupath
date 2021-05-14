@@ -1,4 +1,4 @@
-package qupath.edu.lib;
+package qupath.edu.util;
 
 /*
  NaturalOrderComparator.java -- Perform 'natural order' comparisons of strings in Java.

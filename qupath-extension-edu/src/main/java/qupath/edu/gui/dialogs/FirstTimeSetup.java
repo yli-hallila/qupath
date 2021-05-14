@@ -1,4 +1,4 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import javafx.beans.Observable;
 import javafx.beans.binding.Bindings;
@@ -14,7 +14,8 @@ import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import qupath.edu.EduOptions;
-import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.gui.ServerListCell;
+import qupath.edu.api.EduAPI;
 import qupath.edu.models.Server;
 import qupath.lib.gui.dialogs.Dialogs;
 
@@ -34,7 +35,7 @@ public class FirstTimeSetup {
     private ComboBox<Server> cbServerMenu;
 
     private final Server customServer = new Server("Custom server");
-    private final List<Server> servers = RemoteOpenslide.fetchPublicServers();
+    private final List<Server> servers = EduAPI.fetchPublicServers();
 
     public static void showDialog() {
         FirstTimeSetup firstTimeSetupDialog = new FirstTimeSetup();

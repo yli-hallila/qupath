@@ -1,4 +1,4 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -19,8 +19,8 @@ import org.controlsfx.glyphfont.FontAwesome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.gui.buttons.IconButtons;
-import qupath.edu.lib.RemoteOpenslide;
-import qupath.edu.lib.Roles;
+import qupath.edu.api.EduAPI;
+import qupath.edu.api.Roles;
 import qupath.edu.models.ExternalOrganization;
 import qupath.edu.models.ExternalUser;
 import qupath.lib.gui.dialogs.Dialogs;
@@ -94,7 +94,7 @@ public class RemoteUserManager {
         TextField tfFilter = new TextField();
         tfFilter.setPromptText("Search by name, organization or ID");
 
-        FilteredList<ExternalUser> filteredData = new FilteredList<>(FXCollections.observableArrayList(RemoteOpenslide.getAllUsers()), data -> true);
+        FilteredList<ExternalUser> filteredData = new FilteredList<>(FXCollections.observableArrayList(EduAPI.getAllUsers()), data -> true);
 
         tfFilter.textProperty().addListener(((observable, oldValue, newValue) -> {
             filteredData.setPredicate(data -> {
@@ -115,7 +115,7 @@ public class RemoteUserManager {
         /* Properties */
 
         var selected = table.getSelectionModel().selectedItemProperty();
-        var hasPermission = new SimpleBooleanProperty(RemoteOpenslide.hasRole(Roles.MANAGE_USERS));
+        var hasPermission = new SimpleBooleanProperty(EduAPI.hasRole(Roles.MANAGE_USERS));
 
         /* Table onClick */
 
@@ -189,7 +189,7 @@ public class RemoteUserManager {
 
         Button btnEditPassword = IconButtons.createIconButton(FontAwesome.Glyph.PENCIL);
         btnEditPassword.setOnAction(a -> tfPassword.setDisable(false));
-        btnEditPassword.setDisable(!RemoteOpenslide.hasRole(Roles.ADMIN));
+        btnEditPassword.setDisable(!EduAPI.hasRole(Roles.ADMIN));
 
         /* Organization */
 
@@ -240,7 +240,7 @@ public class RemoteUserManager {
             label.setLabelFor(checkbox);
             label.setAlignment(Pos.BASELINE_RIGHT);
 
-            if (role.equals(Roles.MANAGE_USERS) && user.getId().equals(RemoteOpenslide.getUserId()) ) {
+            if (role.equals(Roles.MANAGE_USERS) && user.getId().equals(EduAPI.getUserId()) ) {
                 checkbox.setDisable(true);
                 label.setTooltip(new Tooltip("Cannot modify this permission."));
             }
@@ -283,7 +283,7 @@ public class RemoteUserManager {
                 formData.put("password", tfPassword.getText());
             }
 
-            if (RemoteOpenslide.editUser(user.getId(), formData)) {
+            if (EduAPI.editUser(user.getId(), formData)) {
                 refresh();
                 Dialogs.showInfoNotification("Success", "Successfully edited user.");
             } else {
@@ -302,7 +302,7 @@ public class RemoteUserManager {
             return;
         }
 
-        boolean success = RemoteOpenslide.deleteUser(user.getId());
+        boolean success = EduAPI.deleteUser(user.getId());
 
         if (success) {
             refresh();
@@ -325,10 +325,10 @@ public class RemoteUserManager {
         tfPassword.setPromptText("Password");
 
         ComboBox<ExternalOrganization> cbOrganization = new ComboBox<>();
-        ExternalOrganization currentOrganization = RemoteOpenslide.getOrganization().get();
+        ExternalOrganization currentOrganization = EduAPI.getOrganization().get();
 
-        if (RemoteOpenslide.hasRole(Roles.ADMIN)) {
-            cbOrganization.setItems(FXCollections.observableArrayList(RemoteOpenslide.getAllOrganizations().get()));
+        if (EduAPI.hasRole(Roles.ADMIN)) {
+            cbOrganization.setItems(FXCollections.observableArrayList(EduAPI.getAllOrganizations().get()));
             cbOrganization.getSelectionModel().select(currentOrganization);
         } else {
             cbOrganization.setItems(FXCollections.observableArrayList(currentOrganization));
@@ -363,7 +363,7 @@ public class RemoteUserManager {
                 .showAndWait();
 
         if (result.isPresent() && result.get().equals(ButtonType.FINISH)) {
-            Optional<ExternalUser> user = RemoteOpenslide.createUser(
+            Optional<ExternalUser> user = EduAPI.createUser(
                 tfPassword.getText(), tfEmail.getText(), tfName.getText(), cbOrganization.getValue().getId()
             );
 

@@ -1,4 +1,4 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
@@ -18,7 +18,8 @@ import javafx.scene.layout.Pane;
 import org.controlsfx.control.MasterDetailPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.edu.lib.ReflectionUtil;
+import qupath.edu.gui.Browser;
+import qupath.edu.util.ReflectionUtil;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.panes.PathObjectListCell;
@@ -95,6 +96,7 @@ public class SimpleAnnotationPane implements PathObjectSelectionListener, Change
      * @param qupath current QuPath instance.
      */
     public SimpleAnnotationPane(final QuPathGUI qupath) {
+        // TODO: Make toggle between old annotation pane!
         this.qupath = qupath;
 
         setImageData(qupath.getImageData());
@@ -410,6 +412,8 @@ public class SimpleAnnotationPane implements PathObjectSelectionListener, Change
                     message += "\n\n";
                     message += description;
                 }
+
+                // TODO: Add support for retrying wrong answers
 
                 Dialogs.showPlainMessage("Answer", message);
             }

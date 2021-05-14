@@ -1,4 +1,4 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyObjectProperty;
@@ -15,8 +15,8 @@ import org.controlsfx.glyphfont.FontAwesome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.gui.buttons.IconButtons;
-import qupath.edu.lib.RemoteOpenslide;
-import qupath.edu.lib.Roles;
+import qupath.edu.api.EduAPI;
+import qupath.edu.api.Roles;
 import qupath.edu.models.ExternalOrganization;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
@@ -73,7 +73,7 @@ public class OrganizationManager {
     }
 
     private synchronized void initializePane() {
-        hasPermission.set(RemoteOpenslide.hasRole(Roles.ADMIN));
+        hasPermission.set(EduAPI.hasRole(Roles.ADMIN));
 
         /* Table */
 
@@ -95,7 +95,7 @@ public class OrganizationManager {
 
         table.getColumns().addAll(nameColumn, uuidColumn, logoUrlColumn);
 
-        table.setItems(FXCollections.observableArrayList(RemoteOpenslide.getAllOrganizations().orElse(Collections.emptyList())));
+        table.setItems(FXCollections.observableArrayList(EduAPI.getAllOrganizations().orElse(Collections.emptyList())));
 
         selected = table.getSelectionModel().selectedItemProperty();
 
@@ -136,7 +136,7 @@ public class OrganizationManager {
             return;
         }
 
-        Optional<ExternalOrganization> result = RemoteOpenslide.createOrganization(name);
+        Optional<ExternalOrganization> result = EduAPI.createOrganization(name);
 
         if (result.isPresent()) {
             refresh();
@@ -212,7 +212,7 @@ public class OrganizationManager {
                 return;
             }
 
-            if (RemoteOpenslide.editOrganization(organization.getId(), tfName.getText(), logo.get())) {
+            if (EduAPI.editOrganization(organization.getId(), tfName.getText(), logo.get())) {
                 refresh();
                 Dialogs.showInfoNotification("Success", "Successfully edited organization.");
             } else {
@@ -236,9 +236,9 @@ public class OrganizationManager {
         }
 
         ExternalOrganization organization = selected.get();
-        RemoteOpenslide.Result result = RemoteOpenslide.deleteOrganization(organization.getId());
+        EduAPI.Result result = EduAPI.deleteOrganization(organization.getId());
 
-        if (result == RemoteOpenslide.Result.OK) {
+        if (result == EduAPI.Result.OK) {
             refresh();
             Dialogs.showInfoNotification("Success", "Organization successfully deleted.");
         } else {

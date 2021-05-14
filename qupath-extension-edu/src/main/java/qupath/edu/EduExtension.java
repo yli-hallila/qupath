@@ -13,11 +13,11 @@ import javafx.scene.text.Font;
 import org.controlsfx.control.action.Action;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.edu.api.EduAPI;
 import qupath.edu.gui.*;
-import qupath.edu.lib.EditModeManager;
-import qupath.edu.lib.ReflectionUtil;
-import qupath.edu.lib.RemoteOpenslide;
-import qupath.edu.lib.RemoteProject;
+import qupath.edu.gui.dialogs.*;
+import qupath.edu.util.EditModeManager;
+import qupath.edu.util.ReflectionUtil;
 import qupath.edu.tours.SlideTour;
 import qupath.lib.gui.ActionTools;
 import qupath.lib.gui.QuPathGUI;
@@ -30,7 +30,6 @@ import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.gui.viewer.QuPathViewerPlus;
 import qupath.lib.gui.viewer.tools.PathTools;
-import qupath.lib.io.PathIO;
 import qupath.lib.projects.Project;
 
 import java.awt.image.BufferedImage;
@@ -105,8 +104,8 @@ public class EduExtension implements QuPathExtension {
                 FirstTimeSetup.showDialog();
             }
 
-            RemoteOpenslide.setHost(EduOptions.remoteOpenslideHost().get());
-            EduOptions.remoteOpenslideHost().addListener(((obs, oldHost, newHost) -> RemoteOpenslide.setHost(newHost)));
+            EduAPI.setHost(EduOptions.remoteOpenslideHost().get());
+            EduOptions.remoteOpenslideHost().addListener(((obs, oldHost, newHost) -> EduAPI.setHost(newHost)));
 
             if (EduOptions.showLoginDialogOnStartup().get()) {
                 showWorkspaceOrLoginDialog();
@@ -139,10 +138,10 @@ public class EduExtension implements QuPathExtension {
         qupath.projectProperty().addListener((obs, oldProject, newProject) -> {
             if (newProject == null) {
                 projectInformation.setContent("No project open");
-            } else if (newProject instanceof RemoteProject) {
-                RemoteProject project = (RemoteProject) newProject;
+            } else if (newProject instanceof EduProject) {
+                EduProject project = (EduProject) newProject;
 
-                Object informationText = project.retrieveMetadataValue(RemoteProject.PROJECT_INFORMATION);
+                Object informationText = project.retrieveMetadataValue(EduProject.PROJECT_INFORMATION);
 
                 if (informationText == null) {
                     projectInformation.setContent("No information available for this project");
@@ -246,10 +245,10 @@ public class EduExtension implements QuPathExtension {
         projectInformation.setOnMouseClicked(event -> {
             Project<BufferedImage> project = qupath.getProject();
 
-            if (event.getClickCount() > 1 && project instanceof RemoteProject) {
-                String projectId = ((RemoteProject) project).getId();
+            if (event.getClickCount() > 1 && project instanceof EduProject) {
+                String projectId = ((EduProject) project).getId();
 
-                if (RemoteOpenslide.hasPermission(projectId)) {
+                if (EduAPI.hasPermission(projectId)) {
                     ProjectDescriptionEditorCommand.openDescriptionEditor();
                 }
             }
@@ -304,7 +303,7 @@ public class EduExtension implements QuPathExtension {
     }
 
     private void checkSaveChanges() {
-        if (qupath.getProject() instanceof RemoteProject) {
+        if (qupath.getProject() instanceof EduProject) {
             try {
                 qupath.getProject().syncChanges();
             } catch (IOException e) {
@@ -356,7 +355,7 @@ public class EduExtension implements QuPathExtension {
         }
 
         try {
-            if (RemoteOpenslide.getAuthType() == RemoteOpenslide.AuthType.UNAUTHENTICATED) {
+            if (EduAPI.getAuthType() == EduAPI.AuthType.UNAUTHENTICATED) {
                 RemoteServerLoginManager.showLoginDialog();
             } else {
                 WorkspaceManager.showWorkspace(QuPathGUI.getInstance());
@@ -369,7 +368,7 @@ public class EduExtension implements QuPathExtension {
 
             logger.error("Error when connecting to server", e);
 
-            RemoteOpenslide.logout();
+            EduAPI.logout();
         }
     }
 }

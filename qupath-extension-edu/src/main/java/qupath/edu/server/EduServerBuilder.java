@@ -1,4 +1,4 @@
-package qupath.edu;
+package qupath.edu.server;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

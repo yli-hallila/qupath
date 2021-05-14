@@ -1,4 +1,4 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -22,9 +22,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.EduExtension;
 import qupath.edu.EduOptions;
-import qupath.edu.lib.ReflectionUtil;
-import qupath.edu.lib.RemoteOpenslide;
-import qupath.edu.lib.RemoteProject;
+import qupath.edu.gui.SubjectListCell;
+import qupath.edu.gui.WorkspaceProjectListCell;
+import qupath.edu.util.ReflectionUtil;
+import qupath.edu.api.EduAPI;
+import qupath.edu.EduProject;
 import qupath.edu.models.ExternalProject;
 import qupath.edu.models.ExternalSlide;
 import qupath.edu.models.ExternalSubject;
@@ -37,7 +39,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static qupath.edu.lib.RemoteOpenslide.Result;
+import static qupath.edu.api.EduAPI.Result;
 
 public class WorkspaceManager {
 
@@ -107,7 +109,7 @@ public class WorkspaceManager {
 
         // TODO: Make this async or make a loading dialog
 
-        List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
+        List<ExternalWorkspace> workspaces = EduAPI.getAllWorkspaces();
 
         /* Header Buttons */
 
@@ -205,11 +207,11 @@ public class WorkspaceManager {
         gvProjects.getItems().clear();
 
         for (ExternalWorkspace workspace : workspaces) {
-            if (!workspace.getOwnerId().equals(RemoteOpenslide.getOrganizationId())) {
+            if (!workspace.getOwnerId().equals(EduAPI.getOrganizationId())) {
                 return;
             }
 
-            var hasWriteAccess = RemoteOpenslide.isOwner(workspace.getOwnerId());
+            var hasWriteAccess = EduAPI.isOwner(workspace.getOwnerId());
 
             ListView<ExternalSubject> lvSubjects = new ListView<>();
             lvSubjects.setCellFactory(f -> new SubjectListCell(this, hasWriteAccess));
@@ -256,7 +258,7 @@ public class WorkspaceManager {
             return;
         }
 
-        List<ExternalSlide> slides = RemoteOpenslide.getAllSlides();
+        List<ExternalSlide> slides = EduAPI.getAllSlides();
         Optional<ExternalSlide> slide = slides.stream().filter(s -> s.getId().equalsIgnoreCase(id.strip())).findFirst();
         if (slide.isPresent()) {
             ExternalSlideManager.openSlide(slide.get());
@@ -293,7 +295,7 @@ public class WorkspaceManager {
 
             if (workspace.getId() != null) {
                 currentWorkspace.set(workspace.getId());
-                hasAccessProperty.set(RemoteOpenslide.hasPermission(workspace.getId()));
+                hasAccessProperty.set(EduAPI.hasPermission(workspace.getId()));
                 gvProjects.setItems(FXCollections.observableArrayList(workspace.getAllProjects()));
             }
         };
@@ -313,7 +315,7 @@ public class WorkspaceManager {
             previousWorkspace = ((ExternalWorkspace) accordion.getExpandedPane().getUserData());
         }
 
-        List<ExternalWorkspace> workspaces = RemoteOpenslide.getAllWorkspaces();
+        List<ExternalWorkspace> workspaces = EduAPI.getAllWorkspaces();
         createAccordion(accordion, workspaces);
 
         // Restore the previously open TitlePane
@@ -341,7 +343,7 @@ public class WorkspaceManager {
             return;
         }
 
-        Result result = RemoteOpenslide.createProject(currentSubject.get(), name);
+        Result result = EduAPI.createProject(currentSubject.get(), name);
 
         if (result == Result.OK) {
             refreshDialog();
@@ -358,7 +360,7 @@ public class WorkspaceManager {
             return;
         }
 
-        Result result = RemoteOpenslide.createSubject(currentWorkspace.get(), name);
+        Result result = EduAPI.createSubject(currentWorkspace.get(), name);
 
         if (result == Result.OK) {
             refreshDialog();
@@ -375,7 +377,7 @@ public class WorkspaceManager {
             return;
         }
 
-        Result result = RemoteOpenslide.createWorkspace(name);
+        Result result = EduAPI.createWorkspace(name);
 
         if (result == Result.OK) {
             refreshDialog();
@@ -392,7 +394,7 @@ public class WorkspaceManager {
             return;
         }
 
-        Result result = RemoteOpenslide.renameWorkspace(workspace.getId(), name);
+        Result result = EduAPI.renameWorkspace(workspace.getId(), name);
 
         if (result == Result.OK) {
             refreshDialog();
@@ -415,7 +417,7 @@ public class WorkspaceManager {
             return;
         }
 
-        Result result = RemoteOpenslide.deleteWorkspace(workspace.getId());
+        Result result = EduAPI.deleteWorkspace(workspace.getId());
 
         if (result == Result.OK) {
             refreshDialog();
@@ -432,7 +434,7 @@ public class WorkspaceManager {
             return;
         }
 
-        Result result = RemoteOpenslide.renameSubject(subject.getId(), name);
+        Result result = EduAPI.renameSubject(subject.getId(), name);
 
         if (result == Result.OK) {
             refreshDialog();
@@ -454,7 +456,7 @@ public class WorkspaceManager {
             return;
         }
 
-        Result result = RemoteOpenslide.deleteSubject(subject.getId());
+        Result result = EduAPI.deleteSubject(subject.getId());
 
         if (result == Result.OK) {
             refreshDialog();
@@ -467,11 +469,11 @@ public class WorkspaceManager {
     private void logout() {
         // Confirm logging out if logged in
 
-        if (!(RemoteOpenslide.getAuthType().shouldPrompt()) || Dialogs.showConfirmDialog("Are you sure?", "Are you sure you wish to log out?")) {
+        if (!(EduAPI.getAuthType().shouldPrompt()) || Dialogs.showConfirmDialog("Are you sure?", "Are you sure you wish to log out?")) {
             // TODO: Multiple viewers
             qupath.getViewer().setImageData(null);
             qupath.setProject(null);
-            RemoteOpenslide.logout();
+            EduAPI.logout();
             closeDialog();
 
             EduExtension.showWorkspaceOrLoginDialog();
@@ -505,7 +507,7 @@ public class WorkspaceManager {
                 @Override
                 protected Optional<String> call() {
                     updateMessage("Downloading project");
-                    Optional<String> projectData = RemoteOpenslide.downloadProject(extProject.getIdWithTimestamp());
+                    Optional<String> projectData = EduAPI.downloadProject(extProject.getIdWithTimestamp());
 
                     if (projectData.isEmpty()) {
                         updateMessage("Error when downloading project, see log.");
@@ -526,7 +528,7 @@ public class WorkspaceManager {
             var projectData = worker.getValue();
 
             if (projectData.isPresent()) {
-                RemoteProject project = new RemoteProject(projectData.get());
+                EduProject project = new EduProject(projectData.get());
                 project.setName(extProject.getName());
 
                 if (manager != null) {

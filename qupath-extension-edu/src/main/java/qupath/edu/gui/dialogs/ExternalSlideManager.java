@@ -1,4 +1,4 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import com.google.common.collect.MoreCollectors;
 import javafx.application.Platform;
@@ -25,9 +25,9 @@ import javafx.scene.text.Text;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.edu.lib.ReflectionUtil;
-import qupath.edu.lib.RemoteOpenslide;
-import qupath.edu.lib.Roles;
+import qupath.edu.util.ReflectionUtil;
+import qupath.edu.api.EduAPI;
+import qupath.edu.api.Roles;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
@@ -42,7 +42,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.List;
 
-import static qupath.edu.lib.RemoteOpenslide.Result;
+import static qupath.edu.api.EduAPI.Result;
 
 public class ExternalSlideManager {
 
@@ -113,7 +113,7 @@ public class ExternalSlideManager {
         TextField filterTextField = new TextField();
         filterTextField.setPromptText("Search by slide name, organization or ID");
 
-        FilteredList<ExternalSlide> filteredData = new FilteredList<>(FXCollections.observableArrayList(RemoteOpenslide.getAllSlides()), data -> true);
+        FilteredList<ExternalSlide> filteredData = new FilteredList<>(FXCollections.observableArrayList(EduAPI.getAllSlides()), data -> true);
 
         filterTextField.textProperty().addListener(((observable, oldValue, newValue) -> {
             filteredData.setPredicate(data -> {
@@ -139,12 +139,12 @@ public class ExternalSlideManager {
             if (selectedItem == null) {
                 return false;
             } else {
-                return RemoteOpenslide.isOwner(selectedItem.getOwner().getId());
+                return EduAPI.isOwner(selectedItem.getOwner().getId());
             }
         }, table.getSelectionModel().selectedItemProperty());
 
         BooleanBinding slideSelected = table.getSelectionModel().selectedItemProperty().isNull();
-        BooleanBinding canManageSlides = new SimpleBooleanProperty(RemoteOpenslide.hasRole(Roles.MANAGE_SLIDES)).not();
+        BooleanBinding canManageSlides = new SimpleBooleanProperty(EduAPI.hasRole(Roles.MANAGE_SLIDES)).not();
 
         Button btnAdd = new Button("Add selected");
         btnAdd.setTooltip(new Tooltip("Add selected slides to current project"));
@@ -201,14 +201,14 @@ public class ExternalSlideManager {
         List<String> urls = new ArrayList<>();
 
         table.getItems().stream().filter(ExternalSlide::isSelected).forEach(slide -> {
-            urls.add(RemoteOpenslide.getHost() + "/" + RemoteOpenslide.e(slide.getId()) + "#" + RemoteOpenslide.e(slide.getName()));
+            urls.add(EduAPI.getHost() + "/" + EduAPI.e(slide.getId()) + "#" + EduAPI.e(slide.getName()));
         });
 
         // Only add slides which have its' checkbox selected.
         // If no slides have a checked checkbox, we'll add the slide which is just selected, it should never be null.
         if (urls.isEmpty()) {
             ExternalSlide selected = table.getSelectionModel().getSelectedItem();
-            urls.add(RemoteOpenslide.getHost() + "/" + RemoteOpenslide.e(selected.getId()) + "#" + RemoteOpenslide.e(selected.getName()));
+            urls.add(EduAPI.getHost() + "/" + EduAPI.e(selected.getId()) + "#" + EduAPI.e(selected.getName()));
         }
 
         dialog.close();
@@ -217,7 +217,7 @@ public class ExternalSlideManager {
     }
 
     private void copySlideURL() {
-        Dialogs.showInputDialog("Slide URL", "", RemoteOpenslide.getHost() + "/" + table.getSelectionModel().getSelectedItem().getId());
+        Dialogs.showInputDialog("Slide URL", "", EduAPI.getHost() + "/" + table.getSelectionModel().getSelectedItem().getId());
     }
 
     private void copySlideID() {
@@ -264,7 +264,7 @@ public class ExternalSlideManager {
         }
 
         Platform.runLater(() -> {
-            qupath.openImage(RemoteOpenslide.getHost() + "/" + slide.getId(), true, true);
+            qupath.openImage(EduAPI.getHost() + "/" + slide.getId(), true, true);
 // TODO:           qupath.getTabbedPanel().getSelectionModel().select(1);
 
             // Loading a slide will prompt to set ImageType. This marks ImageData as changed prompts and prompts pointlessly to save changes.
@@ -363,7 +363,7 @@ public class ExternalSlideManager {
         }
 
         ExternalSlide slide = table.getSelectionModel().getSelectedItem();
-        Result result = RemoteOpenslide.deleteSlide(slide.getId());
+        Result result = EduAPI.deleteSlide(slide.getId());
 
         if (result == Result.OK) {
             Dialogs.showInfoNotification("Success", "Successfully deleted slide.");
@@ -381,7 +381,7 @@ public class ExternalSlideManager {
             return;
         }
 
-        Result result = RemoteOpenslide.editSlide(slide.getId(), name);
+        Result result = EduAPI.editSlide(slide.getId(), name);
 
         if (result == Result.OK) {
             Dialogs.showInfoNotification("Success", "Successfully renamed slide.");
@@ -413,7 +413,7 @@ public class ExternalSlideManager {
                 byte[] buffer = new byte[CHUNK_BUFFER_SIZE];
                 int read;
                 while ((read = is.read(buffer)) > 0) {
-                    RemoteOpenslide.uploadSlideChunk(
+                    EduAPI.uploadSlideChunk(
                         filename,
                         fileSize,
                         Arrays.copyOf(buffer, read),

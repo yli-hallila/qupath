@@ -1,4 +1,4 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import javafx.scene.control.Button;
 import javafx.scene.control.Dialog;
@@ -11,7 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.EduExtension;
 import qupath.edu.exceptions.HttpException;
-import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.api.EduAPI;
 import qupath.edu.models.VersionHistory;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
@@ -32,7 +32,7 @@ public class UpdateManager {
 
     public static void checkForUpdates() {
         try {
-            VersionHistory versionHistory = RemoteOpenslide.getVersionHistory();
+            VersionHistory versionHistory = EduAPI.getVersionHistory();
             latestRelease = versionHistory.getLatest();
 
             if (latestRelease.getVersion().compareTo(EduExtension.getVersion()) > 0) {

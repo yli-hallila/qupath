@@ -1,4 +1,4 @@
-package qupath.edu.lib;
+package qupath.edu.util;
 
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.scene.control.ButtonType;

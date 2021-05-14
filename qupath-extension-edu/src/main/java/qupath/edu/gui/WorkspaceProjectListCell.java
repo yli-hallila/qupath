@@ -13,13 +13,13 @@ import javafx.scene.text.Text;
 import org.controlsfx.control.GridCell;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.edu.lib.ReflectionUtil;
-import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.gui.dialogs.WorkspaceManager;
+import qupath.edu.util.ReflectionUtil;
+import qupath.edu.api.EduAPI;
 import qupath.edu.models.ExternalProject;
-import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 
-import static qupath.edu.lib.RemoteOpenslide.Result;
+import static qupath.edu.api.EduAPI.Result;
 
 public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
 
@@ -47,7 +47,7 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
             return;
         }
 
-        this.hasWriteAccess = RemoteOpenslide.isOwner(project.getOwner());
+        this.hasWriteAccess = EduAPI.isOwner(project.getOwner());
 
         GridPane pane = new GridPane();
         pane.setPadding(new Insets(5));
@@ -152,7 +152,7 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
             return;
         }
 
-        Result result = RemoteOpenslide.editProject(project.getId(), project.getName(), newDescription);
+        Result result = EduAPI.editProject(project.getId(), project.getName(), newDescription);
 
         if (result == Result.OK) {
             manager.refreshDialog();
@@ -173,7 +173,7 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
             return;
         }
 
-        Result result = RemoteOpenslide.editProject(project.getId(), newName, project.getDescription());
+        Result result = EduAPI.editProject(project.getId(), newName, project.getDescription());
         TitledPane expanded = manager.getAccordion().getExpandedPane();
 
         if (result == Result.OK) {
@@ -194,7 +194,7 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
         );
 
         if (confirm) {
-            Result result = RemoteOpenslide.deleteProject(project.getId());
+            Result result = EduAPI.deleteProject(project.getId());
             TitledPane expanded = manager.getAccordion().getExpandedPane();
 
             if (result == Result.OK) {
@@ -216,7 +216,7 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
         );
 
         if (confirm) {
-            Result result = RemoteOpenslide.setProjectHidden(project.getId(), !project.isHidden());
+            Result result = EduAPI.setProjectHidden(project.getId(), !project.isHidden());
             TitledPane expanded = manager.getAccordion().getExpandedPane();
 
             if (result == Result.OK) {

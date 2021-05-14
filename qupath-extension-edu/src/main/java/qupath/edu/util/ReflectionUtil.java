@@ -1,4 +1,4 @@
-package qupath.edu.lib;
+package qupath.edu.util;
 
 import javafx.scene.control.TabPane;
 import javafx.scene.image.Image;

@@ -1,4 +1,4 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -8,9 +8,10 @@ import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
 import javafx.scene.text.Text;
-import qupath.edu.lib.ReflectionUtil;
-import qupath.edu.lib.RemoteOpenslide;
-import qupath.edu.lib.Roles;
+import qupath.edu.gui.FocusingTextFieldTableCell;
+import qupath.edu.util.ReflectionUtil;
+import qupath.edu.api.EduAPI;
+import qupath.edu.api.Roles;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.io.GsonTools;
@@ -21,7 +22,7 @@ import java.util.Collections;
 public class EditAnnotationAnswerDialog {
 
     public static boolean openDialog(SimpleAnnotationPane annotationPane) {
-        if (!RemoteOpenslide.hasRole(Roles.MANAGE_PROJECTS)) {
+        if (!EduAPI.hasRole(Roles.MANAGE_PROJECTS)) {
             Dialogs.showErrorMessage("No permission", "You don't have permissions to edit answers.");
             return true;
         }

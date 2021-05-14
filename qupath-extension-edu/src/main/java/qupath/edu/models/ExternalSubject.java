@@ -1,7 +1,7 @@
 package qupath.edu.models;
 
-import qupath.edu.lib.NaturalOrderComparator;
-import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.util.NaturalOrderComparator;
+import qupath.edu.api.EduAPI;
 
 import java.util.Comparator;
 import java.util.List;
@@ -47,7 +47,7 @@ public class ExternalSubject {
      */
     public List<ExternalProject> getProjects() {
         return projects.stream()
-                .filter(project -> !(project.isHidden() && !RemoteOpenslide.isOwner(project.getOwner())))
+                .filter(project -> !(project.isHidden() && !EduAPI.isOwner(project.getOwner())))
                 .sorted(Comparator.comparing(ExternalProject::getName, new NaturalOrderComparator<>()))
                 .collect(Collectors.toList());
     }

@@ -1,4 +1,4 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.SimpleStringProperty;
@@ -10,10 +10,9 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.text.Text;
 import qupath.edu.EduExtension;
-import qupath.edu.lib.RemoteOpenslide;
+import qupath.edu.api.EduAPI;
 import qupath.edu.models.ExternalBackup;
 import qupath.edu.models.ExternalProject;
-import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
 
@@ -71,7 +70,7 @@ public class BackupManager {
 
         table.getColumns().addAll(backupNameColumn, filenameColumn, timestampColumn);
 
-        table.setItems(FXCollections.observableArrayList(RemoteOpenslide.getAllBackups().orElse(Collections.emptyList())));
+        table.setItems(FXCollections.observableArrayList(EduAPI.getAllBackups().orElse(Collections.emptyList())));
 
         /* Bindings */
 
@@ -116,7 +115,7 @@ public class BackupManager {
             return;
         }
 
-        var success = RemoteOpenslide.restoreBackup(backup.getFilename(), backup.getTimestamp());
+        var success = EduAPI.restoreBackup(backup.getFilename(), backup.getTimestamp());
 
         if (success) {
             Dialogs.showInfoNotification(

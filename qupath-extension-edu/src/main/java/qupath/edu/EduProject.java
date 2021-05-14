@@ -1,12 +1,14 @@
-package qupath.edu.lib;
+package qupath.edu;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.edu.EduExtension;
+import qupath.edu.api.EduAPI;
 import qupath.edu.exceptions.HttpException;
+import qupath.edu.util.ReflectionUtil;
+import qupath.edu.api.Roles;
 import qupath.lib.classifiers.object.ObjectClassifier;
 import qupath.lib.classifiers.pixel.PixelClassifier;
 import qupath.lib.common.GeneralTools;
@@ -41,7 +43,7 @@ import java.util.*;
  * Based on {@link qupath.lib.projects.DefaultProject}
  *
  */
-public class RemoteProject implements Project<BufferedImage> {
+public class EduProject implements Project<BufferedImage> {
 
 	public final static String IMAGE_ID = "PROJECT_ENTRY_ID";
 	public final static String PROJECT_INFORMATION = "PROJECT_INFORMATION";
@@ -62,7 +64,7 @@ public class RemoteProject implements Project<BufferedImage> {
 	private long creationTimestamp;
 	private long modificationTimestamp;
 
-	public RemoteProject(String projectData) throws IOException {
+	public EduProject(String projectData) throws IOException {
 		Gson gson = GsonTools.getInstance();
 		JsonObject element = gson.fromJson(projectData, JsonObject.class);
 
@@ -239,7 +241,7 @@ public class RemoteProject implements Project<BufferedImage> {
 		var makeCopy = false;
 
 		try {
-			hasWriteAccess = RemoteOpenslide.hasPermission(getId());
+			hasWriteAccess = EduAPI.hasPermission(getId());
 		} catch (HttpException e) {
 			logger.error("Error while syncing project.", e);
 
@@ -251,7 +253,7 @@ public class RemoteProject implements Project<BufferedImage> {
 			);
 		}
 
-		if (RemoteOpenslide.hasRole(Roles.MANAGE_PERSONAL_PROJECTS) && !hasWriteAccess) {
+		if (EduAPI.hasRole(Roles.MANAGE_PERSONAL_PROJECTS) && !hasWriteAccess) {
 			var response = Dialogs.showYesNoDialog("Save changes",
 				"You've made changes to this project but you don't have the required permissions to save these changes." +
 				"\n\n" +
@@ -273,7 +275,7 @@ public class RemoteProject implements Project<BufferedImage> {
 			askedToLogin = true;
 
 			if (login) {
-				RemoteOpenslide.logout();
+				EduAPI.logout();
 				EduExtension.showWorkspaceOrLoginDialog();
 			}
 
@@ -285,7 +287,7 @@ public class RemoteProject implements Project<BufferedImage> {
 		} else if (hasWriteAccess) {
 			logger.debug("Uploading project to server");
 
-			RemoteOpenslide.uploadProject(id, projectData);
+			EduAPI.uploadProject(id, projectData);
 
 			Dialogs.showInfoNotification("[Debug]", "Changes synced to server.");
 			logger.debug("Uploaded to server");

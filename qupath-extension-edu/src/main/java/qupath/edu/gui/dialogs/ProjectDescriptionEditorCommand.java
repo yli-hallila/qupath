@@ -1,9 +1,10 @@
-package qupath.edu.gui;
+package qupath.edu.gui.dialogs;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.EduExtension;
-import qupath.edu.lib.RemoteProject;
+import qupath.edu.gui.CustomDialogs;
+import qupath.edu.EduProject;
 import qupath.lib.gui.QuPathGUI;
 
 import java.io.IOException;
@@ -15,14 +16,14 @@ public class ProjectDescriptionEditorCommand {
     private static final Logger logger = LoggerFactory.getLogger(ProjectDescriptionEditorCommand.class);
 
     public static void openDescriptionEditor() {
-        if (qupath.getProject() instanceof RemoteProject) {
-            RemoteProject project = (RemoteProject) qupath.getProject();
+        if (qupath.getProject() instanceof EduProject) {
+            EduProject project = (EduProject) qupath.getProject();
 
-            String initialInput = (String) project.retrieveMetadataValue(RemoteProject.PROJECT_INFORMATION);
+            String initialInput = (String) project.retrieveMetadataValue(EduProject.PROJECT_INFORMATION);
             Optional<String> result = CustomDialogs.showWYSIWYGEditor(initialInput);
 
             if (result.isPresent()) {
-                project.storeMetadataValue(RemoteProject.PROJECT_INFORMATION, result.get());
+                project.storeMetadataValue(EduProject.PROJECT_INFORMATION, result.get());
                 EduExtension.setProjectInformation(result.get());
 
                 try {
