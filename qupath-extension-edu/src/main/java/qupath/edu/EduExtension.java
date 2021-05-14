@@ -14,6 +14,7 @@ import org.controlsfx.control.action.Action;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.gui.*;
+import qupath.edu.lib.EditModeManager;
 import qupath.edu.lib.ReflectionUtil;
 import qupath.edu.lib.RemoteOpenslide;
 import qupath.edu.lib.RemoteProject;
@@ -51,7 +52,7 @@ public class EduExtension implements QuPathExtension {
 
     private QuPathGUI qupath;
 
-    private static final SimpleBooleanProperty editModeEnabled = new SimpleBooleanProperty(false);
+    private static final EditModeManager editModeManager = new EditModeManager();
     private static final SimpleBooleanProperty noWriteAccess = new SimpleBooleanProperty(true);
     private static final Browser projectInformation = new Browser();
     private final TabPane tabbedPanel = new TabPane();
@@ -114,13 +115,13 @@ public class EduExtension implements QuPathExtension {
     }
 
     private void toggleTools() {
-        EduExtension.editModeEnabledProperty().addListener((observable, oldValue, enabled) -> {
+        editModeManager.editModeEnabledProperty().addListener((observable, oldValue, enabled) -> {
             if (enabled) {
                 PathPrefs.imageTypeSettingProperty().set(PathPrefs.ImageTypeSetting.PROMPT);
             } else {
+                PathPrefs.imageTypeSettingProperty().set(PathPrefs.ImageTypeSetting.NONE);
                 qupath.setSelectedTool(PathTools.MOVE);
                 qupath.getViewer().setActiveTool(PathTools.MOVE);
-                PathPrefs.imageTypeSettingProperty().set(PathPrefs.ImageTypeSetting.NONE);
             }
 
             qupath.setToolSwitchingEnabled(enabled);
@@ -156,18 +157,12 @@ public class EduExtension implements QuPathExtension {
 
     private void onImageDataChange() {
         qupath.imageDataProperty().addListener((observable, oldValue, imageData) -> {
-            if (imageData == null || !editModeEnabled.get()) {
+            if (imageData == null || editModeManager.isEditModeDisabled()) {
                 return;
             }
 
             logger.debug("Switching slides with edit mode enabled -- creating a backup");
-
-            try {
-                osImageData.reset();
-                PathIO.writeImageData(osImageData, imageData);
-            } catch (IOException e) {
-                logger.error("Error when backing up image data", e);
-            }
+            editModeManager.backupImageData(imageData);
         });
     }
 
@@ -185,9 +180,13 @@ public class EduExtension implements QuPathExtension {
         return version;
     }
 
+    public static EditModeManager getEditModeManager() {
+        return editModeManager;
+    }
+
     private void initializeMenus() {
         Action action = createAction(ProjectDescriptionEditorCommand::openDescriptionEditor, "Edit project information");
-        action.disabledProperty().bind(editModeEnabledProperty().not());
+        action.disabledProperty().bind(editModeManager.editModeEnabledProperty().not());
 
         qupath.getMenu("File>Project...", false).getItems().add(7,
             createMenuItem(action)
@@ -199,7 +198,8 @@ public class EduExtension implements QuPathExtension {
             createMenuItem(createAction(RemoteUserManager::showManagementDialog, "Manage users")),
             createMenuItem(createAction(OrganizationManager::showOrganizationManager, "Manage organizations")),
             createMenuItem(createAction(EduExtension::showWorkspaceOrLoginDialog, "Show workspaces")),
-            createMenuItem(createAction(this::checkSaveChanges, "Sync changes"))
+            createMenuItem(createAction(this::checkSaveChanges, "Sync changes")),
+            createMenuItem(createAction(HelpDialog::showHelpDialog, "About"))
         );
     }
 
@@ -225,58 +225,6 @@ public class EduExtension implements QuPathExtension {
             "Check for updates on startup",
             "Edu",
             "If enabled, checks for updates on startup.");
-    }
-
-    public static SimpleBooleanProperty editModeEnabledProperty() {
-        return editModeEnabled;
-    }
-
-    public static boolean isEditModeEnabled() {
-        return editModeEnabled.get();
-    }
-
-    private static final ByteArrayOutputStream osImageData = new ByteArrayOutputStream(0);
-
-    public static void setEditModeEnabled(boolean enabled) {
-        QuPathGUI qupath = QuPathGUI.getInstance();
-
-        if (enabled) {
-            EduExtension.editModeEnabledProperty().set(true);
-            qupath.setReadOnly(false);
-
-            if (qupath.getImageData() != null) {
-                try {
-                    osImageData.reset();
-                    PathIO.writeImageData(osImageData, qupath.getImageData());
-                } catch (IOException e) {
-                    logger.error("Error when backing up image data", e);
-                }
-            }
-        } else {
-            var choice = Dialogs.builder()
-                    .title("Confirm")
-                    .contentText("Do you wish to save changes or restore changes?")
-                    .buttons("Save", "Restore", "Cancel")
-                    .build()
-                    .showAndWait()
-                    .orElseGet(() -> new ButtonType("Cancel"))
-                    .getText();
-
-            if (choice.equals("Save")) {
-                qupath.checkSaveChanges(qupath.getImageData());
-                qupath.setReadOnly(true);
-                EduExtension.editModeEnabledProperty().set(false);
-            } else if (choice.equals("Restore")) {
-                try {
-                    qupath.getViewer().setImageData(PathIO.readImageData(new ByteArrayInputStream(osImageData.toByteArray()), null, null, BufferedImage.class));
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
-                qupath.setReadOnly(true);
-                EduExtension.editModeEnabledProperty().set(false);
-            }
-        }
     }
 
     public static void setWriteAccess(boolean hasWriteAccess) {
@@ -324,7 +272,7 @@ public class EduExtension implements QuPathExtension {
         Button btnCreate = ActionTools.createButton(
             ActionTools.createAction(EduExtension::showWorkspaceOrLoginDialog, "Create project"), false
         );
-        btnCreate.disableProperty().bind(editModeEnabledProperty().not());
+        btnCreate.disableProperty().bind(editModeManager.editModeEnabledProperty().not());
 
         Button btnOpen = ActionTools.createButton(
             ActionTools.createAction(EduExtension::showWorkspaceOrLoginDialog, "Open project"), false
@@ -333,7 +281,7 @@ public class EduExtension implements QuPathExtension {
         Button btnAdd = ActionTools.createButton(
             ActionTools.createAction(ExternalSlideManager::showExternalSlideManager, "Add images"), false
         );
-        btnAdd.disableProperty().bind(editModeEnabledProperty().not().or(qupath.projectProperty().isNull()));
+        btnAdd.disableProperty().bind(editModeManager.editModeEnabledProperty().not().or(qupath.projectProperty().isNull()));
 
         GridPane paneButtons = PaneTools.createColumnGridControls(btnCreate, btnOpen, btnAdd);
         paneButtons.prefWidthProperty().bind(projectBrowser.getPane().widthProperty());
@@ -373,9 +321,9 @@ public class EduExtension implements QuPathExtension {
     private void disableButtons() {
         /* File menu */
 
-        qupath.lookupActionByText("Edit project metadata").disabledProperty().bind(editModeEnabledProperty().not());
-        qupath.lookupActionByText("Check project URIs").disabledProperty().bind(editModeEnabledProperty().not());
-        qupath.lookupActionByText("Import images from v0.1.2").disabledProperty().bind(editModeEnabledProperty().not());
+        qupath.lookupActionByText("Edit project metadata").disabledProperty().bind(editModeManager.editModeEnabledProperty().not());
+        qupath.lookupActionByText("Check project URIs").disabledProperty().bind(editModeManager.editModeEnabledProperty().not());
+        qupath.lookupActionByText("Import images from v0.1.2").disabledProperty().bind(editModeManager.editModeEnabledProperty().not());
 
         /* Slide context menu */
 
@@ -390,12 +338,12 @@ public class EduExtension implements QuPathExtension {
 
         // Toggle edit mode so that tools get disabled / enabled
 
-        editModeEnabled.set(!editModeEnabled.get());
-        editModeEnabled.set(!editModeEnabled.get());
+        editModeManager.editModeEnabledProperty().set(!editModeManager.editModeEnabledProperty().get());
+        editModeManager.editModeEnabledProperty().set(!editModeManager.editModeEnabledProperty().get());
 
         Button btnToggleEditMode = new Button();
-        btnToggleEditMode.textProperty().bind(Bindings.when(editModeEnabled).then("Save changes / discard").otherwise("Enable editing"));
-        btnToggleEditMode.setOnAction(a -> setEditModeEnabled(!(isEditModeEnabled())));
+        btnToggleEditMode.textProperty().bind(Bindings.when(editModeManager.editModeEnabledProperty()).then("Save changes / discard").otherwise("Enable editing"));
+        btnToggleEditMode.setOnAction(a -> editModeManager.toggleEditMode());
         btnToggleEditMode.setFont(Font.font(10));
 
         qupath.getToolBar().getItems().addAll(new Separator(), btnToggleEditMode);

@@ -210,7 +210,7 @@ public class RemoteProject implements Project<BufferedImage> {
 
 	@Override
 	public void syncChanges() throws IOException {
-		if (!EduExtension.isEditModeEnabled()) {
+		if (EduExtension.getEditModeManager().isEditModeDisabled()) {
 			return;
 		}
 
@@ -547,7 +547,7 @@ public class RemoteProject implements Project<BufferedImage> {
 
 		@Override
 		public void saveImageData(ImageData<BufferedImage> imageData) throws IOException {
-			if (!EduExtension.isEditModeEnabled()) {
+			if (EduExtension.getEditModeManager().isEditModeDisabled()) {
 				return;
 			}
 
