@@ -58,6 +58,6 @@ public class EduOptions {
         return host;
     }
 
-    private static StringProperty host = PathPrefs.createPersistentPreference("eduHost", "https://qupath.yli-hallila.fi:7777");
+    private static StringProperty host = PathPrefs.createPersistentPreference("eduHost", null);
 
 }
