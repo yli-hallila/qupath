@@ -52,12 +52,12 @@ public class EduOptions {
     private static StringProperty previousOrganization = PathPrefs.createPersistentPreference("eduPreviousOrganization", null);
 
     /**
-     * Host used to communicate with
+     * Host used to communicate with.
      */
-    public static StringProperty remoteOpenslideHost() {
-        return remoteOpenslideHost;
+    public static StringProperty host() {
+        return host;
     }
 
-    private static StringProperty remoteOpenslideHost = PathPrefs.createPersistentPreference("eduRemoteOpenslideHost", "https://qupath.yli-hallila.fi:7777");
+    private static StringProperty host = PathPrefs.createPersistentPreference("eduHost", "https://qupath.yli-hallila.fi:7777");
 
 }

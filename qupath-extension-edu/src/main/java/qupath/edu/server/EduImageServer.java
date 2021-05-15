@@ -50,16 +50,6 @@ public class EduImageServer extends AbstractTileableImageServer {
         }
     }
 
-    /**
-     * Create an ImageServer using OpenSlide for the specified file.
-     * <p>
-     * The only supported arg is {@code --no-crop}, to specify that any bounding box should not be
-     * applied (which was the default in QuPath &lt;= v0.1.2).
-     *
-     * @param uri
-     * @param args
-     * @throws IOException
-     */
     public EduImageServer(URI uri, String...args) throws IOException {
         super();
         this.uri = uri;
@@ -85,7 +75,7 @@ public class EduImageServer extends AbstractTileableImageServer {
         int width = json.get("openslide.level[0].width").getAsInt();
         int height = json.get("openslide.level[0].height").getAsInt();
 
-        // Bounds currently not supported by Remote Openslide
+        // Bounds currently not supported by EduImageServer
         boundsX = 0;
         boundsY = 0;
         boundsWidth = width;

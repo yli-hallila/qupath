@@ -130,7 +130,7 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
                 MenuItem miShare = new MenuItem("Share");
                 miShare.setOnAction(action -> Dialogs.showInputDialog(
                     "Project ID",
-                    "You can enter this ID to: Remote Openslide > Open project by ID",
+                    "You can enter this ID to: Remote Slides > Open project by ID",
                     project.getId()
                 ));
 

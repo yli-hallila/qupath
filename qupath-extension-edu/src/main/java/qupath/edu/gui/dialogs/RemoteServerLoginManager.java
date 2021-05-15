@@ -114,7 +114,7 @@ public class RemoteServerLoginManager {
         /* Statusbar */
         
         StatusBar statusBar = new StatusBar();
-        statusBar.setText("Host " + EduOptions.remoteOpenslideHost().get());
+        statusBar.setText("Host " + EduOptions.host().get());
 
         /* Borderpane */
 

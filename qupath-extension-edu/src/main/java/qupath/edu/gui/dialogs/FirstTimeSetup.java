@@ -126,7 +126,7 @@ public class FirstTimeSetup {
     }
 
     private void savePreferences() {
-        EduOptions.remoteOpenslideHost().set(hostProperty.getValue());
+        EduOptions.host().set(hostProperty.getValue());
         dialog.close();
     }
 

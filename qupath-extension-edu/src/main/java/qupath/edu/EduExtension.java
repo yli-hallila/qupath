@@ -100,12 +100,12 @@ public class EduExtension implements QuPathExtension {
             }
 
             // Perform first time setup if host is undefined.
-            if (EduOptions.remoteOpenslideHost().isNull().get()) {
+            if (EduOptions.host().isNull().get()) {
                 FirstTimeSetup.showDialog();
             }
 
-            EduAPI.setHost(EduOptions.remoteOpenslideHost().get());
-            EduOptions.remoteOpenslideHost().addListener(((obs, oldHost, newHost) -> EduAPI.setHost(newHost)));
+            EduAPI.setHost(EduOptions.host().get());
+            EduOptions.host().addListener(((obs, oldHost, newHost) -> EduAPI.setHost(newHost)));
 
             if (EduOptions.showLoginDialogOnStartup().get()) {
                 showWorkspaceOrLoginDialog();
@@ -210,7 +210,7 @@ public class EduExtension implements QuPathExtension {
             "Edu",
             "Restart needed for changes to take effect");
 
-        prefs.addPropertyPreference(EduOptions.remoteOpenslideHost(), String.class,
+        prefs.addPropertyPreference(EduOptions.host(), String.class,
             "Edu Host",
             "Edu",
             "Server used with QuPath Education");
