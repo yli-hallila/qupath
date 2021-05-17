@@ -91,7 +91,7 @@ public class SlideTour implements QuPathViewerListener {
 					entryTextProperty.set(entry.getText());
 				}
 
-				smoothZoomAndPan(entry.getMagnification(), entry.getX(), entry.getY());
+				smoothZoomAndPan(entry.getX(), entry.getY(), entry.getMagnification(), entry.getRotation());
 
 				viewer.getImageData().getHierarchy().getSelectionModel().clearSelection();
 				viewer.getImageData().getHierarchy().clearAll();
@@ -292,7 +292,7 @@ public class SlideTour implements QuPathViewerListener {
 	}
 
 	private void editLocation(SlideTourEntry entry) {
-		entry.setLocation(viewer.getCenterPixelX(), viewer.getCenterPixelY(), viewer.getMagnification());
+		entry.setLocation(viewer.getCenterPixelX(), viewer.getCenterPixelY(), viewer.getMagnification(), viewer.getRotation());
 	}
 
 	private void editText(SlideTourEntry entry) {
@@ -312,11 +312,13 @@ public class SlideTour implements QuPathViewerListener {
 		double x = viewer.getCenterPixelX();
 		double y = viewer.getCenterPixelY();
 		double magnification = viewer.getMagnification();
+		double rotation = viewer.getRotation();
 
-		tourEntries.add(new SlideTourEntry(null, x, y, magnification, Collections.emptyList()));
+		tourEntries.add(new SlideTourEntry(null, x, y, magnification, rotation, Collections.emptyList()));
 
 		viewer.setMagnification(1);
 		viewer.setCenterPixelLocation(x, y);
+		viewer.setRotation(0);
 
 		currentIndexProperty.set(tourEntries.size() - 1);
 
@@ -460,12 +462,14 @@ public class SlideTour implements QuPathViewerListener {
 
 	private Timeline timeline;
 
-	private void smoothZoomAndPan(double magnification, double x, double y) {
+	private void smoothZoomAndPan(double x, double y, double magnification, double rotation) {
 		double currentMagnification = viewer.getMagnification();
+		double currentRotation = viewer.getRotation();
 		double currentX = viewer.getCenterPixelX();
 		double currentY = viewer.getCenterPixelY();
 
 		double diffMagnification = magnification - currentMagnification;
+		double diffRotation = rotation - currentRotation;
 		double diffX = x - currentX;
 		double diffY = y - currentY;
 		int diff = (int) Math.hypot(diffX, diffY);
@@ -485,6 +489,7 @@ public class SlideTour implements QuPathViewerListener {
 					double multiplier = Math.min(1, 1.0 * steps.get() / maxSteps);
 					viewer.setMagnification(currentMagnification + diffMagnification * multiplier);
 					viewer.setCenterPixelLocation(currentX + diffX * multiplier, currentY + diffY * multiplier);
+					viewer.setRotation(currentRotation + diffRotation * multiplier);
 
 					steps.getAndIncrement();
 				}

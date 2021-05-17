@@ -24,15 +24,21 @@ public class SlideTourEntry {
     private double magnification;
 
     /**
+     * Rotation for this entry.
+     */
+    private double rotation;
+
+    /**
      * Any annotations related to this entry.
      */
     private Collection<PathObject> annotations = new ArrayList<>();
 
-    public SlideTourEntry(String text, double x, double y, double magnification, Collection<PathObject> annotations) {
+    public SlideTourEntry(String text, double x, double y, double magnification, double rotation, Collection<PathObject> annotations) {
         this.text = text;
         this.x = x;
         this.y = y;
         this.magnification = magnification;
+        this.rotation = rotation;
         this.annotations.addAll(annotations);
     }
 
@@ -44,10 +50,11 @@ public class SlideTourEntry {
         return text;
     }
 
-    public void setLocation(double x, double y, double magnification) {
+    public void setLocation(double x, double y, double magnification, double rotation) {
         this.x = x;
         this.y = y;
         this.magnification = magnification;
+        this.rotation = rotation;
     }
 
     public double getX() {
@@ -60,6 +67,10 @@ public class SlideTourEntry {
 
     public double getMagnification() {
         return magnification;
+    }
+
+    public double getRotation() {
+        return rotation;
     }
 
     public void addAnnotation(PathObject annotation) {
