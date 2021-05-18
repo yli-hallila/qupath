@@ -1,7 +1,9 @@
 package qupath.edu.gui.dialogs;
 
+import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
+import com.sun.javafx.scene.control.skin.Utils;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -15,6 +17,7 @@ import javafx.scene.control.*;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
+import javafx.scene.text.TextBoundsType;
 import org.controlsfx.control.MasterDetailPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,10 +76,21 @@ public class SimpleAnnotationPane implements PathObjectSelectionListener, Change
      */
     private boolean suppressSelectionChanges = false;
 
-    private Browser slideDescription = new Browser();
+    private TextArea slideDescription = new TextArea();
 
     public void setSlideDescription(String description) {
-        slideDescription.setContent(description);
+        slideDescription.setText(description);
+
+        // Empty text areas take up space: setting managed to false will stop rendering it.
+        slideDescription.setManaged(!(Strings.isNullOrEmpty(description)));
+
+        slideDescription.setPrefHeight(Utils.computeTextHeight(
+            slideDescription.getFont(),
+            description,
+            slideDescription.getWidth(),
+            10,
+            TextBoundsType.VISUAL
+        ));
     }
 
     private StringProperty descriptionProperty = new SimpleStringProperty();
@@ -179,8 +193,11 @@ public class SimpleAnnotationPane implements PathObjectSelectionListener, Change
         btnShowAnswer.disableProperty().bind(answerProperty.isNull());
         btnShowAnswer.prefWidthProperty().bind(panelObjects.widthProperty());
 
-        slideDescription.setTextHighlightable(false);
         slideDescription.maxHeightProperty().bind(pane.heightProperty().divide(3).multiply(2));
+        slideDescription.setMinHeight(0);
+        slideDescription.setWrapText(true);
+        slideDescription.setDisable(true);
+        slideDescription.setStyle("-fx-opacity: 1.0;"); // Disabled text fields are gray because of lower opacity
 
         panelObjects.setTop(slideDescription);
         panelObjects.setCenter(listAnnotations);
