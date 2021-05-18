@@ -4,6 +4,7 @@ import javafx.application.Platform;
 import javafx.event.EventHandler;
 import javafx.scene.control.*;
 import javafx.stage.Modality;
+import javafx.stage.Screen;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.api.EduAPI;
@@ -58,10 +59,12 @@ public final class CustomDialogs {
 				.title("Editor")
 				.content(browser)
 				.buttons(btnSave, ButtonType.CLOSE)
-				.size(1200, 800)
 				.modality(Modality.APPLICATION_MODAL)
 				.resizable()
 				.build();
+
+		dialog.getDialogPane().setPrefWidth(Screen.getPrimary().getBounds().getWidth() * 0.8);
+		dialog.getDialogPane().setPrefHeight(Screen.getPrimary().getBounds().getHeight() * 0.8);
 
 		dialog.setOnCloseRequest(confirmCloseEventHandler);
 

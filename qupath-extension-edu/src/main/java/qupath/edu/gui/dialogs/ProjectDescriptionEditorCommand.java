@@ -16,9 +16,7 @@ public class ProjectDescriptionEditorCommand {
     private static final Logger logger = LoggerFactory.getLogger(ProjectDescriptionEditorCommand.class);
 
     public static void openDescriptionEditor() {
-        if (qupath.getProject() instanceof EduProject) {
-            EduProject project = (EduProject) qupath.getProject();
-
+        if (qupath.getProject() instanceof EduProject project) {
             String initialInput = (String) project.retrieveMetadataValue(EduProject.PROJECT_INFORMATION);
             Optional<String> result = CustomDialogs.showWYSIWYGEditor(initialInput);
 

@@ -241,14 +241,13 @@ public class EduExtension implements QuPathExtension {
     }
 
     private void replaceViewer() {
-        projectInformation.setTextHighlightable(false);
         projectInformation.setOnMouseClicked(event -> {
             Project<BufferedImage> project = qupath.getProject();
 
             if (event.getClickCount() > 1 && project instanceof EduProject) {
                 String projectId = ((EduProject) project).getId();
 
-                if (EduAPI.hasPermission(projectId)) {
+                if (EduExtension.getEditModeManager().isEditModeEnabled() && EduAPI.hasPermission(projectId)) {
                     ProjectDescriptionEditorCommand.openDescriptionEditor();
                 }
             }

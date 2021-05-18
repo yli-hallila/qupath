@@ -1,56 +1,54 @@
 <!DOCTYPE html>
-<html id="content">
+<html>
 <head>
     <base href="{{qupath-resource-root}}" />
     <link rel="stylesheet" type="text/css" href="css/ckeditor.css">
 </head>
-<body data-editor="ClassicEditor" data-collaboration="false">
+<body id="content">
 
-<main>
-    <div class="row">
-        <div class="document-editor__toolbar"></div>
-    </div>
+<p class="ckeditor--loading" style="text-align: center;font-size:30px">Loading editor ...</p>
 
-    <div class="row row-editor">
-        <div class="editor" id="qupath-editor">
-            {{qupath-input}}
-        </div>
-    </div>
-</main>
+<div class="editor" style="display: none">
+    {{qupath-input}}
+</div>
 
 <script src="ckeditor/ckeditor.js"></script>
 <script>
     ClassicEditor.create(document.querySelector('.editor'), {
         toolbar: {
             items: [
+                'undo',
+                'redo',
+                'removeFormat',
+                '|',
                 'heading',
                 '|',
+                'fontFamily',
+                'fontSize',
                 'bold',
                 'italic',
                 'underline',
                 'strikethrough',
+                'fontColor',
+                'fontBackgroundColor',
+                '|',
                 'link',
+                'insertImage',
+                'mediaEmbed',
+                '|',
+                'alignment',
+                '|',
                 'bulletedList',
                 'numberedList',
-                '|',
                 'indent',
                 'outdent',
                 '|',
                 'subscript',
                 'superscript',
                 '|',
-                'imageUpload',
                 'blockQuote',
                 'insertTable',
-                'mediaEmbed',
-                'undo',
-                'redo',
                 '|',
-                'alignment',
-                'fontColor',
-                'fontBackgroundColor',
-                'fontSize',
-                'fontFamily',
                 'highlight',
                 'horizontalLine',
                 '|',
@@ -62,6 +60,7 @@
         },
         language: 'en',
         image: {
+            resizeUnit: 'px',
             styles: [
                 'alignLeft', 'alignCenter', 'alignRight'
             ],
@@ -73,6 +72,7 @@
         },
         table: {
             contentToolbar: [
+                'tableAlignment',
                 'tableColumn',
                 'tableRow',
                 'mergeTableCells',
@@ -92,6 +92,7 @@
     }).then( editor => {
         window.editor = editor;
 
+        document.querySelector('.ckeditor--loading').style.display = "none";
         document.querySelector( '.document-editor__toolbar' ).appendChild( editor.ui.view.toolbar.element );
         document.querySelector( '.ck-toolbar' ).classList.add( 'ck-reset_all' );
 
@@ -100,5 +101,6 @@
         console.error( error );
     });
 </script>
+
 </body>
 </html>
