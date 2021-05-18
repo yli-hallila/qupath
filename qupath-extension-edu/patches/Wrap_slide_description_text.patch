@@ -1,0 +1,16 @@
+Index: qupath-gui-fx/src/main/java/qupath/lib/gui/panes/ProjectBrowser.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/qupath-gui-fx/src/main/java/qupath/lib/gui/panes/ProjectBrowser.java b/qupath-gui-fx/src/main/java/qupath/lib/gui/panes/ProjectBrowser.java
+--- a/qupath-gui-fx/src/main/java/qupath/lib/gui/panes/ProjectBrowser.java	(revision 610c2d9f83aaa0c3c74509bd6b63dc93d6a53913)
++++ b/qupath-gui-fx/src/main/java/qupath/lib/gui/panes/ProjectBrowser.java	(date 1621331417511)
+@@ -194,6 +194,7 @@
+ 		
+ //		TextArea textDescription = new TextArea();
+ 		TextArea textDescription = new TextArea();
++		textDescription.setWrapText(true);
+ 		textDescription.textProperty().bind(descriptionText);
+ 		MasterDetailPane mdTree = new MasterDetailPane(Side.BOTTOM, tree, textDescription, false);
+ 		mdTree.showDetailNodeProperty().bind(descriptionText.isNotNull());
