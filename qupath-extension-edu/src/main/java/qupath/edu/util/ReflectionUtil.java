@@ -9,6 +9,7 @@ import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.panes.ProjectBrowser;
 import qupath.lib.gui.viewer.QuPathViewerPlus;
+import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.objects.PathObject;
 import qupath.lib.projects.ProjectImageEntry;
@@ -76,7 +77,7 @@ public class ReflectionUtil {
         }
     }
 
-    /* QuPathGui: Project Browser */
+    /* QuPathGUI: Project Browser */
 
     public static ProjectBrowser getProjectBrowser() {
         QuPathGUI qupath = QuPathGUI.getInstance();
@@ -92,7 +93,7 @@ public class ReflectionUtil {
         return null;
     }
 
-    /* QuPathGui: loadIcon */
+    /* QuPathGUI: loadIcon */
 
     public static Image loadIcon(int size) {
         QuPathGUI qupath = QuPathGUI.getInstance();
@@ -101,6 +102,22 @@ public class ReflectionUtil {
             Method method = QuPathGUI.class.getDeclaredMethod("loadIcon", int.class);
             method.setAccessible(true);
             return (Image) method.invoke(qupath, size);
+        } catch (Exception e) {
+            Dialogs.showErrorNotification("Reflection exception. Please report this error via Github", e);
+        }
+
+        return null;
+    }
+
+    /* QuPathGUI: checkSaveChanges */
+
+    public static Boolean checkSaveChanges(ImageData<BufferedImage> imageData) {
+        QuPathGUI qupath = QuPathGUI.getInstance();
+
+        try {
+            Method method = QuPathGUI.class.getDeclaredMethod("checkSaveChanges", ImageData.class);
+            method.setAccessible(true);
+            return (Boolean) method.invoke(qupath, imageData);
         } catch (Exception e) {
             Dialogs.showErrorNotification("Reflection exception. Please report this error via Github", e);
         }

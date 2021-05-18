@@ -66,7 +66,7 @@ public class EditModeManager {
                     .getText();
 
             if (choice.equals("Save")) {
-                qupath.checkSaveChanges(qupath.getImageData());
+                ReflectionUtil.checkSaveChanges(qupath.getImageData());
                 qupath.setReadOnly(true);
                 editModeEnabledProperty().set(false);
             } else if (choice.equals("Restore")) {
