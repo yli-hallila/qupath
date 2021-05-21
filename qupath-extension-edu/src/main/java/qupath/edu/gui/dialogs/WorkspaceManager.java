@@ -529,6 +529,7 @@ public class WorkspaceManager {
 
             if (projectData.isPresent()) {
                 EduProject project = new EduProject(projectData.get());
+                project.setId(extProject.getId());
                 project.setName(extProject.getName());
 
                 if (manager != null) {

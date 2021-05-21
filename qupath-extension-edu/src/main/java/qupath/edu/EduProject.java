@@ -3,10 +3,12 @@ package qupath.edu;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
+import javafx.scene.control.ButtonType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.edu.api.EduAPI;
 import qupath.edu.exceptions.HttpException;
+import qupath.edu.gui.dialogs.WorkspaceManager;
 import qupath.edu.util.ReflectionUtil;
 import qupath.edu.api.Roles;
 import qupath.lib.classifiers.object.ObjectClassifier;
@@ -233,9 +235,11 @@ public class EduProject implements Project<BufferedImage> {
 		syncChangesToServer(gson.toJson(builder));
 	}
 
-	private boolean askedToLogin = false;
+	/**
+	 * False if a guest user has denied any future login prompts for editing slides without permissions.
+	 */
+	private boolean promptForLogin = true;
 
-	// TODO: WIP
 	private void syncChangesToServer(String projectData) {
 		var hasWriteAccess = false;
 		var makeCopy = false;
@@ -253,28 +257,35 @@ public class EduProject implements Project<BufferedImage> {
 			);
 		}
 
-		if (EduAPI.hasRole(Roles.MANAGE_PERSONAL_PROJECTS) && !hasWriteAccess) {
-			var response = Dialogs.showYesNoDialog("Save changes",
-				"You've made changes to this project but you don't have the required permissions to save these changes." +
+		if (!hasWriteAccess && EduAPI.hasRole(Roles.MANAGE_PERSONAL_PROJECTS)) {
+			var confirm = Dialogs.showYesNoDialog("Sync changes",
+				"These changes are only visible to you because you're not authorized to edit this project. These changes will be lost after closing the project." +
 				"\n\n" +
 				"Do you want to make a personal copy of this project which you can edit?"
 			);
 
-			if (response) {
+			if (confirm) {
 				makeCopy = true;
 			} else {
 				return;
 			}
-		} else if (!hasWriteAccess && !askedToLogin) {
-			var login = Dialogs.showYesNoDialog("Save changes",
-				"You've made changes to this project but you're not logged in." +
-				"\n\n" +
-				"Do you wish to login?"
-			);
+		} else if (!hasWriteAccess && promptForLogin) {
+			var choice = Dialogs.builder()
+					.title("Sync changes")
+					.contentText("These changes are only visible to you because you're not logged in. These changes will be lost after closing the project" +
+								 "\n\n" +
+								 "Do you wish to login and sync these changes to everyone?")
+					.buttons("Yes", "No", "No, don't ask me again") // TODO: Fix the order of these
+					.build()
+					.showAndWait()
+					.orElse(new ButtonType("No"))
+					.getText();
 
-			askedToLogin = true;
+			if (choice.equals("No, don't ask me again")) {
+				promptForLogin = false;
+			}
 
-			if (login) {
+			if (choice.equals("Yes")) {
 				EduAPI.logout();
 				EduExtension.showWorkspaceOrLoginDialog();
 			}
@@ -283,7 +294,16 @@ public class EduProject implements Project<BufferedImage> {
 		}
 
 		if (makeCopy) {
-			// TODO: Reimplement personal projects
+			Optional<String> projectId = EduAPI.createPersonalProject(getName());
+
+			if (projectId.isPresent()) {
+				EduAPI.uploadProject(projectId.get(), projectData);
+
+				// TODO: This prompts twice to create a personal copy because first QuPathGUI calls syncChanges() and it is ran again when closing the project
+				WorkspaceManager.loadProject(projectId.get(), "Copy of " + getName());
+			} else {
+				Dialogs.showErrorNotification("Error", "Error while creating personal project. See log for possible details.");
+			}
 		} else if (hasWriteAccess) {
 			logger.debug("Uploading project to server");
 
@@ -310,6 +330,10 @@ public class EduProject implements Project<BufferedImage> {
 
 	public String getId() {
 		return id;
+	}
+
+	public void setId(String id) {
+		this.id = id;
 	}
 
 	@Override

@@ -99,15 +99,15 @@ public class RemoteServerLoginManager {
         btnLoginGuest.setOnAction(e -> loginAsGuest());
         btnLoginGuest.setDisable(!(serverConfiguration.isGuestLoginEnabled()));
         
-        Button btnLoginUsername = new Button("Login with username");
-        btnLoginUsername.setOnAction(e -> showAuthDialog());
-        btnLoginUsername.setDisable(!(serverConfiguration.isSimpleLoginEnabled()));
+        Button btnLoginSimple = new Button("Login with credentials");
+        btnLoginSimple.setOnAction(e -> showAuthDialog());
+        btnLoginSimple.setDisable(!(serverConfiguration.isSimpleLoginEnabled()));
         
         Button btnLoginMicrosoft = new Button("Login using Microsoft");
         btnLoginMicrosoft.setOnAction(e -> showMicrosoftAuthDialog());
         btnLoginMicrosoft.setDisable(!(serverConfiguration.isMicrosoftLoginEnabled()));
 
-        GridPane buttons = PaneTools.createRowGridControls(btnLoginGuest, new Separator(), btnLoginUsername, btnLoginMicrosoft);
+        GridPane buttons = PaneTools.createRowGridControls(btnLoginGuest, new Separator(), btnLoginSimple, btnLoginMicrosoft);
         buttons.setPadding(new Insets(10));
         buttons.setVgap(10);
 
@@ -157,11 +157,11 @@ public class RemoteServerLoginManager {
     private void showAuthDialog() {
         /* Textfields */
 
-        Label labUsername = new Label("Username");
-        TextField tfUsername = new TextField();
-        labUsername.setLabelFor(tfUsername);
-        tfUsername.setPromptText("Username");
-        Platform.runLater(tfUsername::requestFocus);
+        Label labEmail = new Label("Email");
+        TextField tfEmail = new TextField();
+        labEmail.setLabelFor(tfEmail);
+        tfEmail.setPromptText("Email");
+        Platform.runLater(tfEmail::requestFocus);
 
         Label labPassword = new Label("Password");
         PasswordField tfPassword = new PasswordField();
@@ -184,8 +184,8 @@ public class RemoteServerLoginManager {
         loginPane.setVgap(5);
 
         int row = 0;
-        loginPane.add(labUsername, 0, row);
-        loginPane.add(tfUsername, 1, row++);
+        loginPane.add(labEmail, 0, row);
+        loginPane.add(tfEmail, 1, row++);
         loginPane.add(labPassword, 0, row);
         loginPane.add(tfPassword, 1, row);
 
@@ -199,7 +199,7 @@ public class RemoteServerLoginManager {
             .showAndWait();
 
         if (choice.isPresent() && choice.get().getButtonData() == ButtonBar.ButtonData.OK_DONE) {
-            if (EduAPI.login(tfUsername.getText(), tfPassword.getText())) {
+            if (EduAPI.login(tfEmail.getText(), tfPassword.getText())) {
                 dialog.close();
                 EduExtension.setWriteAccess(EduAPI.hasRole(Roles.MANAGE_PROJECTS));
                 EduExtension.showWorkspaceOrLoginDialog();
@@ -251,15 +251,15 @@ public class RemoteServerLoginManager {
                         }
                     } catch (CancellationException e) {
                         Dialogs.showInfoNotification(
-                        "Authentication cancelled",
-                        "Authentication was cancelled by user or timed out."
+                            "Authentication cancelled",
+                            "Authentication was cancelled by user or timed out."
                         );
                     } catch (InterruptedException | ExecutionException e) {
                         Dialogs.showErrorMessage(
-                        "Authentication error",
-                        "Error while authenticating with Microsoft, try retrying in a few minutes."
-                              + "\n\n" +
-                                "Possible reason: authentication timed out after two minutes. [Error: " + e.getLocalizedMessage() + "]"
+                            "Authentication error",
+                            "Error while authenticating with Microsoft, try retrying in a few minutes." +
+                            "\n\n" +
+                            "Possible reason: authentication timed out after two minutes. [Error: " + e.getLocalizedMessage() + "]"
                         );
 
                         logger.error("Error while authenticating", e);
@@ -345,9 +345,10 @@ public class RemoteServerLoginManager {
                 Desktop.getDesktop().browse(url.toURI());
             } catch (Exception e) {
                 logger.error("Error while opening browser", e);
+
                 Dialogs.showInputDialog(
-                "Not supported",
-                "Open this web page to authenticate yourself.",
+                    "Not supported",
+                    "Open this web page to authenticate yourself.",
                     url.toExternalForm()
                 );
             }
