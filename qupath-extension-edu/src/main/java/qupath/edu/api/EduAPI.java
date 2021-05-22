@@ -9,6 +9,7 @@ import qupath.edu.exceptions.HttpException;
 import qupath.edu.util.VersionAdapter;
 import qupath.edu.models.*;
 import qupath.lib.gui.Version;
+import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.io.GsonTools;
 
 import java.io.File;
@@ -27,7 +28,12 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
 
-// TODO: Error management
+/*
+ 	TODO:
+ 	 	- Better error management
+ 	 	- Authentication is a mess: rework how credentials are provided
+
+ */
 public class EduAPI {
 
 	private final static Logger logger = LoggerFactory.getLogger(EduAPI.class);
@@ -334,7 +340,7 @@ public class EduAPI {
 		);
 
 		if (isInvalidResponse(response)) {
-			return Optional.empty();
+			return returnEmptyAndShowAnyErrorMessage(response);
 		} else {
 			return Optional.of(GsonTools.getInstance().fromJson(response.get().body(), ExternalUser.class));
 		}
@@ -831,6 +837,19 @@ public class EduAPI {
 
 		byteArrays.add(("--" + boundary + "--").getBytes());
 		return HttpRequest.BodyPublishers.ofByteArrays(byteArrays);
+	}
+
+	/**
+	 * TODO: This is temporary, pending whole rewrite of EduAPI.
+	 */
+	private static <K> Optional<K> returnEmptyAndShowAnyErrorMessage(Optional<HttpResponse<String>> response) {
+		try {
+			var error = GsonTools.getInstance().fromJson(response.get().body(), ExternalError.class);
+
+			Dialogs.showErrorNotification("Error", error.getError());
+		} catch (JsonParseException | NoSuchElementException ignored) {}
+
+		return Optional.empty();
 	}
 
 	/**
