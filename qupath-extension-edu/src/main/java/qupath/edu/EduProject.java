@@ -224,7 +224,7 @@ public class EduProject implements Project<BufferedImage> {
 		builder.addProperty("id", id);
 		builder.addProperty("version", LATEST_VERSION);
 		builder.addProperty("createTimestamp", getCreationTimestamp());
-		builder.addProperty("modifyTimestamp", getModificationTimestamp());
+		builder.addProperty("modifyTimestamp", System.currentTimeMillis());
 
 		if (metadata != null) {
 			builder.addProperty("metadata", Base64.getEncoder().encodeToString(gson.toJson(metadata).getBytes(StandardCharsets.UTF_8)));
@@ -299,7 +299,7 @@ public class EduProject implements Project<BufferedImage> {
 			if (projectId.isPresent()) {
 				EduAPI.uploadProject(projectId.get(), projectData);
 
-				// TODO: This prompts twice to create a personal copy because first QuPathGUI calls syncChanges() and it is ran again when closing the project
+				// TODO: This prompts twice to create a personal copy because first QuPathGUI calls syncChanges() and it is ran again when opening the new project
 				WorkspaceManager.loadProject(projectId.get(), "Copy of " + getName());
 			} else {
 				Dialogs.showErrorNotification("Error", "Error while creating personal project. See log for possible details.");
@@ -572,18 +572,21 @@ public class EduProject implements Project<BufferedImage> {
 		}
 
 		@Override
-		public void saveImageData(ImageData<BufferedImage> imageData) throws IOException {
+		public void saveImageData(ImageData<BufferedImage> imageData) {
 			if (EduExtension.getEditModeManager().isEditModeDisabled()) {
 				return;
 			}
 
 			imageData.getHistoryWorkflow().clear();
+			imageData.setChanged(false);
 
-			ByteArrayOutputStream os = new ByteArrayOutputStream();
-			PathIO.writeImageData(os, imageData);
-
-			this.annotations = GsonTools.getInstance().toJson(imageData.getHierarchy().getAnnotationObjects());
-			this.imageData = Base64.getEncoder().encodeToString(os.toByteArray());
+			try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+				PathIO.writeImageData(os, imageData);
+				this.annotations = GsonTools.getInstance().toJson(imageData.getHierarchy().getAnnotationObjects());
+				this.imageData = Base64.getEncoder().encodeToString(os.toByteArray());
+			} catch (IOException e) {
+				Dialogs.showErrorNotification("Error while saving image data", e);
+			}
 		}
 
 		@Override
