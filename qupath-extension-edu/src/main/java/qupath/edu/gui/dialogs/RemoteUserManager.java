@@ -27,6 +27,7 @@ import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -193,17 +194,28 @@ public class RemoteUserManager {
 
         /* Organization */
 
-        TextField tfOrganization = new TextField();
-        tfOrganization.setText(user.getOrganization().getName());
-        tfOrganization.setDisable(true);
+        ComboBox<ExternalOrganization> cbOrganization = new ComboBox<>();
+        cbOrganization.setDisable(true);
 
-        Button btnEditOrganization = IconButtons.createIconButton(FontAwesome.Glyph.QUESTION_CIRCLE);
-        btnEditOrganization.setOnAction(a -> {
-            Dialogs.showMessageDialog(
+        Button btnEditOrganization;
+
+        if (EduAPI.hasRole(Roles.ADMIN)) {
+            btnEditOrganization = IconButtons.createIconButton(FontAwesome.Glyph.PENCIL);
+            btnEditOrganization.setOnAction(a -> cbOrganization.setDisable(false));
+
+            cbOrganization.setItems(FXCollections.observableArrayList(EduAPI.getAllOrganizations().orElse(List.of())));
+            cbOrganization.getSelectionModel().select(user.getOrganization());
+        } else {
+            btnEditOrganization = IconButtons.createIconButton(FontAwesome.Glyph.QUESTION_CIRCLE);
+            btnEditOrganization.setOnAction(a -> Dialogs.showMessageDialog(
                 "Changing user organization",
-                "Please contact the system administrator if you wish to migrate an user to a different organization."
-            );
-        });
+                "Please contact an administrator if you wish to migrate an user to a different organization." +
+                "\n\n" +
+                "Only users who authenticate via credentials can have their organization changed."
+            ));
+
+            cbOrganization.setItems(FXCollections.observableArrayList(user.getOrganization()));
+        }
 
         /* Pane */
 
@@ -218,7 +230,7 @@ public class RemoteUserManager {
         pane.add(tfPassword, 0, ++row);
         pane.add(btnEditPassword, 1, row);
 
-        pane.add(tfOrganization, 0, ++row);
+        pane.add(cbOrganization, 0, ++row);
         pane.add(btnEditOrganization, 1, row);
 
         /* Separator */
@@ -283,6 +295,10 @@ public class RemoteUserManager {
                 formData.put("password", tfPassword.getText());
             }
 
+            if (!cbOrganization.isDisabled()) {
+                formData.put("organization", cbOrganization.getValue().getId());
+            }
+
             if (EduAPI.editUser(user.getId(), formData)) {
                 refresh();
                 Dialogs.showInfoNotification("Success", "Successfully edited user.");
@@ -325,13 +341,12 @@ public class RemoteUserManager {
         tfPassword.setPromptText("Password");
 
         ComboBox<ExternalOrganization> cbOrganization = new ComboBox<>();
-        ExternalOrganization currentOrganization = EduAPI.getOrganization().get();
 
         if (EduAPI.hasRole(Roles.ADMIN)) {
-            cbOrganization.setItems(FXCollections.observableArrayList(EduAPI.getAllOrganizations().get()));
-            cbOrganization.getSelectionModel().select(currentOrganization);
+            cbOrganization.setItems(FXCollections.observableArrayList(EduAPI.getAllOrganizations().orElse(List.of())));
+            cbOrganization.setPlaceholder(new Text("No organizations"));
         } else {
-            cbOrganization.setItems(FXCollections.observableArrayList(currentOrganization));
+            cbOrganization.setItems(FXCollections.observableArrayList(EduAPI.getOrganization().orElse(null)));
             cbOrganization.setDisable(true);
         }
 

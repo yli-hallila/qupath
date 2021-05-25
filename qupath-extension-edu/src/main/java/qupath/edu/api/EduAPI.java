@@ -158,6 +158,14 @@ public class EduAPI {
 	private static void setUser(ExternalUser user) {
 		setUserId(user.getId());
 		setOrganizationId(user.getOrganizationId());
+
+		if (user.getOrganizationId() == null) {
+			Dialogs.showWarningNotification(
+				"Missing organization",
+				"Please assign an organization to your account ASAP! An account without an organization assigned may not work as intended."
+			);
+		}
+
 		EduAPI.roles.setAll(user.getRoles());
 		EduAPI.user = user;
 	}

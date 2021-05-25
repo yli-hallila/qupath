@@ -29,10 +29,22 @@ public class ExternalUser {
     }
 
     public String getOrganizationName() {
+        if (organization == null) {
+            return "No organization assigned!";
+        }
+
         return organization.getName();
     }
 
+    /**
+     * The organizationId can be null in the rare scenario, when using an
+     * administrator account doesn't have a has an organization assigned yet.
+     */
     public String getOrganizationId() {
+        if (organization == null) {
+            return null;
+        }
+
         return organization.getId();
     }
 

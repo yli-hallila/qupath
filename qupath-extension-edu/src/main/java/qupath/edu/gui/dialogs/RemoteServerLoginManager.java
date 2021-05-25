@@ -18,6 +18,7 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
+import javafx.scene.text.Text;
 import org.controlsfx.control.StatusBar;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
@@ -80,6 +81,7 @@ public class RemoteServerLoginManager {
         
         ComboBox<ExternalOrganization> cbLogos = new ComboBox<>();
         cbLogos.prefWidthProperty().bind(pane.widthProperty());
+        cbLogos.setPlaceholder(new Text("No organizations available."));
         cbLogos.setButtonCell(new ImageViewListCell(false));
         cbLogos.setCellFactory(f -> new ImageViewListCell(true));
         cbLogos.getItems().addAll(EduAPI.getAllOrganizations().orElse(Collections.emptyList()));
@@ -150,6 +152,7 @@ public class RemoteServerLoginManager {
         EduAPI.setOrganizationId(selectedOrganizationProperty.get());
 
         dialog.close();
+
         EduExtension.setWriteAccess(false);
         EduExtension.showWorkspaceOrLoginDialog();
     }
@@ -201,6 +204,7 @@ public class RemoteServerLoginManager {
         if (choice.isPresent() && choice.get().getButtonData() == ButtonBar.ButtonData.OK_DONE) {
             if (EduAPI.login(tfEmail.getText(), tfPassword.getText())) {
                 dialog.close();
+
                 EduExtension.setWriteAccess(EduAPI.hasRole(Roles.MANAGE_PROJECTS));
                 EduExtension.showWorkspaceOrLoginDialog();
             } else {
@@ -292,11 +296,7 @@ public class RemoteServerLoginManager {
         }
     }
 
-    public static void closeDialog() {
-        dialog.close();
-    }
-
-    private class ImageViewListCell extends ListCell<ExternalOrganization> {
+    static class ImageViewListCell extends ListCell<ExternalOrganization> {
 
         /**
          * Flag to indicate whether this is the factory for the button or cells.
@@ -320,20 +320,33 @@ public class RemoteServerLoginManager {
                 setGraphic(null);
             } else {
                 Image image = new Image(item.getLogoUrl());
-                ImageView imageView = new ImageView(image);
 
-                if (buttonCell) {
-                    imageView.setFitWidth(330);
+                if (image.getException() == null) {
+                    setLogoAsGraphic(image);
                 } else {
-                    imageView.setFitWidth(310);
+                    setNameAsGraphic(item.getName());
                 }
-
-                imageView.setPreserveRatio(true);
-                imageView.setSmooth(true);
-                imageView.setCache(true);
-
-                setGraphic(imageView);
             }
+        }
+
+        private void setLogoAsGraphic(Image image) {
+            ImageView imageView = new ImageView(image);
+
+            if (buttonCell) {
+                imageView.setFitWidth(330);
+            } else {
+                imageView.setFitWidth(310);
+            }
+
+            imageView.setPreserveRatio(true);
+            imageView.setSmooth(true);
+            imageView.setCache(true);
+
+            setGraphic(imageView);
+        }
+
+        private void setNameAsGraphic(String name) {
+            setGraphic(new Text(name));
         }
     }
 
