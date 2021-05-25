@@ -169,15 +169,19 @@ public class OrganizationManager {
         TextField tfLogo = new TextField(organization.getLogoUrl());
         tfLogo.setDisable(true);
 
-        Button btnEditLogo = IconButtons.createIconButton(FontAwesome.Glyph.UPLOAD);
-        btnEditLogo.setTooltip(new Tooltip("Upload new logo"));
-        btnEditLogo.setOnAction(a -> {
+        Button btnUploadLogo = IconButtons.createIconButton(FontAwesome.Glyph.UPLOAD);
+        btnUploadLogo.setTooltip(new Tooltip("Upload new logo"));
+        btnUploadLogo.setOnAction(a -> {
             logo.set(Dialogs.promptForFile("Choose logo", null, "Images", "png"));
 
             if (logo.get() != null) {
                 tfLogo.setText(logo.get().getName());
             }
         });
+
+        Button btnUploadLogoInfo = IconButtons.createIconButton(FontAwesome.Glyph.QUESTION);
+        btnUploadLogoInfo.setTooltip(new Tooltip("Logo requirements"));
+        btnUploadLogoInfo.setOnAction(a -> Dialogs.showMessageDialog("Upload logo", "Logo must be a transparent PNG, size of 400x80px or greater and aspect ratio of 5:1."));
 
         /* Pane */
 
@@ -189,10 +193,13 @@ public class OrganizationManager {
         int row = 0;
 
         pane.add(tfName, 0, ++row);
-        pane.add(btnEditName, 1, row);
+        pane.add(btnEditName, 2, row);
 
         pane.add(tfLogo, 0, ++row);
-        pane.add(btnEditLogo, 1, row);
+        pane.add(btnUploadLogoInfo, 1, row);
+        pane.add(btnUploadLogo, 2, row);
+
+        GridPane.setColumnSpan(tfName, 2);
 
         /* Dialog */
 

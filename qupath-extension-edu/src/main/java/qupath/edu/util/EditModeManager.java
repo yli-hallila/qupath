@@ -22,7 +22,11 @@ public class EditModeManager {
     private final Logger logger = LoggerFactory.getLogger(EditModeManager.class);
 
     private final SimpleBooleanProperty editModeEnabled = new SimpleBooleanProperty(false);
-    private final ByteArrayOutputStream osImageData = new ByteArrayOutputStream(0);
+
+    /**
+     * Stores the pre-editing image data which can be restored.
+     */
+    private final ByteArrayOutputStream imageDataBackup = new ByteArrayOutputStream(0);
 
     public SimpleBooleanProperty editModeEnabledProperty() {
         return editModeEnabled;
@@ -49,10 +53,10 @@ public class EditModeManager {
 
             if (qupath.getImageData() != null) {
                 try {
-                    osImageData.reset();
-                    PathIO.writeImageData(osImageData, qupath.getImageData());
+                    imageDataBackup.reset();
+                    PathIO.writeImageData(imageDataBackup, qupath.getImageData());
                 } catch (IOException e) {
-                    logger.error("Error when backing up image data", e);
+                    Dialogs.showErrorNotification("Error when backing up image data", e);
                 }
             }
         } else {
@@ -66,7 +70,19 @@ public class EditModeManager {
                     .getText();
 
             if (choice.equals("Save")) {
-                ReflectionUtil.checkSaveChanges(qupath.getImageData());
+                var project = qupath.getProject();
+                var imageData = qupath.getImageData();
+
+                try {
+                    if (imageData != null) {
+                        project.getEntry(imageData).saveImageData(imageData);
+                    }
+
+                    project.syncChanges();
+                } catch (IOException e) {
+                    Dialogs.showErrorNotification("Error while saving project", e.getMessage());
+                }
+
                 qupath.setReadOnly(true);
                 editModeEnabledProperty().set(false);
             } else if (choice.equals("Restore")) {
@@ -79,7 +95,7 @@ public class EditModeManager {
 
     public void restoreImageData() {
         try {
-            QuPathGUI.getInstance().getViewer().setImageData(PathIO.readImageData(new ByteArrayInputStream(osImageData.toByteArray()), null, null, BufferedImage.class));
+            QuPathGUI.getInstance().getViewer().setImageData(PathIO.readImageData(new ByteArrayInputStream(imageDataBackup.toByteArray()), null, null, BufferedImage.class));
         } catch (IOException e) {
             logger.error("Error when restoring image data", e);
         }
@@ -87,8 +103,8 @@ public class EditModeManager {
 
     public void backupImageData(ImageData<BufferedImage> imageData) {
         try {
-            osImageData.reset();
-            PathIO.writeImageData(osImageData, imageData);
+            this.imageDataBackup.reset();
+            PathIO.writeImageData(this.imageDataBackup, imageData);
         } catch (IOException e) {
             logger.error("Error when backing up image data", e);
         }
