@@ -375,7 +375,7 @@ public class EduAPI {
 	}
 
 	public static Result renameSubject(String subjectId, String newName) {
-		var response = put(
+		var response = patch(
 			"/api/v0/subjects/" + e(subjectId),
 			Map.of(
 				"subject-name", newName
@@ -451,7 +451,7 @@ public class EduAPI {
 	}
 
 	public static Result editProject(String projectId, String name, String description) {
-		var response = put(
+		var response = patch(
 			"/api/v0/projects/" + e(projectId),
 			Map.of(
 				"name", name,
@@ -469,7 +469,7 @@ public class EduAPI {
 	}
 
 	public static Result setProjectHidden(String projectId, boolean hidden) {
-		var response = put(
+		var response = patch(
 			"/api/v0/projects/" + e(projectId),
 			Map.of("hidden", hidden)
 		);
@@ -505,7 +505,7 @@ public class EduAPI {
 	}
 
 	public static Result editSlide(String slideId, String name) {
-		var response = put(
+		var response = patch(
 			"/api/v0/slides/" + e(slideId),
 			Map.of("slide-name", name)
 		);
@@ -539,7 +539,7 @@ public class EduAPI {
 
 	public static URI getSlideUploadURL(String fileName, long fileSize, int chunkIndex, int chunkSize) {
 		return host.resolve(String.format(
-			"/api/v0/upload/?filename=%s&fileSize=%s&chunk=%s&chunkSize=%s",
+			"/api/v0/slides/?filename=%s&fileSize=%s&chunk=%s&chunkSize=%s",
 			e(fileName),
 			fileSize,
 			chunkIndex,
@@ -595,7 +595,7 @@ public class EduAPI {
 	}
 
 	public static Result renameWorkspace(String workspaceId, String newName) {
-		var response = put(
+		var response = patch(
 			"/api/v0/workspaces/" + e(workspaceId),
 			Map.of("workspace-name", newName)
 		);
