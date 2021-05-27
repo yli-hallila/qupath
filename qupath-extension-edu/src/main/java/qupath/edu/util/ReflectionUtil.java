@@ -164,32 +164,4 @@ public class ReflectionUtil {
 
         return null;
     }
-
-    /* ProjectImportImagesCommand */
-
-    public static BufferedImage getThumbnailRGB(ImageServer<BufferedImage> server, ImageDisplay imageDisplay) {
-        try {
-            Class<?> clazz = Class.forName("qupath.lib.gui.commands.ProjectImportImagesCommand");
-            Method method = clazz.getDeclaredMethod("getThumbnailRGB", ImageServer.class, ImageDisplay.class);
-            method.setAccessible(true);
-            return (BufferedImage) method.invoke(null, server, imageDisplay);
-        } catch (Exception e) {
-            Dialogs.showErrorNotification("Reflection exception. Please report this error via Github", e);
-        }
-
-        return null;
-    }
-
-    public static List<ProjectImageEntry<BufferedImage>> promptToImportImages(QuPathGUI qupath, String... defaultPaths) {
-        try {
-            Class<?> clazz = Class.forName("qupath.lib.gui.commands.ProjectImportImagesCommand");
-            Method method = clazz.getDeclaredMethod("promptToImportImages", QuPathGUI.class, String[].class);
-            method.setAccessible(true);
-            return (List<ProjectImageEntry<BufferedImage>>) method.invoke(null, qupath, defaultPaths);
-        } catch (Exception e) {
-            Dialogs.showErrorNotification("Reflection exception. Please report this error via Github", e);
-        }
-
-        return null;
-    }
 }

@@ -25,10 +25,10 @@ import javafx.scene.text.Text;
 import org.controlsfx.dialog.ProgressDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.edu.util.ReflectionUtil;
 import qupath.edu.api.EduAPI;
 import qupath.edu.api.Roles;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.commands.ProjectCommands;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.gui.tools.PaneTools;
 import qupath.lib.images.servers.ImageServerBuilder;
@@ -213,7 +213,7 @@ public class ExternalSlideManager {
 
         dialog.close();
 
-        Platform.runLater(() -> ReflectionUtil.promptToImportImages(qupath, urls.toArray(new String[0])));
+        Platform.runLater(() -> ProjectCommands.promptToImportImages(qupath, urls.toArray(new String[0])));
     }
 
     private void copySlideURL() {
