@@ -9,11 +9,11 @@ import org.slf4j.LoggerFactory;
 import qupath.edu.api.EduAPI;
 import qupath.edu.exceptions.HttpException;
 import qupath.edu.gui.dialogs.WorkspaceManager;
-import qupath.edu.util.ReflectionUtil;
 import qupath.edu.api.Roles;
 import qupath.lib.classifiers.object.ObjectClassifier;
 import qupath.lib.classifiers.pixel.PixelClassifier;
 import qupath.lib.common.GeneralTools;
+import qupath.lib.gui.commands.ProjectCommands;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
@@ -32,6 +32,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.*;
@@ -418,12 +419,7 @@ public class EduProject implements Project<BufferedImage> {
 		/**
 		 * Thumbnail for this slide.
 		 */
-		private transient BufferedImage cachedThumbnail;
-
-		/**
-		 * Base64 decoded PNG thumbnail
-		 */
-		private String thumbnail;
+		private transient BufferedImage thumbnail;
 
 		/**
 		 * JSON Representation of annotations. <b>Temporary until ImageData is fully JSON serializable!</b>
@@ -617,47 +613,66 @@ public class EduProject implements Project<BufferedImage> {
 			return sb.toString();
 		}
 
-		@Override
-		public BufferedImage getThumbnail() {
-			if (cachedThumbnail != null) {
-				return cachedThumbnail;
+		/**
+		 * Tries to download the thumbnail from the QuPath Edu Server, fallbacks to trying to generate one client-side.
+		 */
+		@Override public BufferedImage getThumbnail() {
+			if (thumbnail != null) {
+				return thumbnail;
 			}
 
-			if (thumbnail != null) {
-				byte[] bytes = Base64.getDecoder().decode(thumbnail);
-
-				try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
-					cachedThumbnail = ImageIO.read(bis);
-				} catch (IOException e) {
-					logger.error("Error while reading thumbnail for {}. Generating a new one...", entryID, e);
-					generateThumbnail();
-				}
-			} else {
+			if (!(fetchThumbnailFromServer())) {
 				generateThumbnail();
 			}
 
-			return cachedThumbnail;
+			return thumbnail;
 		}
 
 		@Override
 		public void setThumbnail(BufferedImage img) {
-			this.cachedThumbnail = img;
-
-			try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-				ImageIO.write(cachedThumbnail, "png", os);
-
-				thumbnail = Base64.getEncoder().encodeToString(os.toByteArray());
-			} catch (Exception e) {
-				logger.error("Unable to generate thumbnail for {}", entryID, e);
-			}
+			this.thumbnail = img;
 		}
 
-		private void generateThumbnail() {
+		/**
+		 * Tries to download the thumbnail from the QuPath Edu Server.
+		 *
+		 * @return true when fetching the thumbnail was a success
+		 */
+		private boolean fetchThumbnailFromServer() {
+			String property = "openslide.thumbnail.uri";
+
 			try {
-				setThumbnail(ReflectionUtil.getThumbnailRGB(serverBuilder.build(), null));
+				Optional<JsonObject> properties = EduAPI.getSlideProperties(serverBuilder.getURIs().iterator().next());
+
+				if (properties.isPresent() && properties.get().has(property)) {
+					String thumbnailUrl = properties.get().get(property).getAsString();
+
+					setThumbnail(ImageIO.read(new URL(thumbnailUrl)));
+
+					return true;
+				}
+			} catch (Exception e) {
+				logger.error("Unable to download thumbnail for {}", entryID, e);
+			}
+
+			return false;
+		}
+
+		/**
+		 * Tries to generate the thumbnail client-side.
+		 *
+		 * @return true when generating the thumbnail was a succes.
+		 */
+		private boolean generateThumbnail() {
+			try {
+				setThumbnail(ProjectCommands.getThumbnailRGB(serverBuilder.build()));
+
+				return true;
 			} catch (Exception e) {
 				logger.error("Unable to generate thumbnail for {}", entryID, e);
 			}
+
+			return false;
 		}
 
 		@Override
