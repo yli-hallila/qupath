@@ -190,6 +190,7 @@ public class EduAPI {
 	 * User is treated as a owner when ...
 	 * 	  a) The ownerId is the same as userId and the user has the role MANAGE_PERSONAL PROJECTS.
 	 * 	  b) The ownerId is the same as tenantId and the user has the the role MANAGE_PROJECTS.
+	 * 	  c) the user has the ADMIN role
 	 * @param ownerId ID of project or workspace owner.
 	 * @return True if owner (=has write permissions)
 	 */
@@ -419,7 +420,7 @@ public class EduAPI {
 
 	public static Optional<String> createPersonalProject(String projectName) {
 		var response = post(
-			"/api/v0/projects/personal",
+			"/api/v0/projects?personal",
 			Map.of(
 				"project-name", projectName
 			)
