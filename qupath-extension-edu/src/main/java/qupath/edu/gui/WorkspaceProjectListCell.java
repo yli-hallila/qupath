@@ -156,6 +156,7 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
 
         if (result == Result.OK) {
             manager.refreshDialog();
+            Dialogs.showInfoNotification("Success", "Successfully edited project.");
         } else {
             Dialogs.showErrorNotification(
                 "Error when editing project description",
@@ -174,11 +175,10 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
         }
 
         Result result = EduAPI.editProject(project.getId(), newName, project.getDescription());
-        TitledPane expanded = manager.getAccordion().getExpandedPane();
 
         if (result == Result.OK) {
             manager.refreshDialog();
-            manager.getAccordion().setExpandedPane(expanded);
+            Dialogs.showInfoNotification("Success", "Successfully renamed project.");
         } else {
             Dialogs.showErrorNotification(
                 "Error when editing project name",
@@ -195,11 +195,10 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
 
         if (confirm) {
             Result result = EduAPI.deleteProject(project.getId());
-            TitledPane expanded = manager.getAccordion().getExpandedPane();
 
             if (result == Result.OK) {
                 manager.refreshDialog();
-                manager.getAccordion().setExpandedPane(expanded);
+                Dialogs.showInfoNotification("Success", "Successfully deleted project.");
             } else {
                 Dialogs.showErrorNotification(
                     "Error when deleting project",
@@ -217,11 +216,10 @@ public class WorkspaceProjectListCell extends GridCell<ExternalProject> {
 
         if (confirm) {
             Result result = EduAPI.setProjectHidden(project.getId(), !project.isHidden());
-            TitledPane expanded = manager.getAccordion().getExpandedPane();
 
             if (result == Result.OK) {
                 manager.refreshDialog();
-                manager.getAccordion().setExpandedPane(expanded);
+                Dialogs.showInfoNotification("Success", "Successfully toggled visibility.");
             } else {
                 Dialogs.showErrorNotification(
                     "Error while setting project visibility",
