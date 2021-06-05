@@ -146,6 +146,7 @@ public class WorkspaceManager {
 
         MenuItem miCreateWorkspace = new MenuItem("Workspace");
         miCreateWorkspace.setOnAction(action -> createNewWorkspace());
+        miCreateWorkspace.disableProperty().bind(hasAccessProperty.not());
 
         MenuItem miCreateSubject = new MenuItem("Subject");
         miCreateSubject.setOnAction(action -> createNewSubject());
@@ -207,7 +208,7 @@ public class WorkspaceManager {
         gvProjects.getItems().clear();
 
         for (ExternalWorkspace workspace : workspaces) {
-            if (!workspace.getOwnerId().equals(EduAPI.getOrganizationId())) {
+            if (!(workspace.getOwnerId().equals(EduAPI.getOrganizationId()) || workspace.getOwnerId().equals(EduAPI.getUserId()))) {
                 return;
             }
 
@@ -325,12 +326,12 @@ public class WorkspaceManager {
         }
 
         accordion.getPanes().stream()
-                .filter(pane -> previousWorkspace.equals(pane.getUserData()))
+                .filter(pane -> previousWorkspace.getId().equals(((ExternalWorkspace) pane.getUserData()).getId()))
                 .findFirst()
                 .ifPresent(accordion::setExpandedPane);
 
         workspaces.stream()
-                .filter(workspace -> workspace.equals(previousWorkspace))
+                .filter(workspace -> workspace.getId().equals(previousWorkspace.getId()))
                 .findFirst()
                 .flatMap(workspace -> workspace.findSubject(currentSubject.get()))
                 .ifPresent(subject -> gvProjects.getItems().setAll(subject.getProjects()));
