@@ -50,7 +50,7 @@ public class HelpDialog {
 
         /* Text */
 
-        Text version = new Text("Version " + EduExtension.getVersion().toString());
+        Text version = new Text("Version " + EduExtension.getExtensionVersion().toString());
         version.setTextAlignment(TextAlignment.CENTER);
 
         /* Sponsors */

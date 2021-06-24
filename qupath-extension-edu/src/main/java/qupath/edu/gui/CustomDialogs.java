@@ -90,7 +90,7 @@ public final class CustomDialogs {
 			Dialog<String> dialog = new Dialog<>();
 			dialog.setTitle(title);
 			if (QuPathGUI.getInstance() != null) {
-				dialog.initOwner(Dialogs.getDefaultOwner());
+				dialog.initOwner(QuPathGUI.getInstance().getStage());
 			}
 			dialog.setHeaderText(message);
 			dialog.setResizable(false);

@@ -1,0 +1,7 @@
+module qupath.edu {
+
+	requires java.desktop;
+
+    requires qupath.core;
+
+}

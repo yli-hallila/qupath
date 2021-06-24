@@ -35,7 +35,7 @@ public class UpdateManager {
             VersionHistory versionHistory = EduAPI.getVersionHistory();
             latestRelease = versionHistory.getLatest();
 
-            if (latestRelease.getVersion().compareTo(EduExtension.getVersion()) > 0) {
+            if (latestRelease.getVersion().compareTo(EduExtension.getExtensionVersion()) > 0) {
                 showDialog();
             }
         } catch (HttpException e) {

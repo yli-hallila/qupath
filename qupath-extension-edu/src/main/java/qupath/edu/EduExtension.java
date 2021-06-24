@@ -175,7 +175,12 @@ public class EduExtension implements QuPathExtension {
         return "Use QuPath for studying!";
     }
 
-    public static Version getVersion() {
+    @Override
+    public String getQuPathVersion() {
+        return "0.3.0";
+    }
+
+    public static Version getExtensionVersion() {
         return version;
     }
 

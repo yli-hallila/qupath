@@ -1,6 +1,11 @@
-ext.moduleName = 'qupath.extension.edu'
+plugins {
+    id 'qupath.extension-conventions'
+    id 'java-library'
+}
 
-description = 'qupath-extension-edu'
+ext.moduleName = 'qupath.extension.edu'
+archivesBaseName = 'qupath-extension-edu'
+description = "QuPath extension for studying with QuPath"
 
 configurations {
     implementation.extendsFrom guava
